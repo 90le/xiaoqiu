@@ -29,12 +29,7 @@ JAVAC_CP="$AJ"
 javac -source 8 -target 8 -nowarn -Xlint:-options -cp "$JAVAC_CP" -d obj $(find src gen -name "*.java")
 
 # 3) dex（含 sherpa-onnx AAR 类 + kotlin-stdlib）
-SHERPA_CLS=libs/aar-extract/cls
-EXTRA_CLS=""
-[ -d "$SHERPA_CLS" ] && EXTRA_CLS=$(find "$SHERPA_CLS" -name "*.class")
-EXTRA_JAR=""
-[ -f libs/kotlin-stdlib.jar ] && EXTRA_JAR=libs/kotlin-stdlib.jar
-"$D8" --min-api 24 --release --lib "$AJ" --output build $(find obj -name "*.class") $EXTRA_CLS $EXTRA_JAR
+"$D8" --min-api 24 --release --lib "$AJ" --output build $(find obj -name "*.class")
 
 # 4) 打包 + 塞 dex（--rename-manifest-package：应用包名 com.pihost（10 字符，与 bootstrap 路径字节兼容），代码包不变）
 "$AAPT" package -f -M AndroidManifest.xml -S res -A assets -I "$AJ" --rename-manifest-package com.pihost -F build/base.apk

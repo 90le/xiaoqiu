@@ -559,35 +559,16 @@ public class Tools {
                 String nat = ctx.getApplicationInfo().nativeLibraryDir;
                 System.load(nat + "/libonnxruntime.so");
                 System.load(nat + "/libsherpa-onnx-jni.so");
-                com.k2fsa.sherpa.onnx.QnnConfig qnn = new com.k2fsa.sherpa.onnx.QnnConfig("", "", "");
-                com.k2fsa.sherpa.onnx.OfflineSenseVoiceModelConfig sv =
-                    new com.k2fsa.sherpa.onnx.OfflineSenseVoiceModelConfig(mf.getAbsolutePath(), "", false, qnn);
-                com.k2fsa.sherpa.onnx.OfflineTransducerModelConfig cTra = new com.k2fsa.sherpa.onnx.OfflineTransducerModelConfig("", "", "", qnn);
-                com.k2fsa.sherpa.onnx.OfflineParaformerModelConfig cPar = new com.k2fsa.sherpa.onnx.OfflineParaformerModelConfig("", qnn);
-                com.k2fsa.sherpa.onnx.OfflineWhisperModelConfig cWhi = new com.k2fsa.sherpa.onnx.OfflineWhisperModelConfig("", "", "", "", 0, false, false);
-                com.k2fsa.sherpa.onnx.OfflineFireRedAsrModelConfig cFir = new com.k2fsa.sherpa.onnx.OfflineFireRedAsrModelConfig("", "");
-                com.k2fsa.sherpa.onnx.OfflineMoonshineModelConfig cMoo = new com.k2fsa.sherpa.onnx.OfflineMoonshineModelConfig("", "", "", "", "");
-                com.k2fsa.sherpa.onnx.OfflineNemoEncDecCtcModelConfig cNem = new com.k2fsa.sherpa.onnx.OfflineNemoEncDecCtcModelConfig("");
-                com.k2fsa.sherpa.onnx.OfflineDolphinModelConfig cDol = new com.k2fsa.sherpa.onnx.OfflineDolphinModelConfig("");
-                com.k2fsa.sherpa.onnx.OfflineZipformerCtcModelConfig cZip = new com.k2fsa.sherpa.onnx.OfflineZipformerCtcModelConfig("", qnn);
-                com.k2fsa.sherpa.onnx.OfflineWenetCtcModelConfig cWen = new com.k2fsa.sherpa.onnx.OfflineWenetCtcModelConfig("");
-                com.k2fsa.sherpa.onnx.OfflineOmnilingualAsrCtcModelConfig cOmn = new com.k2fsa.sherpa.onnx.OfflineOmnilingualAsrCtcModelConfig("");
-                com.k2fsa.sherpa.onnx.OfflineMedAsrCtcModelConfig cMed = new com.k2fsa.sherpa.onnx.OfflineMedAsrCtcModelConfig("");
-                com.k2fsa.sherpa.onnx.OfflineFunAsrNanoModelConfig cFun = new com.k2fsa.sherpa.onnx.OfflineFunAsrNanoModelConfig("", "", "", "", "", "", 0, 0f, 0f, 0, "", false, "");
-                com.k2fsa.sherpa.onnx.OfflineQwen3AsrModelConfig cQwe = new com.k2fsa.sherpa.onnx.OfflineQwen3AsrModelConfig("", "", "", "", 0, 0, 0f, 0f, 0, "");
-                com.k2fsa.sherpa.onnx.OfflineFireRedAsrCtcModelConfig cFrc = new com.k2fsa.sherpa.onnx.OfflineFireRedAsrCtcModelConfig("");
-                com.k2fsa.sherpa.onnx.OfflineCanaryModelConfig cCan = new com.k2fsa.sherpa.onnx.OfflineCanaryModelConfig("", "", "", "", false);
-                com.k2fsa.sherpa.onnx.OfflineCohereTranscribeModelConfig cCoh = new com.k2fsa.sherpa.onnx.OfflineCohereTranscribeModelConfig("", "", "", false, false);
-                com.k2fsa.sherpa.onnx.OfflineModelConfig mc =
-                    new com.k2fsa.sherpa.onnx.OfflineModelConfig(cTra, cPar, cWhi, cFir, cMoo, cNem, sv,
-                        cDol, cZip, cWen, cOmn, cMed, cFun, cQwe, cFrc, cCan, cCoh,
-                        tk.getAbsolutePath(), 2, false, "cpu", "", "", "", "");
-                com.k2fsa.sherpa.onnx.OfflineRecognizerConfig cfg =
-                    new com.k2fsa.sherpa.onnx.OfflineRecognizerConfig(
-                        new com.k2fsa.sherpa.onnx.FeatureConfig(16000, 80, 0.0f),
-                        mc,
-                        new com.k2fsa.sherpa.onnx.HomophoneReplacerConfig("", "", ""),
-                        "greedy_search", 4, "", 1.5f, "", "", 0.0f);
+                com.k2fsa.sherpa.onnx.OfflineModelConfig mc = new com.k2fsa.sherpa.onnx.OfflineModelConfig();
+                mc.senseVoice = new com.k2fsa.sherpa.onnx.OfflineSenseVoiceModelConfig(
+                        mf.getAbsolutePath(), "", false, new com.k2fsa.sherpa.onnx.QnnConfig());
+                mc.tokens = tk.getAbsolutePath();
+                mc.numThreads = 2;
+                android.util.Log.i("PiBridge", "STT-DIAG java侧 tokens=" + mc.tokens + " model=" + mc.senseVoice.model);
+                mc.debug = true;  // 临时：native 打印收到的配置
+                com.k2fsa.sherpa.onnx.OfflineRecognizerConfig cfg = new com.k2fsa.sherpa.onnx.OfflineRecognizerConfig();
+                cfg.modelConfig = mc;
+                cfg.decodingMethod = "greedy_search";
                 sttRec = new com.k2fsa.sherpa.onnx.OfflineRecognizer(null, cfg);
             }
             float[] samples = WavUtil.readWav(file);
