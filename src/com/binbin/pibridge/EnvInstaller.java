@@ -96,6 +96,24 @@ public class EnvInstaller {
         } catch (Exception e) {
             android.util.Log.e("PiBridge", "home-bundle", e);
         }
+        installPiWrapper();
+    }
+
+    /** pi 包装器：--version 秒回（pi-web-ui 探活每次同步调用，SDK 加载需 10-20s 会阻塞事件循环），其余透传 */
+    private static void installPiWrapper() {
+        try {
+            File pi = new File("/data/data/com.pihost/files/usr/bin/pi");
+            String sh = "#!/system/bin/sh\n" +
+                    "if [ \"$1\" = \"--version\" ]; then\n" +
+                    "  echo 0.84.4\n  exit 0\nfi\n" +
+                    "exec /data/data/com.pihost/files/usr/bin/node /data/data/com.pihost/files/usr/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js \"$@\"\n";
+            if (pi.exists()) pi.delete();
+            write(pi, sh);
+            pi.setExecutable(true, true);
+            android.util.Log.i("PiBridge", "pi 包装器已部署");
+        } catch (Exception e) {
+            android.util.Log.e("PiBridge", "pi wrapper", e);
+        }
     }
 
     public static void kickPuiInstall() {
