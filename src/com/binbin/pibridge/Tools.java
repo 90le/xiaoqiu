@@ -503,6 +503,12 @@ public class Tools {
             }
             return ok("已保存（" + provider + "，key 尾号 " + key.substring(Math.max(0, key.length() - 4)) + "）");
         }});
+        def("floatball", "开关小丘悬浮球（保活+快开，可拖拽，重复调用即切换）", schema(props()), new H() { public JSONObject run(JSONObject a) {
+            if (Build.VERSION.SDK_INT >= 23 && !Settings.canDrawOverlays(ctx))
+                return err("NO_OVERLAY", "请先授权悬浮窗（appops set com.pihost SYSTEM_ALERT_WINDOW allow）");
+            FloatBall.toggle(ctx);
+            return ok("悬浮球已切换，当前：" + (FloatBall.isOn() ? "开" : "关（异步生效）"));
+        }});
 
         def("env_run", "在工作台 pi 环境内执行 shell 命令（pi/node/npm/全部 Linux 工具可用），返回输出", 
             schema(props("cmd", prop("string", "命令"), "timeout_sec", prop("number", "超时秒默认120")), "cmd"), new H() { public JSONObject run(JSONObject a) throws Exception {

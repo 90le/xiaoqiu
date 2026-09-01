@@ -33,7 +33,7 @@ public class BridgeService extends Service {
             "export PATH=$PREFIX/bin:/system/bin\n" +
             "export LD_LIBRARY_PATH=$PREFIX/lib\n" +
             "export TMPDIR=$PREFIX/tmp\n" +
-            "exec node $HOME/.pi/agent/npm/node_modules/pi-web-ui/bin/pi-web-ui.mjs\n";
+            "exec node $HOME/.pi/agent/npm/node_modules/pi-web-ui/bin/pi-web-ui.mjs --no-browser\n";
 
     @Override public void onCreate() {
         inst = this;

@@ -103,7 +103,8 @@ public class MainActivity extends Activity {
         retries = 0;
         for (int j = 0; j < btns.length; j++) btns[j].setTextColor(j == idx ? ACTIVE : IDLE);
         final String url = URLS[idx];
-        final String base = url.substring(0, url.indexOf('/', 7));
+        int slash = url.indexOf('/', 7);
+        final String base = slash > 0 ? url.substring(0, slash) : url;
         splash.setText("🏔\n小丘启动中…");
         splash.setVisibility(View.VISIBLE);
         new Thread(() -> {
