@@ -8,6 +8,10 @@ import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.provider.Settings;
 import android.view.Gravity;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
@@ -21,6 +25,14 @@ public class FloatBall {
     public static boolean isOn() { return ball != null; }
 
     private static final android.os.Handler MAIN = new android.os.Handler(android.os.Looper.getMainLooper());
+
+    private static java.io.File prefFile(Context c) { return new File(c.getFilesDir(), "floatball"); }
+    private static void save(Context c, boolean on) {
+        try { java.io.FileOutputStream fo = new java.io.FileOutputStream(prefFile(c)); fo.write((on ? "1" : "0").getBytes()); fo.close(); } catch (Exception ignore) {}
+    }
+    public static boolean savedOn(Context c) {
+        try { java.io.FileInputStream fi = new java.io.FileInputStream(prefFile(c)); byte[] b = new byte[1]; int n = fi.read(b); fi.close(); return n == 1 && b[0] == '1'; } catch (Exception e) { return false; }
+    }
 
     public static boolean toggle(Context c) {
         if (isOn()) { runMain(c, "hide"); return false; }
@@ -86,10 +98,12 @@ public class FloatBall {
         });
         wm.addView(v, p);
         ball = v;
+        save(c, true);
         return true;
     }
 
     public static void hide(Context c) {
+        save(c, false);
         try { if (ball != null && wm != null) wm.removeView(ball); } catch (Exception ignore) {}
         ball = null;
     }

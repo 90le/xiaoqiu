@@ -49,6 +49,27 @@
 </div>
 
 <div class="card">
+  <div style="font-size:14px;font-weight:600;margin-bottom:8px;">权限中心</div>
+  <div id="perm">加载中…</div>
+  <button style="background:var(--dawn);margin-top:10px;" onclick="openPerm()">打开缺失项的授权页</button>
+  <select id="permtype" style="margin-top:10px;">
+    <option value="a11y">无障碍设置页</option>
+    <option value="overlay">悬浮窗设置页</option>
+    <option value="allfiles">所有文件访问页</option>
+  </select>
+</div>
+
+<div class="card">
+  <div style="display:flex;justify-content:space-between;align-items:center;">
+    <div>
+      <div style="font-size:14px;font-weight:600;">🏔 悬浮球</div>
+      <div style="font-size:12px;color:var(--muted);">保活可见 + 单击快速回到小丘</div>
+    </div>
+    <button style="width:auto;margin:0;padding:10px 18px;" onclick="toggleBall(this)">切换</button>
+  </div>
+</div>
+
+<div class="card">
   <div class="kv"><span>版本</span><span>0.9.0</span></div>
   <div class="kv"><span>引擎</span><span>pi coding-agent</span></div>
   <div class="kv"><span>MCP</span><span>127.0.0.1:8181</span></div>
@@ -78,7 +99,34 @@ async function save() {
     m.textContent = d.ok ? d.data : (d.error ? d.error.message : '失败');
   } catch(e) { m.className='msg bad'; m.textContent='网络错误'; }
 }
-loadEnv();
+loadEnv(); loadPerm();
+
+let missingPerm = null;
+async function loadPerm() {
+  try {
+    const r = await fetch('/api/perm_status', {method:'POST'});
+    const d = (await r.json()).structuredContent.data;
+    const row = (k, label, ok) => '<div class="kv"><span>' + label + '</span><span class="' + (ok?'on':'') + '">' + (ok?'✅':'❌') + '</span></div>';
+    document.getElementById('perm').innerHTML =
+      row('a', '无障碍', d.accessibility) + row('o', '悬浮窗', d.overlay) +
+      row('f', '所有文件', d.allFiles) + row('q', '队列桥', d.queueBridge) +
+      row('e', 'pi 环境', d.envReady) + row('w', '对话服务', d.webui);
+    missingPerm = !d.accessibility ? 'a11y' : (!d.overlay ? 'overlay' : (!d.allFiles ? 'allfiles' : null));
+  } catch(e) { document.getElementById('perm').textContent = '读取失败'; }
+}
+async function openPerm() {
+  const t = missingPerm || document.getElementById('permtype').value;
+  await fetch('/api/open_permission_settings', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({type:t})});
+}
+async function toggleBall(btn) {
+  btn.textContent = '…';
+  const r = await fetch('/api/floatball', {method:'POST'});
+  await new Promise(res => setTimeout(res, 600));
+  btn.textContent = '切换';
+  loadPerm();
+}
+loadPerm();
+
 </script>
 </body>
 </html>

@@ -22,6 +22,7 @@ public class BridgeService extends Service {
     private Mcp mcp;
     private Process puiProc;
     private final Handler h = new Handler();
+    private static final android.os.Handler MAIN = new android.os.Handler(android.os.Looper.getMainLooper());
     private int puiFails = 0;
     private int mcpFails = 0;
 
@@ -40,6 +41,8 @@ public class BridgeService extends Service {
         Tools.init(this);
         startMcp();
         startPui();
+        // 悬浮球状态恢复（上次开过就自动出现）
+        if (FloatBall.savedOn(this)) MAIN.post(() -> FloatBall.show(this));
         // 环境引擎：首启自动装 pi 环境
         if (!EnvInstaller.isReady() && !EnvInstaller.isRunning()) {
             EnvInstaller.installAsync(new EnvInstaller.Cb() {
