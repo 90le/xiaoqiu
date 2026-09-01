@@ -42,6 +42,8 @@ public class MainActivity extends Activity {
 
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
+        // 小丘在前台时屏幕常亮（配合 L2 的 stay_on_while_plugged_in 充电常亮）
+        getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         startService(new Intent(this, BridgeService.class));
         buildUi();
         switchTab(0);

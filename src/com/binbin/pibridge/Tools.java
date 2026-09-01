@@ -503,6 +503,42 @@ public class Tools {
             }
             return ok("已保存（" + provider + "，key 尾号 " + key.substring(Math.max(0, key.length() - 4)) + "）");
         }});
+        // ═══ 权限中心（向导/设置页数据源）═══
+        def("perm_status", "查询小丘权限与环境状态（无障碍/悬浮窗/所有文件/队列桥/环境）", schema(props()), new H() { public JSONObject run(JSONObject a) throws Exception {
+            JSONObject o = new JSONObject();
+            String enabled = Settings.Secure.getString(ctx.getContentResolver(), Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES);
+            o.put("accessibility", enabled != null && enabled.contains("com.pihost"));
+            boolean overlay = false;
+            try { overlay = Settings.canDrawOverlays(ctx); } catch (Throwable ignore) {}
+            o.put("overlay", overlay);
+            boolean allFiles = false;
+            try { allFiles = (Build.VERSION.SDK_INT < 30) || android.os.Environment.isExternalStorageManager(); } catch (Throwable ignore) {}
+            o.put("allFiles", allFiles);
+            File q = new File("/storage/emulated/0/Download/pibridge-queue");
+            o.put("queueBridge", q.isDirectory());
+            JSONObject env = EnvInstaller.status();
+            o.put("envReady", env.optBoolean("ready", false));
+            File pui = new File("/data/data/com.pihost/files/home/.pi/agent/npm/node_modules/pi-web-ui/bin/pi-web-ui.mjs");
+            o.put("webui", pui.exists());
+            o.put("floatball", com.binbin.pibridge.FloatBall.isOn());
+            return ok(o);
+        }});
+        def("open_permission_settings", "打开指定权限的系统设置页", schema(props("type", prop("string", "a11y=无障碍 overlay=悬浮窗 allfiles=所有文件")), "type"), new H() { public JSONObject run(JSONObject a) throws Exception {
+            String t = a.optString("type", "");
+            Intent i;
+            if (t.equals("a11y")) i = new Intent(android.provider.Settings.ACTION_ACCESSIBILITY_SETTINGS);
+            else if (t.equals("overlay")) {
+                i = new Intent(android.provider.Settings.ACTION_MANAGE_OVERLAY_PERMISSION,
+                        android.net.Uri.parse("package:com.pihost"));
+            } else if (t.equals("allfiles")) {
+                i = new Intent(android.provider.Settings.ACTION_MANAGE_APP_ALL_FILES_ACCESS_PERMISSION,
+                        android.net.Uri.parse("package:com.pihost"));
+            } else return err("BAD", "type 须为 a11y/overlay/allfiles");
+            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+            ctx.startActivity(i);
+            return ok("已打开设置页");
+        }});
+
         // ═══ L2 特权通道（经队列桥 → ZeroTermux → adbc shell，shell 权限）═══
         def("l2_exec", "以 shell 特权执行系统命令（静默授权/系统设置/输入注入/强制停止应用等）。普通命令请用 env_run",
             schema(props("cmd", prop("string", "特权命令"), "timeout_sec", prop("number", "超时秒默认30")), "cmd"), new H() { public JSONObject run(JSONObject a) throws Exception {
