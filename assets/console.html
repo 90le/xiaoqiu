@@ -1,0 +1,75 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pi 桥控制台</title>
+<style>
+  body{font-family:sans-serif;background:#0d1117;color:#e6edf3;margin:0;padding:16px;max-width:560px;margin:0 auto}
+  h1{font-size:20px} h1 span{color:#58a6ff;font-size:12px}
+  .grid{display:grid;grid-template-columns:1fr 1fr;gap:8px;margin:12px 0}
+  button{background:#21262d;color:#e6edf3;border:1px solid #30363d;border-radius:8px;padding:14px 8px;font-size:14px;cursor:pointer}
+  button:active{background:#30363d}
+  .wide{grid-column:1/3;background:#1f6feb;border-color:#1f6feb}
+  .danger{color:#f85149}
+  #out{background:#161b22;border:1px solid #30363d;border-radius:8px;padding:10px;font-size:12px;white-space:pre-wrap;word-break:break-all;min-height:120px;font-family:monospace}
+  .ok{color:#3fb950}.bad{color:#f85149}
+</style>
+</head>
+<body>
+<h1>🌉 pi 桥控制台 <span>v0.7</span></h1>
+<div id="dev">设备状态加载中…</div>
+<div class="grid">
+  <button class="wide" onclick="location.href='http://127.0.0.1:8787'">🌐 打开 Web UI（对话/文件/终端）</button>
+  <button onclick="api('battery_status')">🔋 电池</button>
+  <button onclick="api('network_info')">📶 网络</button>
+  <button onclick="api('notify_post',{title:'pi 桥测试',text:'可点击通知正常',url:'http://127.0.0.1:8787'})">🔔 测试通知</button>
+  <button onclick="api('clipboard_read')">📋 剪贴板</button>
+  <button onclick="api('flashlight',{on:true})">🔦 手电开</button>
+  <button onclick="api('flashlight',{on:false})">🔦 手电关</button>
+  <button onclick="queue(`bash ~/.pi/agent/skills/env-doctor/scripts/doctor.sh`);viewLog()">🩺 环境自检</button>
+  <button onclick="queue(`bash ~/工程档案/ZeroTermux-RESTORE.sh`);viewLog()" class="danger">🛠 一键重建环境</button>
+  <button class="wide" onclick="viewLog()">📜 查看队列执行日志</button>
+</div>
+<div id="out">就绪。</div>
+<script>
+const BASE = 'http://127.0.0.1:8099';
+const out = document.getElementById('out');
+const show = (t) => out.textContent = typeof t === 'string' ? t : JSON.stringify(t, null, 1);
+async function api(tool, args) {
+  show('执行 ' + tool + ' …');
+  try {
+    const r = await fetch(BASE + '/api/' + tool, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(args||{})});
+    const j = await r.json();
+    show(j.structuredContent || j);
+  } catch(e) { show('❌ ' + e + '（服务未运行？）'); }
+}
+async function queue(script) {
+  show('投递队列…');
+  try {
+    await fetch(BASE + '/api/termux_queue', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({script})});
+    show('已投递（2 秒内执行），稍后点「查看队列执行日志」');
+  } catch(e) { show('❌ ' + e); }
+}
+async function viewLog() {
+  try {
+    const r = await fetch(BASE + '/api/files_read_text', {method:'POST', headers:{'Content-Type':'application/json'},
+      body: JSON.stringify({path:'/storage/emulated/0/Download/pibridge-queue/last-run.log', maxKB:16})});
+    const j = await r.json();
+    const s = j.structuredContent;
+    show(s && s.ok ? (s.data.text || '(日志为空)') : j);
+  } catch(e) { show('❌ ' + e); }
+}
+(async function(){ // 启动自检：设备信息 + Web UI 可达性
+  try {
+    const r = await fetch(BASE + '/api/device_info'); const j = await r.json(); const d = j.structuredContent.data;
+    let web = '❌';
+    try { await fetch('http://127.0.0.1:8787', {mode:'no-cors'}); web = '✅'; } catch(e) {}
+    document.getElementById('dev').innerHTML =
+      `<span class="ok">✔ ${d.manufacturer} ${d.model} · Android ${d.android.replace(' (API',' / API')} · 电量见「电池」</span><br>` +
+      `存储剩余 ${d.storageFreeGB}G / ${d.storageTotalGB}G · Web UI ${web}`;
+  } catch(e) { document.getElementById('dev').innerHTML = '<span class="bad">✘ 桥服务未运行，请重启 App</span>'; }
+})();
+</script>
+</body>
+</html>
