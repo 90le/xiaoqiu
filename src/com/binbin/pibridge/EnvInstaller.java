@@ -108,7 +108,7 @@ public class EnvInstaller {
                     "  echo 0.84.4\n  exit 0\nfi\n" +
                     "exec /data/data/com.pihost/files/usr/bin/node /data/data/com.pihost/files/usr/lib/node_modules/@earendil-works/pi-coding-agent/dist/bundle/cli.js \"$@\"\n";
             if (pi.exists()) pi.delete();
-            write(pi, sh);
+            Tools.write(pi, sh);
             pi.setExecutable(true, true);
             android.util.Log.i("PiBridge", "pi 包装器已部署");
         } catch (Exception e) {
