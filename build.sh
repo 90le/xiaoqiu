@@ -23,14 +23,30 @@ mkdir -p gen obj build
 "$AAPT" package -f -m -J gen -M AndroidManifest.xml -S res -I "$AJ"
 
 # 2) Java 编译（javac 8 语法，d8 负责脱糖）
-javac -source 8 -target 8 -nowarn -Xlint:-options -cp "$AJ" -d obj $(find src gen -name "*.java")
+SHERPA_JAR="libs/aar-extract/classes.jar"
+JAVAC_CP="$AJ"
+[ -f "$SHERPA_JAR" ] && JAVAC_CP="$AJ:$SHERPA_JAR"
+javac -source 8 -target 8 -nowarn -Xlint:-options -cp "$JAVAC_CP" -d obj $(find src gen -name "*.java")
 
-# 3) dex
-"$D8" --min-api 24 --release --lib "$AJ" --output build $(find obj -name "*.class")
+# 3) dex（含 sherpa-onnx AAR 类 + kotlin-stdlib）
+SHERPA_CLS=libs/aar-extract/cls
+EXTRA_CLS=""
+[ -d "$SHERPA_CLS" ] && EXTRA_CLS=$(find "$SHERPA_CLS" -name "*.class")
+EXTRA_JAR=""
+[ -f libs/kotlin-stdlib.jar ] && EXTRA_JAR=libs/kotlin-stdlib.jar
+"$D8" --min-api 24 --release --lib "$AJ" --output build $(find obj -name "*.class") $EXTRA_CLS $EXTRA_JAR
 
 # 4) 打包 + 塞 dex（--rename-manifest-package：应用包名 com.pihost（10 字符，与 bootstrap 路径字节兼容），代码包不变）
 "$AAPT" package -f -M AndroidManifest.xml -S res -A assets -I "$AJ" --rename-manifest-package com.pihost -F build/base.apk
 (cd build && "$AAPT" add base.apk classes.dex)
+# 4.5) 原生库（sherpa-onnx 语音识别）
+if [ -d libs/aar-extract/jni/arm64-v8a ]; then
+  mkdir -p build/lib/arm64-v8a
+  cp libs/aar-extract/jni/arm64-v8a/libsherpa-onnx-jni.so build/lib/arm64-v8a/ 2>/dev/null || true
+  cp libs/aar-extract/jni/arm64-v8a/libonnxruntime.so build/lib/arm64-v8a/ 2>/dev/null || true
+  cp libs/aar-extract/jni/arm64-v8a/libsherpa-onnx-c-api.so build/lib/arm64-v8a/ 2>/dev/null || true
+  (cd build && "$AAPT" add base.apk lib/arm64-v8a/libsherpa-onnx-jni.so lib/arm64-v8a/libonnxruntime.so lib/arm64-v8a/libsherpa-onnx-c-api.so >/dev/null)
+fi
 
 # 5) 签名（CI 从 secrets 解出；本机无则自动生成）
 if [ ! -f pibridge.keystore ]; then

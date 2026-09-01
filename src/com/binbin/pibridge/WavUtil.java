@@ -1,0 +1,100 @@
+package com.binbin.pibridge;
+
+import android.content.Context;
+import android.media.AudioFormat;
+import android.media.AudioRecord;
+import android.media.MediaRecorder;
+
+import java.io.ByteArrayOutputStream;
+import java.io.DataOutputStream;
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.IOException;
+
+/** WAV 录音与读取（16k 单声道 16bit PCM，供语音识别用） */
+public class WavUtil {
+    private static final int RATE = 16000;
+
+    public static File record(Context c, int seconds) throws Exception {
+        int minBuf = AudioRecord.getMinBufferSize(RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
+        AudioRecord ar = new AudioRecord(MediaRecorder.AudioSource.MIC, RATE,
+                AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
+                Math.max(minBuf, RATE * 2 * 2));
+        if (ar.getState() != android.media.AudioRecord.STATE_INITIALIZED) {
+            ar.release();
+            throw new IllegalStateException("麦克风初始化失败（检查 RECORD_AUDIO 权限与 MIUI 麦克风开关）");
+        }
+        int totalSamples = RATE * seconds;
+        ByteArrayOutputStream pcm = new ByteArrayOutputStream(totalSamples * 2);
+        short[] chunk = new short[RATE / 2];
+        ar.startRecording();
+        int got = 0;
+        while (got < totalSamples) {
+            int n = ar.read(chunk, 0, Math.min(chunk.length, totalSamples - got));
+            if (n <= 0) break;
+            for (int i = 0; i < n; i++) {
+                pcm.write(chunk[i] & 0xFF);
+                pcm.write((chunk[i] >> 8) & 0xFF);
+            }
+            got += n;
+        }
+        ar.stop();
+        ar.release();
+
+        File dir = new File("/storage/emulated/0/Download/pibridge");
+        if (!dir.isDirectory()) dir.mkdirs();
+        File wav = new File(dir, "cap-" + System.currentTimeMillis() + ".wav");
+        byte[] data = pcm.toByteArray();
+        writeWav(wav, data, RATE, 1, 16);
+        return wav;
+    }
+
+    public static void writeWav(File f, byte[] pcmData, int rate, int channels, int bits) throws IOException {
+        int blockAlign = channels * bits / 8;
+        int dataLen = pcmData.length;
+        FileOutputStream fo = new FileOutputStream(f);
+        DataOutputStream o = new DataOutputStream(fo);
+        o.writeBytes("RIFF"); o.writeInt(Integer.reverseBytes(36 + dataLen));
+        o.writeBytes("WAVE"); o.writeBytes("fmt ");
+        o.writeInt(Integer.reverseBytes(16)); o.writeShort(Short.reverseBytes((short) 1));
+        o.writeShort(Short.reverseBytes((short) channels)); o.writeInt(Integer.reverseBytes(rate));
+        o.writeInt(Integer.reverseBytes(rate * blockAlign)); o.writeShort(Short.reverseBytes((short) blockAlign));
+        o.writeShort(Short.reverseBytes((short) bits));
+        o.writeBytes("data"); o.writeInt(Integer.reverseBytes(dataLen));
+        o.write(pcmData);
+        o.close();
+    }
+
+    /** 读 WAV（16bit PCM），返回归一化 float 样本与采样率 */
+    public static float[] readWav(File f, int[] rateOut) throws IOException {
+        FileInputStream fi = new FileInputStream(f);
+        ByteArrayOutputStream all = new ByteArrayOutputStream();
+        byte[] b = new byte[8192]; int n;
+        while ((n = fi.read(b)) > 0) all.write(b, 0, n);
+        fi.close();
+        byte[] d = all.toByteArray();
+        // 解析 RIFF
+        int pos = 12, rate = 16000, dataPos = -1, dataLen = 0;
+        while (pos + 8 <= d.length) {
+            String id = new String(d, pos, 4);
+            int sz = (d[pos+4]&0xFF) | ((d[pos+5]&0xFF)<<8) | ((d[pos+6]&0xFF)<<16) | ((d[pos+7]&0xFF)<<24);
+            if (id.equals("fmt ")) { rate = (d[pos+12]&0xFF) | ((d[pos+13]&0xFF)<<8) | ((d[pos+14]&0xFF)<<16) | ((d[pos+15]&0xFF)<<24); }
+            if (id.equals("data")) { dataPos = pos + 8; dataLen = sz; break; }
+            pos += 8 + sz + (sz % 2);
+        }
+        if (dataPos < 0) throw new IOException("非 WAV 文件");
+        int samples = dataLen / 2;
+        float[] out = new float[samples];
+        for (int i = 0; i < samples; i++) {
+            int lo = d[dataPos + i*2] & 0xFF, hi = d[dataPos + i*2 + 1];
+            out[i] = (short)((hi << 8) | lo) / 32768.0f;
+        }
+        if (rateOut != null && rateOut.length > 0) rateOut[0] = rate;
+        return out;
+    }
+
+    public static float[] readWav(String path) throws IOException {
+        return readWav(new File(path), null);
+    }
+}

@@ -541,34 +541,62 @@ public class Tools {
             }
             return ok(friendly);
         }});
-        def("mic_record", "麦克风录音 N 秒保存 m4a（需麦克风权限，可 l2 授权）",
+        def("mic_record", "麦克风录音 N 秒保存 WAV 16k（语音识别用）",
             schema(props("seconds", prop("number", "录音秒数默认10，上限120"))), new H() { public JSONObject run(JSONObject a) throws Exception {
             int sec = a.optInt("seconds", 10);
             if (sec < 2) sec = 2; if (sec > 120) sec = 120;
-            File dir = new File("/storage/emulated/0/Download/pibridge");
-            if (!dir.isDirectory()) dir.mkdirs();
-            File out = new File(dir, "rec-" + System.currentTimeMillis() + ".m4a");
-            try {
-                android.media.MediaRecorder mr;
-                if (Build.VERSION.SDK_INT >= 31) mr = new android.media.MediaRecorder(ctx);
-                else mr = new android.media.MediaRecorder();
-                mr.setAudioSource(android.media.MediaRecorder.AudioSource.MIC);
-                mr.setOutputFormat(android.media.MediaRecorder.OutputFormat.MPEG_4);
-                mr.setAudioEncoder(android.media.MediaRecorder.AudioEncoder.AAC);
-                mr.setAudioEncodingBitRate(128000);
-                mr.setAudioSamplingRate(44100);
-                mr.setOutputFile(out.getAbsolutePath());
-                mr.prepare();
-                mr.start();
-                Thread.sleep(sec * 1000L);
-                mr.stop();
-                mr.release();
-                return ok(out.getAbsolutePath() + " " + out.length() + "B");
-            } catch (SecurityException se) {
-                return err("NO_PERM", "缺麦克风权限。修复：l2_exec cmd=pm grant com.pihost android.permission.RECORD_AUDIO");
-            } catch (Exception e) {
-                return err("FAIL", e.toString());
+            File wav = WavUtil.record(ctx, sec);
+            return ok(wav.getAbsolutePath() + " " + wav.length() + "B");
+        }});
+        def("stt_transcribe", "语音转文字（SenseVoice 离线模型，输入 WAV 路径）",
+            schema(props("file", prop("string", "WAV 文件路径（16k 单声道）")), "file"), new H() { public JSONObject run(JSONObject a) throws Exception {
+            String file = a.optString("file", "");
+            if (file.isEmpty()) return err("BAD", "缺文件路径");
+            File mf = new File(EnvInstaller.HOME + "/sherpa/model/model.int8.onnx");
+            File tk = new File(EnvInstaller.HOME + "/sherpa/model/tokens.txt");
+            if (!mf.exists() || !tk.exists()) return err("NO_MODEL", "模型未下载（239M，稍候自动完成）");
+            if (sttRec == null) {
+                String nat = ctx.getApplicationInfo().nativeLibraryDir;
+                System.load(nat + "/libonnxruntime.so");
+                System.load(nat + "/libsherpa-onnx-jni.so");
+                com.k2fsa.sherpa.onnx.QnnConfig qnn = new com.k2fsa.sherpa.onnx.QnnConfig("", "", "");
+                com.k2fsa.sherpa.onnx.OfflineSenseVoiceModelConfig sv =
+                    new com.k2fsa.sherpa.onnx.OfflineSenseVoiceModelConfig(mf.getAbsolutePath(), "", false, qnn);
+                com.k2fsa.sherpa.onnx.OfflineTransducerModelConfig cTra = new com.k2fsa.sherpa.onnx.OfflineTransducerModelConfig("", "", "", qnn);
+                com.k2fsa.sherpa.onnx.OfflineParaformerModelConfig cPar = new com.k2fsa.sherpa.onnx.OfflineParaformerModelConfig("", qnn);
+                com.k2fsa.sherpa.onnx.OfflineWhisperModelConfig cWhi = new com.k2fsa.sherpa.onnx.OfflineWhisperModelConfig("", "", "", "", 0, false, false);
+                com.k2fsa.sherpa.onnx.OfflineFireRedAsrModelConfig cFir = new com.k2fsa.sherpa.onnx.OfflineFireRedAsrModelConfig("", "");
+                com.k2fsa.sherpa.onnx.OfflineMoonshineModelConfig cMoo = new com.k2fsa.sherpa.onnx.OfflineMoonshineModelConfig("", "", "", "", "");
+                com.k2fsa.sherpa.onnx.OfflineNemoEncDecCtcModelConfig cNem = new com.k2fsa.sherpa.onnx.OfflineNemoEncDecCtcModelConfig("");
+                com.k2fsa.sherpa.onnx.OfflineDolphinModelConfig cDol = new com.k2fsa.sherpa.onnx.OfflineDolphinModelConfig("");
+                com.k2fsa.sherpa.onnx.OfflineZipformerCtcModelConfig cZip = new com.k2fsa.sherpa.onnx.OfflineZipformerCtcModelConfig("", qnn);
+                com.k2fsa.sherpa.onnx.OfflineWenetCtcModelConfig cWen = new com.k2fsa.sherpa.onnx.OfflineWenetCtcModelConfig("");
+                com.k2fsa.sherpa.onnx.OfflineOmnilingualAsrCtcModelConfig cOmn = new com.k2fsa.sherpa.onnx.OfflineOmnilingualAsrCtcModelConfig("");
+                com.k2fsa.sherpa.onnx.OfflineMedAsrCtcModelConfig cMed = new com.k2fsa.sherpa.onnx.OfflineMedAsrCtcModelConfig("");
+                com.k2fsa.sherpa.onnx.OfflineFunAsrNanoModelConfig cFun = new com.k2fsa.sherpa.onnx.OfflineFunAsrNanoModelConfig("", "", "", "", "", "", 0, 0f, 0f, 0, "", false, "");
+                com.k2fsa.sherpa.onnx.OfflineQwen3AsrModelConfig cQwe = new com.k2fsa.sherpa.onnx.OfflineQwen3AsrModelConfig("", "", "", "", 0, 0, 0f, 0f, 0, "");
+                com.k2fsa.sherpa.onnx.OfflineFireRedAsrCtcModelConfig cFrc = new com.k2fsa.sherpa.onnx.OfflineFireRedAsrCtcModelConfig("");
+                com.k2fsa.sherpa.onnx.OfflineCanaryModelConfig cCan = new com.k2fsa.sherpa.onnx.OfflineCanaryModelConfig("", "", "", "", false);
+                com.k2fsa.sherpa.onnx.OfflineCohereTranscribeModelConfig cCoh = new com.k2fsa.sherpa.onnx.OfflineCohereTranscribeModelConfig("", "", "", false, false);
+                com.k2fsa.sherpa.onnx.OfflineModelConfig mc =
+                    new com.k2fsa.sherpa.onnx.OfflineModelConfig(cTra, cPar, cWhi, cFir, cMoo, cNem, sv,
+                        cDol, cZip, cWen, cOmn, cMed, cFun, cQwe, cFrc, cCan, cCoh,
+                        tk.getAbsolutePath(), 2, false, "cpu", "", "", "", "");
+                com.k2fsa.sherpa.onnx.OfflineRecognizerConfig cfg =
+                    new com.k2fsa.sherpa.onnx.OfflineRecognizerConfig(
+                        new com.k2fsa.sherpa.onnx.FeatureConfig(16000, 80, 0.0f),
+                        mc,
+                        new com.k2fsa.sherpa.onnx.HomophoneReplacerConfig("", "", ""),
+                        "greedy_search", 4, "", 1.5f, "", "", 0.0f);
+                sttRec = new com.k2fsa.sherpa.onnx.OfflineRecognizer(null, cfg);
             }
+            float[] samples = WavUtil.readWav(file);
+            com.k2fsa.sherpa.onnx.OfflineStream st = sttRec.createStream();
+            st.acceptWaveform(samples, 16000);
+            sttRec.decode(st);
+            String text = sttRec.getResult(st).getText();
+            st.release();
+            return ok(text.isEmpty() ? "(未识别到语音)" : text);
         }});
 
         // ═══ 权限中心（向导/设置页数据源）═══
@@ -731,6 +759,8 @@ public class Tools {
     }
 
     /** IntentFilter 不能用匿名类继承简写，补个小类 */
+
+    static com.k2fsa.sherpa.onnx.OfflineRecognizer sttRec;
 
     static String readFile(File f) throws Exception {
         java.io.BufferedReader br = new java.io.BufferedReader(new java.io.InputStreamReader(new java.io.FileInputStream(f), "UTF-8"));
