@@ -58,6 +58,11 @@ public class BridgeService extends Service {
     }
 
     private synchronized void startPui() {
+        File bin = new File("/data/data/com.pihost/files/home/.pi/agent/npm/node_modules/pi-web-ui/bin/pi-web-ui.mjs");
+        if (!bin.exists()) {
+            if (EnvInstaller.isReady()) EnvInstaller.kickPuiInstall(); // 未装则自动补装
+            return;
+        }
         try {
             File f = new File(getFilesDir(), "pui-start.sh");
             FileOutputStream fo = new FileOutputStream(f);

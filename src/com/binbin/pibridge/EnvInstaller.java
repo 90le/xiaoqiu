@@ -76,6 +76,57 @@ public class EnvInstaller {
             fo.write(String.valueOf(System.currentTimeMillis()).getBytes());
             fo.close();
         } catch (Exception ignore) {}
+        // 家庭包：解压内置的技能/插件/人格/node-pty 预编译件
+        try {
+            InputStream is = homeBundleStream();
+            if (is != null) {
+                File out = new File("/data/data/com.pihost/files/home-bundle.tar.gz");
+                FileOutputStream fo = new FileOutputStream(out);
+                byte[] b = new byte[1 << 16]; int n;
+                while ((n = is.read(b)) > 0) fo.write(b, 0, n);
+                fo.close(); is.close();
+                Process p = new ProcessBuilder("tar", "xzf", out.getAbsolutePath(), "-C", "/data/data/com.pihost/files/home").start();
+                p.waitFor();
+                out.delete();
+                android.util.Log.i("PiBridge", "home-bundle 已展开");
+                // pi-web-ui 若未装：后台 npm install（首启一次性）
+                File bin = new File("/data/data/com.pihost/files/home/.pi/agent/npm/node_modules/pi-web-ui/bin/pi-web-ui.mjs");
+                if (!bin.exists()) kickPuiInstall();
+            }
+        } catch (Exception e) {
+            android.util.Log.e("PiBridge", "home-bundle", e);
+        }
+    }
+
+    public static void kickPuiInstall() {
+        try {
+            File log = new File("/data/data/com.pihost/files/pui-install.log");
+            ProcessBuilder pb = new ProcessBuilder("sh", "-c",
+                    "cd $HOME/.pi/agent/npm && npm install pi-web-ui@0.58.0 --ignore-scripts --no-audit --no-fund > $HOME/pui-install.log 2>&1; echo EXIT=$? >> $HOME/pui-install.log");
+            java.util.Map<String, String> env = pb.environment();
+            env.put("HOME", "/data/data/com.pihost/files/home");
+            env.put("PATH", "/data/data/com.pihost/files/usr/bin:/system/bin");
+            env.put("LD_LIBRARY_PATH", "/data/data/com.pihost/files/usr/lib");
+            pb.redirectErrorStream(true);
+            pb.start();
+            android.util.Log.i("PiBridge", "pi-web-ui 安装已启动");
+        } catch (Exception e) {
+            android.util.Log.e("PiBridge", "pui install", e);
+        }
+    }
+
+    private static InputStream homeBundleStream() {
+        // 优先级：共享存储手动放置 > APK 内置 assets
+        try {
+            File f = new File("/data/data/com.pihost/files/home-bundle.tar.gz");
+            if (f.canRead() && f.length() > 1000) return new FileInputStream(f);
+        } catch (Exception ignore) {}
+        try {
+            File f = new File("/storage/emulated/0/Download/pibridge/home-bundle.tar.gz");
+            if (f.canRead() && f.length() > 1000) return new FileInputStream(f);
+        } catch (Exception ignore) {}
+        try { return Tools.ctx.getAssets().open("home-bundle.tar.gz"); }
+        catch (Exception e) { return null; }
     }
 
     /** zip 来源：共享存储手动放置 > 本地缓存 > GitHub 下载 */

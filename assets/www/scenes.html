@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html lang="zh">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>场景 · 小丘</title>
+<style>
+  :root { --hill:#3E7C59; --dawn:#E8853D; --ink:#22301F; --muted:#7A8471; --line:#E8E1D4; --bg:#F7F3EC; }
+  * { box-sizing:border-box; margin:0; }
+  body { font-family:'MiSans','HarmonyOS Sans',system-ui,sans-serif; background:var(--bg); color:var(--ink); padding:16px 14px 30px; }
+  h1 { font-size:20px; margin:6px 4px 2px; }
+  .sub { color:var(--muted); font-size:13px; margin:0 4px 16px; }
+  .grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
+  .card { background:#fff; border:1px solid var(--line); border-radius:18px; padding:16px 14px; cursor:pointer; transition:transform .06s; }
+  .card:active { transform:scale(.97); }
+  .ico { font-size:26px; }
+  .t { font-size:15px; font-weight:600; margin:8px 0 3px; }
+  .d { font-size:12px; color:var(--muted); }
+  #out { margin-top:16px; background:#fff; border:1px solid var(--line); border-radius:18px; padding:14px; font-size:13px; white-space:pre-wrap; word-break:break-all; display:none; }
+</style>
+</head>
+<body>
+<h1>场景</h1>
+<div class="sub">一键直达，小丘替你办</div>
+<div class="grid">
+  <div class="card" onclick="run('battery_status',{},'🔋 电池')"><div class="ico">🔋</div><div class="t">电池状态</div><div class="d">电量/温度/充电</div></div>
+  <div class="card" onclick="run('network_info',{},'📶 网络')"><div class="ico">📶</div><div class="t">网络信息</div><div class="d">WiFi/流量/信号</div></div>
+  <div class="card" onclick="run('screenshot',{},'📸 截图')"><div class="ico">📸</div><div class="t">截个屏</div><div class="d">保存当前屏幕</div></div>
+  <div class="card" onclick="run('screen_state',{},' Screen')"><div class="ico">🔆</div><div class="t">屏幕状态</div><div class="d">亮灭/亮度</div></div>
+  <div class="card" onclick="run('device_info',{},'📱 设备')"><div class="ico">📱</div><div class="t">设备信息</div><div class="d">型号/系统/存储</div></div>
+  <div class="card" onclick="run('apps_list',{limit:200},'📦 应用')"><div class="ico">📦</div><div class="t">应用统计</div><div class="d">已装应用列表</div></div>
+</div>
+<div id="out"></div>
+<script>
+async function run(tool, args, tag) {
+  const out = document.getElementById('out');
+  out.style.display = 'block';
+  out.textContent = tag + ' 执行中…';
+  try {
+    const r = await fetch('/api/' + tool, {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(args)});
+    const d = (await r.json()).structuredContent;
+    if (d.ok) {
+      let s = typeof d.data === 'string' ? d.data : JSON.stringify(d.data, null, 1);
+      out.textContent = tag + ' ✅\n' + (s.length > 1500 ? s.slice(0, 1500) + '…' : s);
+    } else out.textContent = tag + ' ❌ ' + (d.error ? d.error.message : '失败');
+  } catch(e) { out.textContent = tag + ' ❌ 网络错误'; }
+}
+</script>
+</body>
+</html>
