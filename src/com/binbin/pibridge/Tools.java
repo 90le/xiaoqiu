@@ -478,6 +478,32 @@ public class Tools {
             });
             return ok("安装已后台启动，可用 env_status 轮询");
         }});
+        def("setkey", "保存 API Key 与默认模型（写入小丘的 auth.json/settings.json）",
+            schema(props("provider", prop("string", "供应商，如 zai-coding-cn"),
+                    "key", prop("string", "API Key"),
+                    "model", prop("string", "默认模型，如 glm-5.3-flash")),
+                    "provider", "key"), new H() { public JSONObject run(JSONObject a) throws Exception {
+            String provider = a.optString("provider", "zai-coding-cn");
+            String key = a.optString("key", "");
+            String model = a.optString("model", "");
+            if (key.length() < 8) return err("BAD", "Key 太短");
+            File dir = new File(EnvInstaller.HOME, ".pi/agent");
+            if (!dir.isDirectory()) dir.mkdirs();
+            File af = new File(dir, "auth.json");
+            JSONObject auth = new JSONObject();
+            try { if (af.canRead()) auth = new JSONObject(readFile(af)); } catch (Exception ignore) {}
+            auth.put(provider, new JSONObject().put("type", "api_key").put("key", key));
+            write(af, auth.toString());
+            if (model.length() > 0) {
+                File sf = new File(dir, "settings.json");
+                JSONObject st = new JSONObject();
+                try { if (sf.canRead()) st = new JSONObject(readFile(sf)); } catch (Exception ignore) {}
+                st.put("defaultProvider", provider).put("defaultModel", model);
+                write(sf, st.toString());
+            }
+            return ok("已保存（" + provider + "，key 尾号 " + key.substring(Math.max(0, key.length() - 4)) + "）");
+        }});
+
         def("env_run", "在工作台 pi 环境内执行 shell 命令（pi/node/npm/全部 Linux 工具可用），返回输出", 
             schema(props("cmd", prop("string", "命令"), "timeout_sec", prop("number", "超时秒默认120")), "cmd"), new H() { public JSONObject run(JSONObject a) throws Exception {
             if (!EnvInstaller.isReady()) return err("NOT_READY", "环境未就绪，先调 env_install");
@@ -558,4 +584,18 @@ public class Tools {
     }
 
     /** IntentFilter 不能用匿名类继承简写，补个小类 */
+
+    static String readFile(File f) throws Exception {
+        java.io.BufferedReader br = new java.io.BufferedReader(new java.io.InputStreamReader(new java.io.FileInputStream(f), "UTF-8"));
+        StringBuilder sb = new StringBuilder(); String l;
+        while ((l = br.readLine()) != null) sb.append(l);
+        br.close();
+        return sb.toString();
+    }
+
+    static void write(File f, String s) throws Exception {
+        FileOutputStream fo = new FileOutputStream(f);
+        fo.write(s.getBytes("UTF-8"));
+        fo.close();
+    }
 }

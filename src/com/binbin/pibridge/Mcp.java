@@ -16,6 +16,11 @@ import java.util.Map;
 public class Mcp implements Runnable {
     public static final int PORT = 8181;
     private volatile boolean run = true;
+
+    public void shutdown() {
+        run = false;
+        try { if (ss != null) ss.close(); } catch (Exception ignore) {}
+    }
     private ServerSocket ss;
 
     public void stop() {
@@ -24,15 +29,19 @@ public class Mcp implements Runnable {
     }
 
     @Override public void run() {
-        try {
-            ss = new ServerSocket(PORT, 64, InetAddress.getByName("127.0.0.1"));
-            Log.i("PiBridge", "MCP listening on 127.0.0.1:" + PORT);
-            while (run) {
-                final Socket s = ss.accept();
-                new Thread(new Runnable() { public void run() { handle(s); } }).start();
+        // 永生循环：任何 Throwable（含 OOM）都不终结服务，1.5 秒后重建端口
+        while (run) {
+            try {
+                ss = new ServerSocket(PORT, 64, InetAddress.getByName("127.0.0.1"));
+                Log.i("PiBridge", "MCP listening on 127.0.0.1:" + PORT);
+                while (run) {
+                    final Socket s = ss.accept();
+                    new Thread(new Runnable() { public void run() { handle(s); } }).start();
+                }
+            } catch (Throwable e) {
+                Log.e("PiBridge", "mcp server crash, restarting", e);
             }
-        } catch (Exception e) {
-            if (run) Log.e("PiBridge", "mcp server", e);
+            try { Thread.sleep(1500); } catch (InterruptedException ignore) {}
         }
     }
 
@@ -69,6 +78,10 @@ public class Mcp implements Runnable {
                 off += n;
             }
 
+            if (path.equals("/ping")) {
+                resp(s, 200, new JSONObject().put("pong", true).put("ts", System.currentTimeMillis()));
+                return;
+            }
             if (path.startsWith("/mcp")) {
                 if (!"POST".equals(method)) {
                     resp(s, 405, new JSONObject().put("error", "use POST"));
@@ -84,20 +97,28 @@ public class Mcp implements Runnable {
                         .put("content", new JSONArray().put(new JSONObject().put("type", "text").put("text", res.toString())))
                         .put("structuredContent", res);
                 resp(s, 200, out);
-            } else if (path.equals("/") || path.equals("/index.html")) {
-                // 工作台首页（内嵌 assets，同一端口，零冲突）
+            } else if (path.equals("/") || path.startsWith("/www/") || path.endsWith(".html") || path.endsWith(".css") || path.endsWith(".js") || path.endsWith(".svg")) {
+                // 静态资源（assets/www），同端口零冲突
                 try {
-                    InputStream ais = Tools.ctx.getAssets().open("console.html");
+                    String apath = path.equals("/") || path.equals("/index.html") ? "www/index.html"
+                            : (path.startsWith("/www/") ? path.substring(1) : "www" + path);
+                    if (apath.contains("..")) throw new Exception("bad path");
+                    InputStream ais = Tools.ctx.getAssets().open(apath);
                     ByteArrayOutputStream abo = new ByteArrayOutputStream();
                     byte[] ab = new byte[8192]; int an;
                     while ((an = ais.read(ab)) > 0) abo.write(ab, 0, an);
                     ais.close();
-                    byte[] html = abo.toByteArray();
-                    s.getOutputStream().write(("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: " + html.length + "\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.UTF_8));
-                    s.getOutputStream().write(html);
+                    byte[] bodyBytes = abo.toByteArray();
+                    String mime = apath.endsWith(".html") ? "text/html; charset=utf-8"
+                            : apath.endsWith(".css") ? "text/css; charset=utf-8"
+                            : apath.endsWith(".js") ? "text/javascript"
+                            : apath.endsWith(".svg") ? "image/svg+xml"
+                            : apath.endsWith(".png") ? "image/png" : "application/octet-stream";
+                    s.getOutputStream().write(("HTTP/1.1 200 OK\r\nContent-Type: " + mime + "\r\nContent-Length: " + bodyBytes.length + "\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+                    s.getOutputStream().write(bodyBytes);
                     s.close();
                 } catch (Exception e2) {
-                    resp(s, 404, new JSONObject().put("error", "console not found"));
+                    resp(s, 404, new JSONObject().put("error", "not found"));
                 }
             } else {
                 resp(s, 404, new JSONObject().put("error", "not found"));
