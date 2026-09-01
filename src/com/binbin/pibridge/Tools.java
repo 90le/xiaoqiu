@@ -503,6 +503,74 @@ public class Tools {
             }
             return ok("已保存（" + provider + "，key 尾号 " + key.substring(Math.max(0, key.length() - 4)) + "）");
         }});
+        // ═══ 设备感知（pi-api 能力原生吸收）═══
+        def("sensors_read", "读取手机传感器瞬时值（加速度/磁场/光照/接近/重力）", schema(props()), new H() { public JSONObject run(JSONObject a) throws Exception {
+            android.hardware.SensorManager sm = (android.hardware.SensorManager) ctx.getSystemService(Context.SENSOR_SERVICE);
+            if (sm == null) return err("NO_SENSOR", "无传感器服务");
+            JSONObject out = new JSONObject();
+            final java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+            android.hardware.SensorEventListener li = new android.hardware.SensorEventListener() {
+                public void onSensorChanged(android.hardware.SensorEvent ev) {
+                    try {
+                        String t = ev.sensor.getStringType();
+                        StringBuilder sb = new StringBuilder();
+                        for (int i = 0; i < ev.values.length && i < 3; i++) sb.append(i > 0 ? "," : "").append(String.format("%.2f", ev.values[i]));
+                        if (!out.has(t)) out.put(t, sb.toString());
+                    } catch (Exception ignore) {}
+                }
+                public void onAccuracyChanged(android.hardware.Sensor s2, int ac) {}
+            };
+            String[] names = {"accelerometer", "magnetic", "light", "proximity", "gravity"};
+            int[] types = {android.hardware.Sensor.TYPE_ACCELEROMETER, android.hardware.Sensor.TYPE_MAGNETIC_FIELD,
+                    android.hardware.Sensor.TYPE_LIGHT, android.hardware.Sensor.TYPE_PROXIMITY, android.hardware.Sensor.TYPE_GRAVITY};
+            boolean any = false;
+            for (int i = 0; i < types.length; i++) {
+                android.hardware.Sensor s2 = sm.getDefaultSensor(types[i]);
+                if (s2 != null) { sm.registerListener(li, s2, android.hardware.SensorManager.SENSOR_DELAY_NORMAL); any = true; }
+            }
+            if (!any) return err("NO_SENSOR", "无可用传感器");
+            try { latch.await(900, TimeUnit.MILLISECONDS); } catch (Exception ignore) {}
+            sm.unregisterListener(li);
+            JSONObject friendly = new JSONObject();
+            java.util.Iterator<String> it = out.keys();
+            while (it.hasNext()) {
+                String k = it.next();
+                String fk = k;
+                for (String n : names) if (k.endsWith(n)) fk = n;
+                friendly.put(fk, out.get(k));
+            }
+            return ok(friendly);
+        }});
+        def("mic_record", "麦克风录音 N 秒保存 m4a（需麦克风权限，可 l2 授权）",
+            schema(props("seconds", prop("number", "录音秒数默认10，上限120"))), new H() { public JSONObject run(JSONObject a) throws Exception {
+            int sec = a.optInt("seconds", 10);
+            if (sec < 2) sec = 2; if (sec > 120) sec = 120;
+            File dir = new File("/storage/emulated/0/Download/pibridge");
+            if (!dir.isDirectory()) dir.mkdirs();
+            File out = new File(dir, "rec-" + System.currentTimeMillis() + ".m4a");
+            try {
+                android.media.MediaRecorder mr;
+                if (Build.VERSION.SDK_INT >= 31) mr = new android.media.MediaRecorder(ctx);
+                else mr = new android.media.MediaRecorder();
+                mr.setAudioSource(android.media.MediaRecorder.AudioSource.MIC);
+                mr.setOutputFormat(android.media.MediaRecorder.OutputFormat.MPEG_4);
+                mr.setAudioEncoder(android.media.MediaRecorder.AudioEncoder.AAC);
+                mr.setAudioEncodingBitRate(128000);
+                mr.setAudioSamplingRate(44100);
+                mr.setOutputFile(out.getAbsolutePath());
+                mr.prepare();
+                mr.start();
+                Thread.sleep(sec * 1000L);
+                mr.stop();
+                mr.release();
+                return ok(out.getAbsolutePath() + " " + out.length() + "B");
+            } catch (SecurityException se) {
+                return err("NO_PERM", "缺麦克风权限。修复：l2_exec cmd=pm grant com.pihost android.permission.RECORD_AUDIO");
+            } catch (Exception e) {
+                return err("FAIL", e.toString());
+            }
+        }});
+
         // ═══ 权限中心（向导/设置页数据源）═══
         def("perm_status", "查询小丘权限与环境状态（无障碍/悬浮窗/所有文件/队列桥/环境）", schema(props()), new H() { public JSONObject run(JSONObject a) throws Exception {
             JSONObject o = new JSONObject();
