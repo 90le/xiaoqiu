@@ -444,6 +444,28 @@ public class Tools {
                     ? ok("已滑动") : err("NO_SERVICE", "辅助服务未开启");
         }});
 
+        // ═══ 感知与直设（比截图喂视觉更快更准）═══
+        def("ui_screen_read", "读取当前屏幕控件树（结构化 JSON：文本/ID/坐标/可点击性），AI 直接理解界面", schema(props()), new H() { public JSONObject run(JSONObject a) {
+            JSONArray nodes = AdbService.readTree();
+            if (nodes == null) return err("NO_SERVICE", "辅助服务未开启或无活动窗口");
+            try { return ok(new JSONObject().put("count", nodes.length()).put("nodes", nodes)); }
+            catch (Exception e) { return err("INTERNAL", e.toString()); }
+        }});
+        def("ui_set_text", "直接设置当前焦点输入框的文本（无需剪贴板粘贴菜单）", schema(props("text", prop("string", "要设置的文本")), "text"), new H() { public JSONObject run(JSONObject a) {
+            String r = AdbService.setText(a.optString("text", ""));
+            return r.equals("已设置") ? ok(r) : err("SET_FAIL", r);
+        }});
+        def("screenshot", "截取当前屏幕并保存（无障碍通道，返回 PNG 路径）", schema(props()), new H() { public JSONObject run(JSONObject a) {
+            final java.util.concurrent.CountDownLatch latch = new java.util.concurrent.CountDownLatch(1);
+            final String[] out = new String[2];
+            AdbService.screenshot(new AdbService.ShotCb() { public void onShot(boolean ok, String msg) {
+                out[0] = ok ? "1" : "0"; out[1] = msg; latch.countDown();
+            }});
+            try { latch.await(8, TimeUnit.SECONDS); } catch (Exception ignore) {}
+            if (out[0] == null) return err("TIMEOUT", "截图超时");
+            return out[0].equals("1") ? ok(out[1]) : err("SHOT_FAIL", out[1]);
+        }});
+
         def("app_request_permission", "弹出系统授权对话框（用于设置页不显示的自定义权限，如 Termux 命令）",
             schema(props("permission", prop("string", "权限全名")), "permission"), new H() { public JSONObject run(JSONObject a) throws Exception {
                 Intent i = new Intent(ctx, MainActivity.class);
