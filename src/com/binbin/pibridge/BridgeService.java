@@ -92,34 +92,43 @@ public class BridgeService extends Service {
     }
 
     private void watchdog() {
+        // 部分唤醒锁：锁屏/灭屏也保持 CPU 运行，对话不中断
+        try {
+            android.os.PowerManager pm = (android.os.PowerManager) getSystemService(POWER_SERVICE);
+            wl = pm.newWakeLock(android.os.PowerManager.PARTIAL_WAKE_LOCK, "xiaoqiu:service");
+            wl.acquire();
+        } catch (Exception ignore) {}
         h.postDelayed(new Runnable() {
             @Override public void run() {
                 try {
-                    // MCP 自愈：连续 3 次失联 → 重建服务线程（Mcp 内部永生循环兜底）
+                    // MCP：连续 60 秒失联才重建（避免误杀忙碌中的服务）
                     if (!ping("http://127.0.0.1:8181/ping")) {
                         mcpFails++;
-                        if (mcpFails >= 3 && mcp != null) {
+                        if (mcpFails >= 6 && mcp != null) {
                             mcp.shutdown();
                             startMcp();
                             mcpFails = 0;
                             android.util.Log.i("PiBridge", "watchdog: MCP 已重建");
                         }
                     } else mcpFails = 0;
-                    // pi-web-ui 自愈：环境就绪后连续 2 次失联 → 重拉
-                    if (EnvInstaller.isReady() && !ping("http://127.0.0.1:8182/")) {
-                        puiFails++;
-                        if (puiFails >= 2) {
-                            if (puiProc != null) puiProc.destroy();
-                            startPui();
-                            puiFails = 0;
-                            android.util.Log.i("PiBridge", "watchdog: pi-web-ui 已重拉");
+                    // pi-web-ui：只在【进程已死】时重拉；进程活着但忙（流式输出中）绝不杀
+                    if (EnvInstaller.isReady()) {
+                        boolean alive = puiProc != null && puiProc.isAlive();
+                        if (!alive) {
+                            File bin = new File("/data/data/com.pihost/files/home/.pi/agent/npm/node_modules/pi-web-ui/bin/pi-web-ui.mjs");
+                            if (bin.exists()) {
+                                startPui();
+                                android.util.Log.i("PiBridge", "watchdog: pi-web-ui 进程已死，重拉");
+                            }
                         }
-                    } else puiFails = 0;
+                        // 进程活着就不干预（忙/慢都容忍）
+                    }
                 } catch (Exception ignore) {}
                 h.postDelayed(this, 10000);
             }
         }, 10000);
     }
+    private android.os.PowerManager.WakeLock wl;
 
     @Override public int onStartCommand(Intent i, int f, int id) {
         startForeground(1, notif());

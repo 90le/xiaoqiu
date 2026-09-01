@@ -4,102 +4,223 @@ import android.content.Context;
 import android.content.Intent;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
+import android.graphics.Rect;
 import android.graphics.drawable.GradientDrawable;
 import android.os.Build;
 import android.provider.Settings;
 import android.view.Gravity;
-
-import java.io.File;
-import java.io.FileInputStream;
-import java.io.FileOutputStream;
 import android.view.MotionEvent;
 import android.view.View;
 import android.view.WindowManager;
 import android.widget.TextView;
 
-/** MT 式悬浮球：保活可见性 + 一键回小丘。可拖拽，单击打开主界面。 */
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.util.Collections;
+
+/** MT 式悬浮球：吸附态（边缘竖条，触摸区加宽+手势排除）/ 自由态（圆球），轻点回小丘，可拖拽互换。 */
 public class FloatBall {
     private static WindowManager wm;
     private static View ball;
-
-    public static boolean isOn() { return ball != null; }
+    private static boolean docked = true;
+    private static int dockSide = 0; // 0 左 1 右
+    private static int dockY = 420;
+    private static int floatX, floatY;
 
     private static final android.os.Handler MAIN = new android.os.Handler(android.os.Looper.getMainLooper());
+    private static final int TOUCH_W = 36;   // 吸附态触摸区宽（视觉条 10px 贴边，其余向内延伸便于抓取）
+    private static final int BAR_VISUAL = 10;
+    private static final int BAR_H = 64;
+    private static final int CIRCLE = 52;
+    private static final int SLOP = 18;
+    private static final int DOCK_MAGNET = 60;
 
-    private static java.io.File prefFile(Context c) { return new File(c.getFilesDir(), "floatball"); }
+    private static int dp(Context c, int v) { return (int) (c.getResources().getDisplayMetrics().density * v + 0.5f); }
+    private static int screenW(Context c) { return c.getResources().getDisplayMetrics().widthPixels; }
+    private static int screenH(Context c) { return c.getResources().getDisplayMetrics().heightPixels; }
+
+    private static File prefFile(Context c) { return new File(c.getFilesDir(), "floatball"); }
     private static void save(Context c, boolean on) {
-        try { java.io.FileOutputStream fo = new java.io.FileOutputStream(prefFile(c)); fo.write((on ? "1" : "0").getBytes()); fo.close(); } catch (Exception ignore) {}
+        try { FileOutputStream fo = new FileOutputStream(prefFile(c)); fo.write((on ? "1" : "0").getBytes()); fo.close(); } catch (Exception ignore) {}
     }
     public static boolean savedOn(Context c) {
-        try { java.io.FileInputStream fi = new java.io.FileInputStream(prefFile(c)); byte[] b = new byte[1]; int n = fi.read(b); fi.close(); return n == 1 && b[0] == '1'; } catch (Exception e) { return false; }
+        try { FileInputStream fi = new FileInputStream(prefFile(c)); byte[] b = new byte[1]; int n = fi.read(b); fi.close(); return n == 1 && b[0] == '1'; } catch (Exception e) { return false; }
     }
+    public static boolean isOn() { return ball != null; }
 
     public static boolean toggle(Context c) {
         if (isOn()) { runMain(c, "hide"); return false; }
         runMain(c, "show");
         return true;
     }
-
     private static void runMain(Context c, final String what) {
         MAIN.post(() -> { if (what.equals("show")) show(c); else hide(c); });
     }
+    public static void showAsync(Context c) { runMain(c, "show"); }
+    public static void hideAsync(Context c) { runMain(c, "hide"); }
 
     public static boolean show(Context c) {
         if (ball != null) return true;
         if (Build.VERSION.SDK_INT >= 23 && !Settings.canDrawOverlays(c)) return false;
         wm = (WindowManager) c.getSystemService(Context.WINDOW_SERVICE);
-        TextView v = new TextView(c);
-        v.setText("丘");
+        final TextView v = new TextView(c);
         v.setTextColor(Color.WHITE);
         v.setTextSize(16);
         v.setGravity(Gravity.CENTER);
-        GradientDrawable g = new GradientDrawable();
-        g.setShape(GradientDrawable.OVAL);
-        g.setColor(0xE63E7C59);
-        v.setBackground(g);
-        int size = (int) (c.getResources().getDisplayMetrics().density * 52);
-        WindowManager.LayoutParams p = new WindowManager.LayoutParams(
-                size, size,
+
+        final WindowManager.LayoutParams fp = new WindowManager.LayoutParams(
+                dp(c, TOUCH_W), dp(c, BAR_H),
                 Build.VERSION.SDK_INT >= 26
                         ? WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY
                         : WindowManager.LayoutParams.TYPE_PHONE,
-                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE
-                        | WindowManager.LayoutParams.FLAG_LAYOUT_NO_LIMITS,
+                WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
                 PixelFormat.TRANSLUCENT);
-        p.gravity = Gravity.TOP | Gravity.START;
-        p.x = 24;
-        p.y = 420;
-        final WindowManager.LayoutParams fp = p;
+        fp.gravity = Gravity.TOP | Gravity.START;
+
+        final Context fc = c;
         final float[] down = new float[2];
+        final int[] startPos = new int[2];
         final boolean[] moved = {false};
+        final boolean[] dragging = {false};
+
         v.setOnTouchListener((vw, ev) -> {
             switch (ev.getActionMasked()) {
                 case MotionEvent.ACTION_DOWN:
-                    down[0] = ev.getRawX() - fp.x;
-                    down[1] = ev.getRawY() - fp.y;
-                    moved[0] = false;
+                    down[0] = ev.getRawX(); down[1] = ev.getRawY();
+                    startPos[0] = fp.x; startPos[1] = fp.y;
+                    moved[0] = false; dragging[0] = false;
                     return true;
-                case MotionEvent.ACTION_MOVE:
-                    float nx = ev.getRawX() - down[0], ny = ev.getRawY() - down[1];
-                    if (Math.abs(ev.getRawX() - (fp.x + size / 2f)) > 12
-                            || Math.abs(ev.getRawY() - (fp.y + size / 2f)) > 12) moved[0] = true;
-                    fp.x = (int) nx; fp.y = (int) ny;
-                    try { wm.updateViewLayout(v, fp); } catch (Exception ignore) {}
-                    return true;
-                case MotionEvent.ACTION_UP:
-                    if (!moved[0]) {
-                        Intent i = new Intent(c, MainActivity.class);
-                        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                        c.startActivity(i);
+                case MotionEvent.ACTION_MOVE: {
+                    float dx = ev.getRawX() - down[0], dy = ev.getRawY() - down[1];
+                    if (!dragging[0] && Math.hypot(dx, dy) > dp(fc, SLOP)) {
+                        dragging[0] = true;
+                        if (docked) {
+                            // 吸附条沿边上下滑动（不展开，避免与系统手势打架）
+                            fp.y = Math.max(0, Math.min(startPos[1] + (int) dy, screenH(fc) - fp.height));
+                            dockY = fp.y;
+                            try { wm.updateViewLayout(v, fp); } catch (Exception ignore) {}
+                            return true;
+                        }
+                    }
+                    if (dragging[0]) {
+                        if (docked) {
+                            fp.y = Math.max(0, Math.min(startPos[1] + (int) dy, screenH(fc) - fp.height));
+                            dockY = fp.y;
+                        } else {
+                            fp.x = startPos[0] + (int) dx;
+                            fp.y = startPos[1] + (int) dy;
+                            fp.x = Math.max(0, Math.min(fp.x, screenW(fc) - fp.width));
+                            fp.y = Math.max(0, Math.min(fp.y, screenH(fc) - fp.height));
+                        }
+                        try { wm.updateViewLayout(v, fp); } catch (Exception ignore) {}
                     }
                     return true;
+                }
+                case MotionEvent.ACTION_UP: {
+                    if (!dragging[0]) {
+                        // 轻点：吸附条 → 展开成圆球；圆球 → 打开小丘
+                        if (docked) {
+                            floatX = dockSide == 0 ? dp(fc, 24) : screenW(fc) - dp(fc, CIRCLE + 24);
+                            floatY = fp.y;
+                            docked = false;
+                            fp.width = dp(fc, CIRCLE);
+                            fp.height = dp(fc, CIRCLE);
+                            fp.x = floatX; fp.y = floatY;
+                            GradientDrawable g = new GradientDrawable();
+                            g.setShape(GradientDrawable.OVAL);
+                            g.setColor(0xE63E7C59);
+                            v.setBackground(g);
+                            v.setText("丘");
+                            try { wm.updateViewLayout(v, fp); } catch (Exception ignore) {}
+                        } else {
+                            Intent i = new Intent(fc, MainActivity.class);
+                            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                            fc.startActivity(i);
+                        }
+                        return true;
+                    }
+                    // 拖拽结束：自由球靠近边缘 → 吸附
+                    if (!docked) {
+                        int leftDist = fp.x;
+                        int rightDist = screenW(fc) - (fp.x + fp.width);
+                        if (Math.min(leftDist, rightDist) < dp(fc, DOCK_MAGNET)) {
+                            dockSide = leftDist <= rightDist ? 0 : 1;
+                            dockY = Math.max(dp(fc, 8), Math.min(fp.y, screenH(fc) - dp(fc, BAR_H) - dp(fc, 8)));
+                            applyDocked(v, fp, fc);
+                        }
+                    }
+                    return true;
+                }
             }
             return false;
         });
-        wm.addView(v, p);
+
+        wm.addView(v, fp);
         ball = v;
+        docked = true;
+        dockSide = 0;
+        applyDocked(v, fp, fc);
+        gestureExclude(v);
         save(c, true);
         return true;
+    }
+
+    /** 吸附态外观与位置（竖条贴边，触摸区加宽） */
+    private static void applyDocked(TextView v, WindowManager.LayoutParams fp, Context c) {
+        docked = true;
+        fp.width = dp(c, TOUCH_W);
+        fp.height = dp(c, BAR_H);
+        fp.x = dockSide == 0 ? 0 : screenW(c) - fp.width;
+        fp.y = dockY;
+        GradientDrawable g = new GradientDrawable();
+        g.setColor(0xD93E7C59);
+        float r = dp(c, 10);
+        if (dockSide == 0) g.setCornerRadii(new float[]{0, 0, r, r, r, r, 0, 0});
+        else g.setCornerRadii(new float[]{r, r, 0, 0, 0, 0, r, r});
+        // 视觉条贴边 10px，其余为透明触摸延伸区：用 LayerDrawable 穿透观感
+        GradientDrawable clear = new GradientDrawable();
+        clear.setColor(Color.TRANSPARENT);
+        android.graphics.drawable.Drawable[] layers = dockSide == 0
+                ? new android.graphics.drawable.Drawable[]{clear, g}
+                : new android.graphics.drawable.Drawable[]{clear, g};
+        android.graphics.drawable.LayerDrawable ld = new android.graphics.drawable.LayerDrawable(layers);
+        if (dockSide == 0) ld.setLayerInset(1, 0, dp(c, 4), dp(c, TOUCH_W - BAR_VISUAL), dp(c, 4));
+        else ld.setLayerInset(1, dp(c, TOUCH_W - BAR_VISUAL), dp(c, 4), 0, dp(c, 4));
+        v.setBackground(ld);
+        v.setText("");
+        try { wm.updateViewLayout(v, fp); } catch (Exception ignore) {}
+        gestureExclude(v);
+    }
+
+    /** 自由态外观（圆球） */
+    private static void becomeCircle(TextView v, WindowManager.LayoutParams fp, Context c) {
+        fp.width = dp(c, CIRCLE);
+        fp.height = dp(c, CIRCLE);
+        fp.x = Math.max(0, Math.min(floatX, screenW(c) - fp.width));
+        fp.y = Math.max(0, Math.min(floatY, screenH(c) - fp.height));
+        v.setBackground(circleDrawable(c));
+        v.setText("丘");
+        try { wm.updateViewLayout(v, fp); } catch (Exception ignore) {}
+    }
+
+    private static GradientDrawable circleDrawable(Context c) {
+        GradientDrawable g = new GradientDrawable();
+        g.setShape(GradientDrawable.OVAL);
+        g.setColor(0xE63E7C59);
+        return g;
+    }
+
+    /** 占住边缘手势区（API 29+），防止系统返回手势抢走触摸 */
+    private static void gestureExclude(View v) {
+        if (Build.VERSION.SDK_INT >= 29) {
+            v.post(() -> {
+                try {
+                    Rect r = new Rect(0, 0, v.getWidth(), v.getHeight());
+                    v.setSystemGestureExclusionRects(Collections.singletonList(r));
+                } catch (Exception ignore) {}
+            });
+        }
     }
 
     public static void hide(Context c) {

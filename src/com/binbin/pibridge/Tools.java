@@ -574,11 +574,13 @@ public class Tools {
             return err("TIMEOUT", "特权执行超时（队列或 adbc 通道异常）");
         }});
 
-        def("floatball", "开关小丘悬浮球（保活+快开，可拖拽，重复调用即切换）", schema(props()), new H() { public JSONObject run(JSONObject a) {
+        def("floatball", "开关小丘悬浮球（on=开 off=关 缺省=切换）", schema(props("on", prop("string", "on/off，缺省切换"))), new H() { public JSONObject run(JSONObject a) {
             if (Build.VERSION.SDK_INT >= 23 && !Settings.canDrawOverlays(ctx))
-                return err("NO_OVERLAY", "请先授权悬浮窗（appops set com.pihost SYSTEM_ALERT_WINDOW allow）");
-            FloatBall.toggle(ctx);
-            return ok("悬浮球已切换，当前：" + (FloatBall.isOn() ? "开" : "关（异步生效）"));
+                return err("NO_OVERLAY", "请先授权悬浮窗");
+            String on = a.optString("on", "toggle");
+            if (on.equals("on") || (on.equals("toggle") && !FloatBall.isOn())) FloatBall.showAsync(ctx);
+            else if (on.equals("off") || on.equals("toggle")) FloatBall.hideAsync(ctx);
+            return ok("指令已发，当前：" + (FloatBall.isOn() ? "开" : "关"));
         }});
 
         def("env_run", "在工作台 pi 环境内执行 shell 命令（pi/node/npm/全部 Linux 工具可用），返回输出", 
