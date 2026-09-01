@@ -14,7 +14,7 @@ import java.util.Map;
 
 /** 内嵌 MCP（Streamable HTTP · 无状态 JSON 模式，学习 MT 管理器实现）+ 简易 /api 直调 */
 public class Mcp implements Runnable {
-    public static final int PORT = 8099;
+    public static final int PORT = 8181;
     private volatile boolean run = true;
     private ServerSocket ss;
 
@@ -84,6 +84,21 @@ public class Mcp implements Runnable {
                         .put("content", new JSONArray().put(new JSONObject().put("type", "text").put("text", res.toString())))
                         .put("structuredContent", res);
                 resp(s, 200, out);
+            } else if (path.equals("/") || path.equals("/index.html")) {
+                // 工作台首页（内嵌 assets，同一端口，零冲突）
+                try {
+                    InputStream ais = Tools.ctx.getAssets().open("console.html");
+                    ByteArrayOutputStream abo = new ByteArrayOutputStream();
+                    byte[] ab = new byte[8192]; int an;
+                    while ((an = ais.read(ab)) > 0) abo.write(ab, 0, an);
+                    ais.close();
+                    byte[] html = abo.toByteArray();
+                    s.getOutputStream().write(("HTTP/1.1 200 OK\r\nContent-Type: text/html; charset=utf-8\r\nContent-Length: " + html.length + "\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+                    s.getOutputStream().write(html);
+                    s.close();
+                } catch (Exception e2) {
+                    resp(s, 404, new JSONObject().put("error", "console not found"));
+                }
             } else {
                 resp(s, 404, new JSONObject().put("error", "not found"));
             }
@@ -106,7 +121,7 @@ public class Mcp implements Runnable {
             String ver = p == null ? "2024-11-05" : p.optString("protocolVersion", "2024-11-05");
             result = new JSONObject()
                     .put("protocolVersion", ver)
-                    .put("serverInfo", new JSONObject().put("name", "pi-bridge").put("version", "0.3.0"))
+                    .put("serverInfo", new JSONObject().put("name", "xiaoqiu").put("version", "0.3.0"))
                     .put("capabilities", new JSONObject().put("tools", new JSONObject()));
         } else if ("tools/list".equals(m)) {
             JSONArray arr = new JSONArray();

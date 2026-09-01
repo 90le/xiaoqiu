@@ -466,6 +466,53 @@ public class Tools {
             return out[0].equals("1") ? ok(out[1]) : err("SHOT_FAIL", out[1]);
         }});
 
+        // ═══ 环境引擎（工作台自带 pi 环境）═══
+        def("env_status", "查工作台 pi 环境状态（就绪/安装中/路径）", schema(props()), new H() { public JSONObject run(JSONObject a) {
+            return ok(EnvInstaller.status());
+        }});
+        def("env_install", "安装 pi 环境（若未就绪则后台自动：下载→解压→二阶段），完成后 pi 可用", schema(props()), new H() { public JSONObject run(JSONObject a) {
+            if (EnvInstaller.isReady()) return ok("环境已就绪");
+            EnvInstaller.installAsync(new EnvInstaller.Cb() {
+                public void onEvent(String line) { android.util.Log.i("PiBridge", "env: " + line); }
+                public void onDone(boolean ok, String msg) { android.util.Log.i("PiBridge", "env done: " + msg); }
+            });
+            return ok("安装已后台启动，可用 env_status 轮询");
+        }});
+        def("env_run", "在工作台 pi 环境内执行 shell 命令（pi/node/npm/全部 Linux 工具可用），返回输出", 
+            schema(props("cmd", prop("string", "命令"), "timeout_sec", prop("number", "超时秒默认120")), "cmd"), new H() { public JSONObject run(JSONObject a) throws Exception {
+            if (!EnvInstaller.isReady()) return err("NOT_READY", "环境未就绪，先调 env_install");
+            String cmd = a.optString("cmd", "");
+            int timeout = a.optInt("timeout_sec", 120);
+            if (timeout < 5) timeout = 5; if (timeout > 900) timeout = 900;
+            ProcessBuilder pb = new ProcessBuilder("/system/bin/sh", "-c", cmd);
+            pb.directory(new java.io.File(EnvInstaller.HOME));
+            java.util.Map<String, String> env = pb.environment();
+            env.put("HOME", EnvInstaller.HOME);
+            env.put("PREFIX", EnvInstaller.PREFIX);
+            env.put("PATH", EnvInstaller.PREFIX + "/bin:" + EnvInstaller.PREFIX + "/bin/applets:/system/bin");
+            env.put("LD_LIBRARY_PATH", EnvInstaller.PREFIX + "/lib");
+            env.put("TMPDIR", EnvInstaller.PREFIX + "/tmp");
+            env.put("LANG", "en_US.UTF-8");
+            pb.redirectErrorStream(true);
+            final Process p = pb.start();
+            final StringBuilder sb = new StringBuilder();
+            Thread reader = new Thread(() -> {
+                try {
+                    java.io.BufferedReader br = new java.io.BufferedReader(new java.io.InputStreamReader(p.getInputStream()));
+                    String line;
+                    while ((line = br.readLine()) != null) {
+                        synchronized (sb) { if (sb.length() < 16000) sb.append(line).append('\n'); }
+                    }
+                } catch (Exception ignore) {}
+            });
+            reader.start();
+            if (!p.waitFor(timeout, java.util.concurrent.TimeUnit.SECONDS)) { p.destroy(); return err("TIMEOUT", "超时（已部分输出）\n" + sb); }
+            reader.join(3000);
+            String out = sb.toString();
+            if (out.length() > 12000) out = out.substring(0, 12000) + "\n…(截断)";
+            return ok(new JSONObject().put("exit", p.exitValue()).put("output", out));
+        }});
+
         def("app_request_permission", "弹出系统授权对话框（用于设置页不显示的自定义权限，如 Termux 命令）",
             schema(props("permission", prop("string", "权限全名")), "permission"), new H() { public JSONObject run(JSONObject a) throws Exception {
                 Intent i = new Intent(ctx, MainActivity.class);

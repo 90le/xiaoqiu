@@ -28,8 +28,8 @@ javac -source 8 -target 8 -nowarn -Xlint:-options -cp "$AJ" -d obj $(find src ge
 # 3) dex
 "$D8" --min-api 24 --release --lib "$AJ" --output build $(find obj -name "*.class")
 
-# 4) 打包 + 塞 dex
-"$AAPT" package -f -M AndroidManifest.xml -S res -A assets -I "$AJ" -F build/base.apk
+# 4) 打包 + 塞 dex（--rename-manifest-package：应用包名 com.pihost（10 字符，与 bootstrap 路径字节兼容），代码包不变）
+"$AAPT" package -f -M AndroidManifest.xml -S res -A assets -I "$AJ" --rename-manifest-package com.pihost -F build/base.apk
 (cd build && "$AAPT" add base.apk classes.dex)
 
 # 5) 签名（CI 从 secrets 解出；本机无则自动生成）

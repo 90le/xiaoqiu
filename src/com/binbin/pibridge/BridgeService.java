@@ -9,7 +9,7 @@ import android.os.Build;
 import android.os.IBinder;
 import android.app.PendingIntent;
 
-/** 前台服务：保活 + 承载内嵌 MCP/HTTP 服务器（127.0.0.1:8099） */
+/** 前台服务：小丘工作台 MCP/HTTP 服务器（127.0.0.1:8181） */
 public class BridgeService extends Service {
     public static BridgeService inst;
     private Mcp mcp;
@@ -17,6 +17,15 @@ public class BridgeService extends Service {
     @Override public void onCreate() {
         inst = this;
         Tools.init(this);
+        // 环境引擎：首启自动装 pi 环境（工作台自带，无需终端 App）
+        if (!EnvInstaller.isReady() && !EnvInstaller.isRunning()) {
+            EnvInstaller.installAsync(new EnvInstaller.Cb() {
+                public void onEvent(String line) { android.util.Log.i("PiBridge", "env: " + line); }
+                public void onDone(boolean ok, String msg) {
+                    android.util.Log.i("PiBridge", "env " + (ok ? "OK: " : "FAIL: ") + msg);
+                }
+            });
+        }
     }
 
     @Override public int onStartCommand(Intent i, int f, int id) {
@@ -40,7 +49,7 @@ public class BridgeService extends Service {
                 new Intent(this, MainActivity.class), PendingIntent.FLAG_IMMUTABLE);
         return b.setSmallIcon(android.R.drawable.ic_menu_manage)
                 .setContentTitle("pi 桥运行中")
-                .setContentText("MCP 127.0.0.1:8099 · Web UI 8787")
+                .setContentText("小丘 MCP:8181")
                 .setContentIntent(pi)
                 .setOngoing(true)
                 .build();

@@ -1,0 +1,232 @@
+package com.binbin.pibridge;
+
+import android.os.Build;
+import android.os.Environment;
+
+import org.json.JSONObject;
+
+import java.io.File;
+import java.io.FileInputStream;
+import java.io.FileOutputStream;
+import java.io.InputStream;
+import java.net.HttpURLConnection;
+import java.net.URL;
+import java.util.ArrayList;
+import java.util.List;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipInputStream;
+
+/**
+ * 环境引擎：工作台自带 pi 环境安装器（吸收自 TermuxInstaller 思路，无 gradle/NDK 依赖）。
+ * 流程：取 zip（共享存储优先 → GitHub 下载）→ 解压 staging（文件统一 0700）→
+ * SYMLINKS.txt 建链（格式：目标←链接位置，U+2190）→ 改名转正 → 跑 login 二阶段。
+ * 包名 com.pihost（10 字符）与 bootstrap 内路径字节兼容。
+ */
+public class EnvInstaller {
+    public static final String APP_ID = "com.pihost";
+    public static final String PREFIX = "/data/data/com.pihost/files/usr";
+    public static final String STAGING = PREFIX + "-staging";
+    public static final String HOME = "/data/data/com.pihost/files/home";
+    public static final String URL_ZIP =
+            "https://github.com/90le/piark/releases/download/v0.1.0-bootstrap/pi-bootstrap-aarch64-v1.0-pihost.zip";
+
+    public interface Cb {
+        void onEvent(String line);
+        void onDone(boolean ok, String msg);
+    }
+
+    private static volatile boolean running = false;
+
+    public static boolean isReady() {
+        return new File(PREFIX + "/bin/pi").canExecute();
+    }
+
+    public static boolean isRunning() { return running; }
+
+    public static void installAsync(final Cb cb) {
+        if (running) { cb.onDone(false, "已有安装任务在跑"); return; }
+        if (isReady()) { cb.onDone(true, "环境已就绪"); return; }
+        running = true;
+        new Thread(() -> {
+            try {
+                File zip = obtainZip(cb);
+                cb.onEvent("解压中（2.1 万文件，约 1-2 分钟）…");
+                extract(zip, cb);
+                cb.onEvent("建立符号链接…");
+                symlinks();
+                File st = new File(STAGING);
+                if (!st.renameTo(new File(PREFIX))) throw new Exception("staging 改名失败（转正失败）");
+                cb.onEvent("运行引导二阶段（dpkg 配置）…");
+                secondStage(cb);
+                if (!isReady()) throw new Exception("安装后 pi 仍不可执行");
+                markReady();
+                cb.onDone(true, "pi 环境安装完成（" + PREFIX + "）");
+            } catch (Exception e) {
+                cb.onDone(false, e.toString());
+            } finally {
+                running = false;
+            }
+        }, "env-install").start();
+    }
+
+    private static void markReady() {
+        try {
+            File f = new File("/data/data/com.pihost/files/envReady");
+            FileOutputStream fo = new FileOutputStream(f);
+            fo.write(String.valueOf(System.currentTimeMillis()).getBytes());
+            fo.close();
+        } catch (Exception ignore) {}
+    }
+
+    /** zip 来源：共享存储手动放置 > 本地缓存 > GitHub 下载 */
+    private static File obtainZip(Cb cb) throws Exception {
+        File shared = new File(Environment.getExternalStorageDirectory(), "Download/pibridge/bootstrap.zip");
+        if (shared.canRead() && shared.length() > 50_000_000L) {
+            cb.onEvent("使用共享存储的 bootstrap.zip");
+            return shared;
+        }
+        File cache = new File("/data/data/com.pihost/files/bootstrap.zip");
+        if (cache.canRead() && cache.length() > 50_000_000L) return cache;
+        // 全新安装时 files/ 懒创建，必须确保父目录存在
+        File filesDir = cache.getParentFile();
+        if (filesDir != null && !filesDir.isDirectory()) filesDir.mkdirs();
+        cb.onEvent("下载 bootstrap（101M）…");
+        HttpURLConnection c = (HttpURLConnection) new URL(URL_ZIP).openConnection();
+        c.setInstanceFollowRedirects(true);
+        c.setConnectTimeout(15000);
+        c.setReadTimeout(60000);
+        if (c.getResponseCode() != 200) throw new Exception("下载失败 HTTP " + c.getResponseCode());
+        long total = c.getContentLength();
+        InputStream in = c.getInputStream();
+        FileOutputStream out = new FileOutputStream(cache);
+        byte[] buf = new byte[1 << 16];
+        long done = 0; int lastPct = -1, n;
+        while ((n = in.read(buf)) > 0) {
+            out.write(buf, 0, n);
+            done += n;
+            if (total > 0) {
+                int pct = (int) (done * 100 / total);
+                if (pct / 10 > lastPct / 10) { lastPct = pct; cb.onEvent("下载 " + pct + "%"); }
+            }
+        }
+        out.close(); in.close();
+        if (cache.length() < 50_000_000L) throw new Exception("下载不完整 " + cache.length());
+        return cache;
+    }
+
+    /** 解压：SYMLINKS.txt 只解析不落盘；普通文件统一 0700 */
+    private static void extract(File zip, Cb cb) throws Exception {
+        File st = new File(STAGING);
+        rmrf(st);
+        st.mkdirs();
+        List<String[]> links = new ArrayList<>();
+        ZipInputStream zin = new ZipInputStream(new FileInputStream(zip));
+        ZipEntry e;
+        byte[] buf = new byte[1 << 16];
+        int files = 0;
+        while ((e = zin.getNextEntry()) != null) {
+            String name = e.getName();
+            if (name.equals("SYMLINKS.txt")) {
+                java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+                int n; while ((n = zin.read(buf)) > 0) bo.write(buf, 0, n);
+                for (String line : bo.toString("UTF-8").split("\n")) {
+                    line = line.trim();
+                    if (line.isEmpty()) continue;
+                    int arrow = line.indexOf('\u2190');
+                    if (arrow > 0)
+                        links.add(new String[]{line.substring(0, arrow), line.substring(arrow + 1)});
+                }
+                continue;
+            }
+            File f = new File(st, name);
+            if (e.isDirectory()) { f.mkdirs(); continue; }
+            File parent = f.getParentFile();
+            if (parent != null) parent.mkdirs();
+            FileOutputStream fo = new FileOutputStream(f);
+            int n; while ((n = zin.read(buf)) > 0) fo.write(buf, 0, n);
+            fo.close();
+            // 统一 0700（吸收自 piark fork 的 TermuxInstaller 改进）
+            f.setReadable(true, true);
+            f.setWritable(true, true);
+            f.setExecutable(true, true);
+            files++;
+            if (files % 5000 == 0) cb.onEvent("已解压 " + files + " 文件…");
+        }
+        zin.close();
+        // 建链（在 staging 内，转正前完成）
+        for (String[] p : links) {
+            String target = p[0].trim();
+            String linkRel = p[1].trim();
+            while (linkRel.startsWith("./")) linkRel = linkRel.substring(2);
+            File link = new File(st, linkRel);
+            File parent = link.getParentFile();
+            if (parent != null) parent.mkdirs();
+            if (link.exists() || link.length() > 0 && link.isFile() && !link.isDirectory()) {
+                // no-op
+            }
+            try {
+                if (android.os.Build.VERSION.SDK_INT >= 21) {
+                    if (link.exists()) link.delete();
+                    android.system.Os.symlink(target, link.getAbsolutePath());
+                }
+            } catch (Exception ignore) {}
+        }
+        cb.onEvent("解压完成：" + files + " 文件 / " + links.size() + " 链接");
+    }
+
+    private static void symlinks() {}
+
+    private static void secondStage(Cb cb) throws Exception {
+        File home = new File(HOME);
+        if (!home.isDirectory()) home.mkdirs();
+        File tmp = new File(PREFIX + "/usr/tmp".replace("/usr/usr", "/usr"));
+        ProcessBuilder pb = new ProcessBuilder(PREFIX + "/bin/login");
+        pb.directory(home);
+        pb.redirectErrorStream(true);
+        try {
+            pb.redirectInput(new File("/dev/null"));
+        } catch (Exception ignore) {}
+        java.util.Map<String, String> env = pb.environment();
+        env.put("HOME", HOME);
+        env.put("PREFIX", PREFIX);
+        env.put("PATH", PREFIX + "/bin:" + PREFIX + "/bin/applets:/system/bin:/system/xbin");
+        env.put("LD_LIBRARY_PATH", PREFIX + "/lib");
+        env.put("TMPDIR", PREFIX + "/tmp");
+        env.put("LANG", "en_US.UTF-8");
+        Process p = pb.start();
+        java.io.BufferedReader br = new java.io.BufferedReader(new java.io.InputStreamReader(p.getInputStream()));
+        String line;
+        while ((line = br.readLine()) != null) {
+            cb.onEvent(line);
+            if (line.contains("second stage completed successfully")) break; // 后台 bash 收尾即可
+        }
+        // 不等 bash 退出（交互进程可能挂着），关键产物到位即算成功
+        long deadline = System.currentTimeMillis() + 120_000L;
+        while (System.currentTimeMillis() < deadline) {
+            if (new File(PREFIX + "/bin/pi").canExecute() && new File(PREFIX + "/bin/node").canExecute()) return;
+            Thread.sleep(2000);
+        }
+    }
+
+    private static void rmrf(File f) {
+        if (!f.exists()) return;
+        File[] kids = f.listFiles();
+        if (kids != null) for (File k : kids) rmrf(k);
+        f.delete();
+    }
+
+    public static JSONObject status() {
+        try {
+            JSONObject o = new JSONObject();
+            o.put("ready", isReady());
+            o.put("running", running);
+            o.put("prefix", PREFIX);
+            o.put("pi", new File(PREFIX + "/bin/pi").canExecute());
+            o.put("node", new File(PREFIX + "/bin/node").canExecute());
+            o.put("marker", new File("/data/data/com.pihost/files/envReady").exists());
+            return o;
+        } catch (Exception e) {
+            return new JSONObject();
+        }
+    }
+}
