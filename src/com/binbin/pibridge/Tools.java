@@ -503,6 +503,41 @@ public class Tools {
             }
             return ok("已保存（" + provider + "，key 尾号 " + key.substring(Math.max(0, key.length() - 4)) + "）");
         }});
+        // ═══ L2 特权通道（经队列桥 → ZeroTermux → adbc shell，shell 权限）═══
+        def("l2_exec", "以 shell 特权执行系统命令（静默授权/系统设置/输入注入/强制停止应用等）。普通命令请用 env_run",
+            schema(props("cmd", prop("string", "特权命令"), "timeout_sec", prop("number", "超时秒默认30")), "cmd"), new H() { public JSONObject run(JSONObject a) throws Exception {
+            String cmd = a.optString("cmd", "");
+            if (cmd.contains("\n") || cmd.isEmpty()) return err("BAD", "命令需单行且非空");
+            int timeout = a.optInt("timeout_sec", 30);
+            if (timeout < 5) timeout = 5; if (timeout > 300) timeout = 300;
+            File qdir = new File("/storage/emulated/0/Download/pibridge-queue");
+            if (!qdir.isDirectory()) return err("NO_QUEUE", "队列桥未部署（ZeroTermux 侧缺失）");
+            String id = String.valueOf(System.currentTimeMillis());
+            File cmdFile = new File(qdir, "l2-cmd-" + id + ".sh");
+            write(cmdFile, "#!/system/bin/sh\n" + cmd + "\n");
+            cmdFile.setReadable(true, false); cmdFile.setExecutable(true, false);
+            File job = new File(qdir, "l2-" + id + ".cmd");
+            write(job, "adbc shell sh /storage/emulated/0/Download/pibridge-queue/l2-cmd-" + id + ".sh"
+                    + " > /storage/emulated/0/Download/pibridge-queue/l2-out-" + id + ".txt 2>&1\n"
+                    + "echo __DONE >> /storage/emulated/0/Download/pibridge-queue/l2-out-" + id + ".txt\n"
+                    + "chmod 644 /storage/emulated/0/Download/pibridge-queue/l2-out-" + id + ".txt\n");
+            job.setReadable(true, false);
+            // 轮询输出
+            File out = new File(qdir, "l2-out-" + id + ".txt");
+            long deadline = System.currentTimeMillis() + timeout * 1000L;
+            while (System.currentTimeMillis() < deadline) {
+                if (out.canRead()) {
+                    String s = readFile(out);
+                    if (s.contains("__DONE")) {
+                        s = s.replace("__DONE", "").trim();
+                        return ok(s.isEmpty() ? "(无输出，执行成功)" : (s.length() > 8000 ? s.substring(0, 8000) : s));
+                    }
+                }
+                Thread.sleep(1000);
+            }
+            return err("TIMEOUT", "特权执行超时（队列或 adbc 通道异常）");
+        }});
+
         def("floatball", "开关小丘悬浮球（保活+快开，可拖拽，重复调用即切换）", schema(props()), new H() { public JSONObject run(JSONObject a) {
             if (Build.VERSION.SDK_INT >= 23 && !Settings.canDrawOverlays(ctx))
                 return err("NO_OVERLAY", "请先授权悬浮窗（appops set com.pihost SYSTEM_ALERT_WINDOW allow）");
