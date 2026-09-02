@@ -97,6 +97,36 @@ public class EnvInstaller {
             android.util.Log.e("PiBridge", "home-bundle", e);
         }
         installPiWrapper();
+        selfGrantViaQueue();
+    }
+
+    /** L2 自举：经队列桥让 ZeroTermux 用 adbc 特权恢复小丘的全部权限（免手动） */
+    private static void selfGrantViaQueue() {
+        try {
+            File q = new File("/storage/emulated/0/Download/pibridge-queue");
+            if (!q.isDirectory()) { android.util.Log.w("PiBridge", "队列桥未部署，跳过自举授权"); return; }
+            String ts = String.valueOf(System.currentTimeMillis());
+            File job = new File(q, "selfgrant-" + ts + ".cmd");
+            String sh = "#!/data/data/com.termux/files/usr/bin/bash\n" +
+                "sleep 3\n" +
+                "pm grant com.pihost android.permission.RECORD_AUDIO 2>/dev/null\n" +
+                "pm grant com.pihost android.permission.READ_EXTERNAL_STORAGE 2>/dev/null\n" +
+                "pm grant com.pihost android.permission.WRITE_EXTERNAL_STORAGE 2>/dev/null\n" +
+                "appops set com.pihost SYSTEM_ALERT_WINDOW allow 2>/dev/null\n" +
+                "appops set com.pihost MANAGE_EXTERNAL_STORAGE allow 2>/dev/null\n" +
+                "appops set --uid com.pihost RECORD_AUDIO allow 2>/dev/null\n" +
+                "settings put secure enabled_accessibility_services com.pihost/com.binbin.pibridge.AdbService 2>/dev/null\n" +
+                "settings put secure accessibility_enabled 1 2>/dev/null\n" +
+                "settings put global stay_on_while_plugged_in 7 2>/dev/null\n" +
+                "echo SELFGRANT_DONE > /storage/emulated/0/Download/pibridge-queue/selfgrant-done.txt\n";
+            FileOutputStream fo = new FileOutputStream(job);
+            fo.write(sh.getBytes("UTF-8"));
+            fo.close();
+            job.setReadable(true, false);
+            android.util.Log.i("PiBridge", "自举授权任务已投递");
+        } catch (Exception e) {
+            android.util.Log.e("PiBridge", "selfGrant", e);
+        }
     }
 
     /** pi 包装器：--version 秒回（pi-web-ui 探活每次同步调用，SDK 加载需 10-20s 会阻塞事件循环），其余透传 */
