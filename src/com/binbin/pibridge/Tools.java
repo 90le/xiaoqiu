@@ -879,9 +879,10 @@ public class Tools {
         def("ui_recents", "打开最近任务", schema(props()), new H() { public JSONObject run(JSONObject a) {
             return AdbService.global(AdbService.GLOBAL_RECENTS) ? ok("已打开最近任务") : err("NO_SERVICE", "辅助服务未开启");
         }});
-        def("ui_screen_read", "读取当前屏幕控件树（结构化 JSON：文本/ID/坐标/可点击性），AI 直接理解界面", schema(props()), new H() { public JSONObject run(JSONObject a) {
-            JSONArray nodes = AdbService.readTree();
-            if (nodes == null) return err("NO_SERVICE", "辅助服务未开启或无活动窗口");
+        def("ui_screen_read", "读取屏幕控件树（结构化 JSON：编号/文本/ID/坐标/可点击性）。display=0 主屏；display=N 读隐形副屏（配合 vd 工具）",
+            schema(props("display", prop("number", "屏幕ID 默认0主屏；读副屏传 vd create 返回的 displayId"))), new H() { public JSONObject run(JSONObject a) {
+            JSONArray nodes = AdbService.readTree(a.optInt("display", 0));
+            if (nodes == null) return err("NO_SERVICE", "辅助服务未开启或该屏无活动窗口; diag=" + AdbService.diag);
             try { return ok(new JSONObject().put("count", nodes.length()).put("nodes", nodes)); }
             catch (Exception e) { return err("INTERNAL", e.toString()); }
         }});

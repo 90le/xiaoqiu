@@ -8,8 +8,10 @@ import android.graphics.Rect;
 import android.os.Build;
 import android.os.Bundle;
 import android.view.Display;
+import android.accessibilityservice.AccessibilityServiceInfo;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
+import android.view.accessibility.AccessibilityWindowInfo;
 
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -25,7 +27,15 @@ public class AdbService extends AccessibilityService {
     public static final int GLOBAL_HOME = GLOBAL_ACTION_HOME;
     public static final int GLOBAL_RECENTS = GLOBAL_ACTION_RECENTS;
 
-    @Override protected void onServiceConnected() { inst = this; }
+    @Override protected void onServiceConnected() {
+        inst = this;
+        try { // 副屏读树 + 全量节点（含"不重要"视图）
+            AccessibilityServiceInfo info = getServiceInfo();
+            info.flags |= AccessibilityServiceInfo.FLAG_RETRIEVE_INTERACTIVE_WINDOWS
+                        | AccessibilityServiceInfo.FLAG_INCLUDE_NOT_IMPORTANT_VIEWS;
+            setServiceInfo(info);
+        } catch (Exception ignore) {}
+    }
     @Override public void onAccessibilityEvent(AccessibilityEvent e) {}
     @Override public void onInterrupt() {}
     @Override public boolean onUnbind(Intent i) { inst = null; return false; }
@@ -99,14 +109,46 @@ public class AdbService extends AccessibilityService {
 
     // ========== 读屏（控件树结构化输出，AI 直接理解界面） ==========
 
-    public static JSONArray readTree() {
+    public static String diag = ""; // 副屏读树诊断
+    public static JSONArray readTree() { return readTree(0); }
+
+    /** 读结构树；displayId>0 时读指定副屏（隐形虚拟屏同样可读，API33+） */
+    public static JSONArray readTree(int displayId) {
         seq = 0;
         if (inst == null) return null;
-        AccessibilityNodeInfo root = inst.getRootInActiveWindow();
-        if (root == null) return null;
         JSONArray out = new JSONArray();
-        try { walk(root, out, 0); } catch (Exception ignore) {}
-        return out;
+        try {
+            if (displayId > 0 && Build.VERSION.SDK_INT >= 33) {
+                diag = "";
+                // 反射调用 API33+ getWindowsOnAllDisplays()（返回 SparseArray<displayId, 窗口列表>）
+                Object arr = null;
+                try {
+                    arr = AccessibilityService.class.getMethod("getWindowsOnAllDisplays").invoke(inst);
+                } catch (Throwable e) { diag = "反射异常: " + e; }
+                java.util.List<AccessibilityWindowInfo> wins = null;
+                if (arr instanceof android.util.SparseArray) {
+                    Object l = ((android.util.SparseArray<?>) arr).get(displayId);
+                    if (l instanceof java.util.List) {
+                        wins = (java.util.List<AccessibilityWindowInfo>) l;
+                    } else diag = "该屏无窗口表";
+                }
+                if (wins != null) {
+                    diag += " 窗口数:" + wins.size();
+                    for (AccessibilityWindowInfo w : wins) {
+                        AccessibilityNodeInfo r = null;
+                        try { r = w.getRoot(); } catch (Throwable e) { diag += " root异常:" + e; }
+                        if (r != null) walk(r, out, 0);
+                    }
+                    diag += " 节点数:" + out.length();
+                    return out.length() > 0 ? out : null;
+                }
+                return null;
+            }
+            AccessibilityNodeInfo root = inst.getRootInActiveWindow();
+            if (root == null) return null;
+            walk(root, out, 0);
+            return out;
+        } catch (Exception e) { return null; }
     }
 
     private static int seq = 0; // 全局节点编号（截图/点击引用的稳定锚）

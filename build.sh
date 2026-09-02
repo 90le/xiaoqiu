@@ -26,7 +26,7 @@ mkdir -p gen obj build
 SHERPA_JAR="libs/aar-extract/classes.jar"
 JAVAC_CP="$AJ"
 [ -f "$SHERPA_JAR" ] && JAVAC_CP="$AJ:$SHERPA_JAR"
-javac -source 8 -target 8 -nowarn -Xlint:-options -cp "$JAVAC_CP" -d obj $(find src gen -name "*.java")
+javac -source 8 -target 8 -nowarn -Xlint:-options -cp "$JAVAC_CP" -d obj $(find src gen -name "*.java") || { echo "❌ 编译失败，中止打包"; exit 1; }
 
 # 3) dex（含 sherpa-onnx AAR 类 + kotlin-stdlib）
 "$D8" --min-api 24 --release --lib "$AJ" --output build $(find obj -name "*.class") "$SHERPA_JAR" libs/kotlin-stdlib.jar
