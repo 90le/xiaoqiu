@@ -92,7 +92,12 @@ public class FloatBall {
                     startPos[0] = fp.x; startPos[1] = fp.y;
                     moved[0] = false; dragging[0] = false;
                     downAt[0] = System.currentTimeMillis();
-                    v.postDelayed(() -> { if (!dragging[0]) v.setText("🎙"); }, 500);
+                    v.postDelayed(() -> {
+                        if (!dragging[0] && System.currentTimeMillis() - downAt[0] >= 580) {
+                            v.setText("🎙");
+                            vibrate(fc, 40); // 长按确认：震动提示已进入对话
+                        }
+                    }, 580);
                     return true;
                 case MotionEvent.ACTION_MOVE: {
                     float dx = ev.getRawX() - down[0], dy = ev.getRawY() - down[1];
@@ -137,9 +142,38 @@ public class FloatBall {
                             v.setText("丘");
                             try { wm.updateViewLayout(v, fp); } catch (Exception ignore) {}
                         } else {
-                            v.setText("丘");
-                            // 长按(≥500ms) = 开启连续语音对话；轻点 = 打开小丘
-                            if (System.currentTimeMillis() - downAt[0] >= 500) MainActivity.PENDING_CONVO = true;
+                            boolean longP = System.currentTimeMillis() - downAt[0] >= 580;
+                            if (VoiceCore.running) {
+                                // 对话中：轻点=结束对话
+                                VoiceCore.stop();
+                                v.setText("丘"); setBallColor(v, 0xE63E7C59);
+                                return true;
+                            }
+                            if (longP) {
+                                // 原地连续语音对话：不跳转 App，球变色即状态
+                                VoiceCore.start(new VoiceCore.Listener() {
+                                    public void onState(String st, String info) {
+                                        android.os.Handler h = new android.os.Handler(android.os.Looper.getMainLooper());
+                                        h.post(() -> {
+                                            int color = 0xE63E7C59; String txt = "丘";
+                                            if ("listen".equals(st)) { color = 0xE6E8853D; txt = "🎙"; }
+                                            else if ("think".equals(st)) { color = 0xE6D9A441; txt = "💭"; }
+                                            else if ("speak".equals(st)) { color = 0xE6447BA6; txt = "🔊"; }
+                                            else if ("exit".equals(st)) { vibrate(fc, 30); }
+                                            v.setText(txt);
+                                            setBallColor(v, color);
+                                        });
+                                    }
+                                    public void onTask(String q) {
+                                        MainActivity.PENDING_TASK = q;
+                                        Intent i = new Intent(fc, MainActivity.class);
+                                        i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                        fc.startActivity(i);
+                                    }
+                                    public Context ctx() { return fc; }
+                                });
+                                return true;
+                            }
                             Intent i = new Intent(fc, MainActivity.class);
                             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                             fc.startActivity(i);
@@ -173,6 +207,12 @@ public class FloatBall {
     }
 
     /** 吸附态外观与位置（竖条贴边，触摸区加宽） */
+    static void setBallColor(android.view.View v, int color) {
+        try { android.graphics.drawable.GradientDrawable g = (android.graphics.drawable.GradientDrawable) v.getBackground(); if (g != null) g.setColor(color); } catch (Exception ignore) {}
+    }
+    static void vibrate(Context c, int ms) {
+        try { android.os.Vibrator vib = (android.os.Vibrator) c.getSystemService(Context.VIBRATOR_SERVICE); if (vib != null) vib.vibrate(ms); } catch (Exception ignore) {}
+    }
     private static void applyDocked(TextView v, WindowManager.LayoutParams fp, Context c) {
         docked = true;
         fp.width = dp(c, TOUCH_W);

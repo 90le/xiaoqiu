@@ -117,6 +117,45 @@ public class Tools {
             return new JSONObject(bo.toString("UTF-8")).optString("text", "");
         } catch (Exception e) { Log.w("PiBridge", "云ASR 失败: " + e); return null; }
     }
+    /** 通用对话补全（glm-5.3-flash），失败返回 null */
+    static String llmRaw(String system, String user) {
+        try {
+            String key = fastKey();
+            if (key == null) return null;
+            JSONObject body = new JSONObject()
+                    .put("model", "glm-5.3-flash")
+                    .put("messages", new org.json.JSONArray()
+                            .put(new JSONObject().put("role", "system").put("content", system))
+                            .put(new JSONObject().put("role", "user").put("content", user)))
+                    .put("max_tokens", 500).put("temperature", 0.4);
+            javax.net.ssl.HttpsURLConnection c = (javax.net.ssl.HttpsURLConnection)
+                    new java.net.URL("https://open.bigmodel.cn/api/coding/paas/v4/chat/completions").openConnection();
+            c.setRequestMethod("POST"); c.setConnectTimeout(5000); c.setReadTimeout(20000); c.setDoOutput(true);
+            c.setRequestProperty("Authorization", "Bearer " + key);
+            c.setRequestProperty("Content-Type", "application/json");
+            java.io.OutputStream os = c.getOutputStream();
+            os.write(body.toString().getBytes("UTF-8")); os.close();
+            int code = c.getResponseCode();
+            java.io.InputStream is = code < 400 ? c.getInputStream() : c.getErrorStream();
+            java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+            byte[] b = new byte[8192]; int n; while (is != null && (n = is.read(b)) > 0) bo.write(b, 0, n);
+            if (is != null) is.close();
+            if (code >= 400) return null;
+            return new JSONObject(bo.toString("UTF-8")).getJSONArray("choices").getJSONObject(0)
+                    .getJSONObject("message").optString("content", "").trim();
+        } catch (Exception e) { return null; }
+    }
+
+    /** 口语化改写：长文本/含格式 → 短口语朗读稿；短文本原样返回 */
+    static String voiceFriendly(String text) {
+        String clean = text.replaceAll("```[\\s\\S]*?```", "代码略。").replaceAll("[#*`>\\[\\]]", "").replaceAll("\\n+", "，").trim();
+        boolean markdowny = text.contains("```") || text.contains("\n- ") || text.contains("\n#") || text.contains("**");
+        if (clean.length() <= 80 && !markdowny) return clean;
+        String r = llmRaw("把内容改写成适合朗读的中文口语短文：30到100字，口语化，去掉所有格式符号、emoji和列表，保留关键数字和结论。只输出改写结果。",
+                clean.length() > 800 ? clean.substring(0, 800) : clean);
+        return (r == null || r.isEmpty()) ? clean : r;
+    }
+
     /** 云 TTS：智谱 GLM-TTS（童童音色）；失败返回 false 由调用方回退 */
     static boolean cloudSpeak(String text) {
         try {
