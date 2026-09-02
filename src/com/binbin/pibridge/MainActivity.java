@@ -39,6 +39,11 @@ public class MainActivity extends Activity {
     private Button micBtn;
     private String pendingHeard = "";
     private int voiceGen = 0; // 语音播报代次：新发送使旧监视器失效
+    // ── 连续对话模式 ──
+    private volatile boolean convoMode = false;
+    private int convoMiss = 0;
+    private int convoGen = 0;
+    public static volatile boolean PENDING_CONVO = false; // 悬浮球长按触发
     private final java.util.concurrent.atomic.AtomicBoolean stopFlag = new java.util.concurrent.atomic.AtomicBoolean(false);
     private Button[] btns;
     private int currentTab = 0;
@@ -98,7 +103,7 @@ public class MainActivity extends Activity {
         voiceCancel.setTextColor(Color.WHITE);
         voiceCancel.setBackgroundColor(Color.parseColor("#5F8A73"));
         voiceCancel.setPadding(20, 8, 20, 8);
-        voiceCancel.setOnClickListener(v -> { voiceStrip.setVisibility(View.GONE); });
+        voiceCancel.setOnClickListener(v -> { convoMode = false; voiceStrip.setVisibility(View.GONE); });
         voiceStrip.addView(voiceCancel, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         voiceSend = new Button(this);
         voiceSend.setText("发送");
@@ -106,7 +111,7 @@ public class MainActivity extends Activity {
         voiceSend.setTextColor(Color.WHITE);
         voiceSend.setBackgroundColor(Color.parseColor("#E8853D"));
         voiceSend.setPadding(20, 8, 20, 8);
-        voiceSend.setOnClickListener(v -> { voiceStrip.setVisibility(View.GONE); fastOrSlow(pendingHeard); });
+        voiceSend.setOnClickListener(v -> { convoMode = false; voiceStrip.setVisibility(View.GONE); fastOrSlow(pendingHeard); });
         voiceStrip.addView(voiceSend, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         page.addView(voiceStrip, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -251,14 +256,16 @@ public class MainActivity extends Activity {
     private void stopVoiceCapture() { stopFlag.set(true); }
 
     /** 两脑分流：快脑能答秒答+朗读；任务才交给慢脑(pi) */
-    private void fastOrSlow(String q) {
-        final String query = q;
+    private void fastOrSlow(String q) { fastOrSlow(q, -1); }
+
+    private void fastOrSlow(final String q, final int gen) {
+        final boolean convo = gen > 0 && convoMode;
         voiceMsg("🤔 想想…");
         voiceStrip.setVisibility(View.VISIBLE);
         new Thread(() -> {
             String answer = null;
             try {
-                JSONObject env = Tools.call("chat_fast", new JSONObject().put("q", query));
+                JSONObject env = Tools.call("chat_fast", new JSONObject().put("q", q));
                 if (env.optBoolean("ok")) {
                     JSONObject d = env.optJSONObject("data");
                     if (d != null && "chat".equals(d.optString("type"))) answer = d.optString("answer", "");
@@ -267,16 +274,71 @@ public class MainActivity extends Activity {
             final String fAns = answer;
             runOnUiThread(() -> {
                 if (fAns == null || fAns.isEmpty()) {
-                    injectPrompt(query, true); // 慢脑接管 + 完成播报
+                    injectPrompt(q, true); // 慢脑接管 + 完成播报
                 } else {
                     pendingHeard = fAns;
                     voiceMsg("💬 " + fAns);
+                    if (convo) armConvoCb(gen);
                     new Thread(() -> { try { Tools.call("tts_speak", new JSONObject().put("text", fAns)); } catch (Exception ignored) {} }, "tts-fast").start();
-                    voiceStrip.postDelayed(() -> voiceStrip.setVisibility(View.GONE), 10000);
+                    if (!convo) voiceStrip.postDelayed(() -> voiceStrip.setVisibility(View.GONE), 10000);
                 }
             });
         }, "fast-brain").start();
- }
+    }
+
+    /** 设定朗读完成→下一轮对话 */
+    private void armConvoCb(final int gen) {
+        Tools.onSpeakDone = () -> runOnUiThread(() -> {
+            if (convoMode && gen == convoGen)
+                web.postDelayed(() -> { if (convoMode && gen == convoGen) convoRound(gen); }, 400);
+        });
+    }
+
+    private void startConvo() {
+        if (convoMode) return;
+        convoMode = true; convoMiss = 0; convoGen++;
+        if (currentTab != 0) switchTab(0);
+        voiceCancel.setVisibility(View.VISIBLE);
+        voiceStrip.setVisibility(View.VISIBLE);
+        voiceMsg("🎧 连续对话已开启，请说话…");
+        final int gen = convoGen;
+        new Thread(() -> {
+            try { Thread.sleep(500); } catch (Exception ignore) {}
+            convoRound(gen);
+        }, "convo").start();
+    }
+
+    private void convoRound(final int gen) {
+        if (!convoMode || gen != convoGen) return;
+        runOnUiThread(() -> { if (convoMode && gen == convoGen) { voiceMsg("🎧 请说…"); voiceStrip.setVisibility(View.VISIBLE); } });
+        final File wav;
+        try { wav = WavUtil.recordAutoStop(this, 20); } catch (Exception e) { exitConvo(gen, "录音出错: " + e.getMessage()); return; }
+        if (!convoMode || gen != convoGen) return;
+        if (wav == null) {
+            convoMiss++;
+            if (convoMiss >= 2) { exitConvo(gen, "没听到说话，连续对话已结束"); return; }
+            convoRound(gen); return;
+        }
+        convoMiss = 0;
+        String heard = "";
+        try {
+            JSONObject env = Tools.call("stt_transcribe", new JSONObject().put("file", wav.getAbsolutePath()));
+            if (env != null && env.optBoolean("ok")) heard = env.optString("data", "").trim();
+        } catch (Exception ignore) {}
+        if (!convoMode || gen != convoGen) return;
+        if (heard.isEmpty()) { convoRound(gen); return; }
+        if (heard.contains("结束对话") || heard.contains("退出对话") || heard.contains("停止对话")) { exitConvo(gen, "好的，对话结束"); return; }
+        final String h = heard;
+        runOnUiThread(() -> { if (convoMode && gen == convoGen) { voiceMsg("🗣 " + h); voiceStrip.setVisibility(View.VISIBLE); } });
+        fastOrSlow(h, gen);
+    }
+
+    private void exitConvo(final int gen, final String msg) {
+        if (gen != convoGen) return;
+        convoMode = false;
+        Tools.onSpeakDone = null;
+        runOnUiThread(() -> { voiceMsg(msg); voiceStrip.postDelayed(() -> voiceStrip.setVisibility(View.GONE), 2500); });
+    }
 
     private void voiceMsg(String msg) {
         runOnUiThread(() -> { voiceMsg.setText(msg); voiceStrip.setVisibility(View.VISIBLE); });
@@ -375,6 +437,11 @@ public class MainActivity extends Activity {
                     });
             }
         }, 2000);
+    }
+
+    @Override protected void onResume() {
+        super.onResume();
+        if (PENDING_CONVO) { PENDING_CONVO = false; startConvo(); }
     }
 
     private boolean waitUp(String url, int sec) {

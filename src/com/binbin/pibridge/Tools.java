@@ -83,6 +83,40 @@ public class Tools {
     }
 
     private static MediaPlayer cloudPlayer;
+    /** 朗读完成回调（连续对话推进用），主线程投递 */
+    public static volatile Runnable onSpeakDone;
+    static void fireSpeakDone() {
+        Runnable cb = onSpeakDone;
+        if (cb != null) new Handler(Looper.getMainLooper()).post(cb);
+    }
+    /** 云端语音识别 GLM-ASR：失败返回 null */
+    static String cloudStt(File wav) {
+        try {
+            String key = fastKey();
+            if (key == null) return null;
+            String B = "----qiu" + System.currentTimeMillis();
+            javax.net.ssl.HttpsURLConnection c = (javax.net.ssl.HttpsURLConnection)
+                    new java.net.URL("https://open.bigmodel.cn/api/paas/v4/audio/transcriptions").openConnection();
+            c.setRequestMethod("POST"); c.setConnectTimeout(5000); c.setReadTimeout(30000); c.setDoOutput(true);
+            c.setRequestProperty("Authorization", "Bearer " + key);
+            c.setRequestProperty("Content-Type", "multipart/form-data; boundary=" + B);
+            java.io.OutputStream os = c.getOutputStream();
+            os.write(("--" + B + "\r\nContent-Disposition: form-data; name=\"model\"\r\n\r\nglm-asr\r\n").getBytes("UTF-8"));
+            os.write(("--" + B + "\r\nContent-Disposition: form-data; name=\"file\"; filename=\"audio.wav\"\r\nContent-Type: audio/wav\r\n\r\n").getBytes("UTF-8"));
+            java.io.FileInputStream fi = new java.io.FileInputStream(wav);
+            byte[] buf = new byte[8192]; int n; while ((n = fi.read(buf)) > 0) os.write(buf, 0, n);
+            fi.close();
+            os.write(("\r\n--" + B + "--\r\n").getBytes("UTF-8"));
+            os.close();
+            int code = c.getResponseCode();
+            java.io.InputStream is = code < 400 ? c.getInputStream() : c.getErrorStream();
+            java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+            byte[] b2 = new byte[8192]; int n2; while (is != null && (n2 = is.read(b2)) > 0) bo.write(b2, 0, n2);
+            if (is != null) is.close();
+            if (code != 200) { Log.w("PiBridge", "云ASR HTTP " + code + ": " + bo.toString("UTF-8")); return null; }
+            return new JSONObject(bo.toString("UTF-8")).optString("text", "");
+        } catch (Exception e) { Log.w("PiBridge", "云ASR 失败: " + e); return null; }
+    }
     /** 云 TTS：智谱 GLM-TTS（童童音色）；失败返回 false 由调用方回退 */
     static boolean cloudSpeak(String text) {
         try {
@@ -120,7 +154,7 @@ public class Tools {
                     .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
                     .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH).build());
             cloudPlayer.setDataSource(out.getAbsolutePath());
-            cloudPlayer.setOnCompletionListener(MediaPlayer::release);
+            cloudPlayer.setOnCompletionListener(mp2 -> { mp2.release(); if (cloudPlayer == mp2) cloudPlayer = null; fireSpeakDone(); });
             cloudPlayer.prepare();
             cloudPlayer.start();
             Log.i("PiBridge", "云TTS 播放中 " + out.length() + " 字节");
@@ -153,15 +187,25 @@ public class Tools {
                 }
                 peaks[w] = peak;
             }
-            // 开头是否嘟嘟声：前几窗口峰值>300 且近似恒定
+            // 寻找语音真实起点：连续5窗有声 且 峰值自然波动(排除嘟嘟的恒定纯音)
+            int w = 0, skip = 0;
             boolean hasBeep = peaks[0] > 300;
-            if (hasBeep) for (int w = 1; w < Math.min(windows, 6); w++)
-                if (Math.abs(peaks[w] - peaks[0]) > peaks[0] * 0.25f) { hasBeep = false; break; }
-            if (!hasBeep) return wav;
-            int w = 0;
-            while (w < windows && peaks[w] > 100) w++;   // 越过嘟嘟
-            while (w < windows && peaks[w] <= 100) w++;  // 越过静音
-            int skip = w * win;
+            if (hasBeep) {
+                int start = -1;
+                for (int i = 0; i + 5 < windows; i++) {
+                    if (peaks[i] < 150) continue;
+                    int mx = 0, mn = Integer.MAX_VALUE;
+                    boolean allLoud = true;
+                    for (int j = i; j < i + 5; j++) {
+                        if (peaks[j] < 150) { allLoud = false; break; }
+                        if (peaks[j] > mx) mx = peaks[j];
+                        if (peaks[j] < mn) mn = peaks[j];
+                    }
+                    if (allLoud && (mx - mn) > mx * 0.25f) { start = i; break; }
+                }
+                if (start < 0) return wav;
+                skip = start * win;
+            }
             if (skip <= 0 || skip >= n) return wav;
             int newLen = (n - skip) * 2;
             byte[] outB = new byte[dataPos + newLen];
@@ -258,6 +302,11 @@ public class Tools {
                         "com.xiaomi.mibrain.speech");
                 l.await(5, java.util.concurrent.TimeUnit.SECONDS);
                 if (miReady) {
+                    miTts.setOnUtteranceProgressListener(new android.speech.tts.UtteranceProgressListener() {
+                        @Override public void onStart(String id) {}
+                        @Override public void onDone(String id) { if ("pi".equals(id)) fireSpeakDone(); }
+                        @Override public void onError(String id) { if ("pi".equals(id)) fireSpeakDone(); }
+                    });
                     miTts.setLanguage(new Locale("zh", "CN"));
                     StringBuilder sb = new StringBuilder();
                     android.speech.tts.Voice cur = miTts.getVoice();
@@ -514,10 +563,15 @@ public class Tools {
             return ok(new JSONObject().put("heard", heard).put("reply", reply));
         }});
 
-        def("stt_transcribe", "语音转文字（SenseVoice 离线模型，输入 WAV 路径）",
+        def("stt_transcribe", "语音转文字（引擎可配：local/cloud，输入 WAV 路径）",
             schema(props("file", prop("string", "WAV 文件路径（16k 单声道）")), "file"), new H() { public JSONObject run(JSONObject a) throws Exception {
             String file = a.optString("file", "");
             if (file.isEmpty()) return err("BAD", "缺文件路径");
+            if ("cloud".equals(loadCfg().optString("stt_engine", "local"))) {
+                String txt = cloudStt(new File(file));
+                if (txt != null && !txt.trim().isEmpty()) return ok(txt.trim());
+                return err("CLOUD_STT_FAIL", "云端识别失败（已配置仅云端）");
+            }
             File mf = new File(EnvInstaller.HOME + "/sherpa/model/model.int8.onnx");
             File tk = new File(EnvInstaller.HOME + "/sherpa/model/tokens.txt");
             if (!mf.exists() || !tk.exists()) return err("NO_MODEL", "模型未下载（239M，稍候自动完成）");
@@ -703,7 +757,14 @@ public class Tools {
         });
         try { l.await(3, TimeUnit.SECONDS); } catch (Exception ignore) {}
         ttsReady = ok[0];
-        if (ttsReady) { try { tts.setLanguage(new Locale("zh", "CN")); } catch (Exception ignore) {} }
+        if (ttsReady) {
+            try { tts.setLanguage(new Locale("zh", "CN")); } catch (Exception ignore) {}
+            tts.setOnUtteranceProgressListener(new android.speech.tts.UtteranceProgressListener() {
+                @Override public void onStart(String id) {}
+                @Override public void onDone(String id) { if ("pi".equals(id)) fireSpeakDone(); }
+                @Override public void onError(String id) { if ("pi".equals(id)) fireSpeakDone(); }
+            });
+        }
         return ttsReady;
     }
 

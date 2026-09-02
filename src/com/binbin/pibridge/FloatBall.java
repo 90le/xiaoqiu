@@ -79,7 +79,8 @@ public class FloatBall {
         fp.gravity = Gravity.TOP | Gravity.START;
 
         final Context fc = c;
-        final float[] down = new float[2];
+        final long[] downAt = {0};
+            final float[] down = new float[2];
         final int[] startPos = new int[2];
         final boolean[] moved = {false};
         final boolean[] dragging = {false};
@@ -90,6 +91,8 @@ public class FloatBall {
                     down[0] = ev.getRawX(); down[1] = ev.getRawY();
                     startPos[0] = fp.x; startPos[1] = fp.y;
                     moved[0] = false; dragging[0] = false;
+                    downAt[0] = System.currentTimeMillis();
+                    v.postDelayed(() -> { if (!dragging[0]) v.setText("🎙"); }, 500);
                     return true;
                 case MotionEvent.ACTION_MOVE: {
                     float dx = ev.getRawX() - down[0], dy = ev.getRawY() - down[1];
@@ -134,6 +137,9 @@ public class FloatBall {
                             v.setText("丘");
                             try { wm.updateViewLayout(v, fp); } catch (Exception ignore) {}
                         } else {
+                            v.setText("丘");
+                            // 长按(≥500ms) = 开启连续语音对话；轻点 = 打开小丘
+                            if (System.currentTimeMillis() - downAt[0] >= 500) MainActivity.PENDING_CONVO = true;
                             Intent i = new Intent(fc, MainActivity.class);
                             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                             fc.startActivity(i);

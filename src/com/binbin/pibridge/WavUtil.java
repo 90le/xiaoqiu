@@ -158,6 +158,48 @@ public class WavUtil {
         return wav;
     }
 
+    /** 连续对话录音：等说话→自动断句（静音1.2秒）→返回wav；6秒无人声返回null */
+    public static File recordAutoStop(Context c, int maxSec) throws Exception {
+        int minBuf = AudioRecord.getMinBufferSize(RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
+        AudioRecord ar = new AudioRecord(MediaRecorder.AudioSource.MIC, RATE,
+                AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
+                Math.max(minBuf, RATE * 2 * 2));
+        if (ar.getState() != AudioRecord.STATE_INITIALIZED) { ar.release(); throw new IllegalStateException("麦克风初始化失败"); }
+        java.io.ByteArrayOutputStream pcm = new java.io.ByteArrayOutputStream();
+        java.util.ArrayDeque<byte[]> pre = new java.util.ArrayDeque<>(); // 预滚：保留说话前0.6秒
+        short[] chunk = new short[RATE / 10];
+        ar.startRecording();
+        long t0 = System.currentTimeMillis();
+        int state = 0, speechWin = 0, silentAfter = 0; // 0=等说话 1=说话中
+        try {
+            while (System.currentTimeMillis() - t0 < maxSec * 1000L) {
+                int n = ar.read(chunk, 0, chunk.length);
+                if (n <= 0) continue;
+                int peak = 0;
+                for (int i = 0; i < n; i++) { int a = Math.abs(chunk[i]); if (a > peak) peak = a; }
+                byte[] bytes = new byte[n * 2];
+                for (int i = 0; i < n; i++) { bytes[i*2] = (byte)(chunk[i] & 255); bytes[i*2+1] = (byte)((chunk[i] >> 8) & 255); }
+                if (state == 0) {
+                    pre.addLast(bytes);
+                    while (pre.size() > 6) pre.removeFirst();
+                    if (peak > 1500) { speechWin++; if (speechWin >= 2) { state = 1; for (byte[] p : pre) pcm.write(p, 0, p.length); pre.clear(); } }
+                    else speechWin = 0;
+                    if (state == 0 && System.currentTimeMillis() - t0 > 6000) return null; // 6秒无人声
+                } else {
+                    pcm.write(bytes, 0, bytes.length);
+                    if (peak < 800) { if (++silentAfter >= 12) break; } // 静音1.2秒=说完
+                    else silentAfter = 0;
+                }
+            }
+        } finally { ar.stop(); ar.release(); }
+        if (state == 0 || pcm.size() < RATE) return null;
+        File dir = new File("/storage/emulated/0/Download/pibridge");
+        if (!dir.isDirectory()) dir.mkdirs();
+        File wav = new File(dir, "convo-" + System.currentTimeMillis() + ".wav");
+        writeWav(wav, pcm.toByteArray(), RATE, 1, 16);
+        return wav;
+    }
+
     public static float[] readWav(File f, int[] rateOut) throws IOException {
         FileInputStream fi = new FileInputStream(f);
         ByteArrayOutputStream all = new ByteArrayOutputStream();

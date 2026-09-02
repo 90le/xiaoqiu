@@ -61,10 +61,24 @@ const voices = [
   { id:'luodo',    name:'罗多（动物圈）' },
 ]
 const ttsVoice = ref('tongtong')
+const sttEngine = ref('local')
+const cloneId = ref('')
 async function pickVoice() {
   await fetch('/api/cfg_set', { method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ key:'tts_voice', value: ttsVoice.value }) })
-  ttsMsg.value = '音色已切换，下次试听生效'
+  ttsMsg.value = '音色已切换，试听即可听到'
+  ttsMsgOk.value = true
+  setTimeout(() => { ttsMsg.value = '' }, 2500)
+}
+async function saveClone() {
+  if (!cloneId.value.trim()) return
+  ttsVoice.value = cloneId.value.trim()
+  await pickVoice()
+}
+async function pickStt() {
+  await fetch('/api/cfg_set', { method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ key:'stt_engine', value: sttEngine.value }) })
+  ttsMsg.value = '识别引擎已切换'
   ttsMsgOk.value = true
   setTimeout(() => { ttsMsg.value = '' }, 2500)
 }
@@ -74,7 +88,11 @@ async function loadCfg() {
     const r = await fetch('/api/cfg_get', { method:'POST' })
     const d = (await r.json()).structuredContent
     if (d.ok && d.data.tts_engine) ttsEngine.value = d.data.tts_engine
-    if (d.ok && d.data.tts_voice) ttsVoice.value = d.data.tts_voice
+    if (d.ok && d.data.tts_voice) {
+      ttsVoice.value = d.data.tts_voice
+      if (!['tongtong','chuichui','xiaochen','jam','kazi','douji','luodo'].includes(d.data.tts_voice)) cloneId.value = d.data.tts_voice
+    }
+    if (d.ok && d.data.stt_engine) sttEngine.value = d.data.stt_engine
   } catch(e) {}
 }
 async function pickEngine(id) {
@@ -110,12 +128,17 @@ onMounted(loadCfg)
   <!-- ═══════ 语音配置中心 ═══════ -->
   <div class="sec">🎙 语音识别</div>
   <div class="card">
-    <div class="engine-row">
+    <div class="engine-row" style="display:flex;justify-content:space-between;align-items:center;gap:10px;">
       <div>
         <div class="engine-name">SenseVoice · 本地离线 <span class="pill ok-pill">已就绪</span></div>
-        <div class="engine-desc">按键说话即时识别，无需网络 · 永久免费 · 隐私不出手机</div>
+        <div class="engine-desc">即时识别，无需网络 · 永久免费 · 隐私不出手机</div>
       </div>
+      <select v-model="sttEngine" @change="pickStt" style="max-width:150px;font-size:13px;">
+        <option value="local">本地识别（默认）</option>
+        <option value="cloud">云端 GLM-ASR</option>
+      </select>
     </div>
+    <div style="font-size:11px;color:var(--muted);margin-top:6px;">云端识别更准但需网络与额度；识别失败会提示，可随时切回本地。</div>
   </div>
 
   <div class="sec">🔊 语音播报</div>
@@ -131,12 +154,6 @@ onMounted(loadCfg)
         </div>
         <div class="engine-desc">{{ e.desc }}</div>
         <div class="engine-note">{{ e.note }}</div>
-        <div v-if="e.id === 'cloud' && ttsEngine === 'cloud'" style="margin-top:8px;">
-          <label style="font-size:11px;color:var(--muted);">音色</label>
-          <select v-model="ttsVoice" @change="pickVoice" style="font-size:13px;">
-            <option v-for="v in voices" :key="v.id" :value="v.id">{{ v.name }}</option>
-          </select>
-        </div>
         <div class="engine-foot">
           <button class="mini-btn" @click.stop="testVoice(e.id)">
             {{ testing === e.id ? '播放中…' : '🔊 试听' }}
@@ -145,8 +162,23 @@ onMounted(loadCfg)
       </div>
     </div>
     <div class="msg" :class="ttsMsgOk ? 'ok' : 'bad'" v-if="ttsMsg">{{ ttsMsg }}</div>
+    <div style="margin-top:12px;border-top:1px dashed var(--line);padding-top:10px;">
+      <label style="font-size:12px;font-weight:600;">🔊 云端音色（试听立即生效）</label>
+      <div style="display:flex;gap:8px;margin-top:6px;">
+        <select v-model="ttsVoice" @change="pickVoice" style="flex:1;font-size:13px;">
+          <option v-for="v in voices" :key="v.id" :value="v.id">{{ v.name }}</option>
+          <option v-if="cloneId" :value="cloneId">🎵 我的复刻音色</option>
+        </select>
+        <button class="mini-btn" style="padding:8px 14px;" @click="testVoice(ttsEngine === 'xiaomi' ? 'xiaomi' : 'cloud')">试听此音色</button>
+      </div>
+      <label style="font-size:11px;color:var(--muted);display:block;margin-top:8px;">🎵 复刻音色 ID（在智谱开放平台「语音复刻」上传录音后获得，粘贴即用）</label>
+      <div style="display:flex;gap:8px;margin-top:4px;">
+        <input v-model="cloneId" type="text" placeholder="粘贴复刻 voice_id（选填）" style="flex:1;font-size:12px;">
+        <button class="mini-btn" style="padding:8px 14px;" @click="saveClone">保存</button>
+      </div>
+    </div>
     <div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.6;">
-      💡 「智能优先」= 云端童童 → 小米本地 → 系统引擎，按可用性自动降级，永远不会哑。
+      💡 「智能优先」= 云端音色 → 小米本地，按可用性自动降级，永远不会哑。
     </div>
   </div>
 
