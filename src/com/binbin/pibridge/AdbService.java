@@ -134,10 +134,14 @@ public class AdbService extends AccessibilityService {
                 }
                 if (wins != null) {
                     diag += " 窗口数:" + wins.size();
-                    for (AccessibilityWindowInfo w : wins) {
-                        AccessibilityNodeInfo r = null;
-                        try { r = w.getRoot(); } catch (Throwable e) { diag += " root异常:" + e; }
-                        if (r != null) walk(r, out, 0);
+                    // 副屏窗口就绪有延迟：重试等待（最多4次×900ms）
+                    for (int tryN = 0; tryN < 4 && out.length() == 0; tryN++) {
+                        if (tryN > 0) { try { Thread.sleep(900); } catch (Exception ignore) {} }
+                        for (AccessibilityWindowInfo w : wins) {
+                            AccessibilityNodeInfo r = null;
+                            try { r = w.getRoot(); } catch (Throwable e) { diag += " root异常:" + e; }
+                            if (r != null) walk(r, out, 0);
+                        }
                     }
                     diag += " 节点数:" + out.length();
                     return out.length() > 0 ? out : null;
