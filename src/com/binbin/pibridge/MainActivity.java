@@ -3,6 +3,7 @@ package com.binbin.pibridge;
 import android.app.Activity;
 import android.content.Intent;
 import android.view.View;
+import android.content.Intent;
 import android.graphics.Color;
 import android.os.Bundle;
 import android.view.Gravity;
@@ -17,18 +18,22 @@ import android.widget.FrameLayout;
 import android.widget.LinearLayout;
 import android.widget.TextView;
 
+import org.json.JSONObject;
+
 import java.io.InputStream;
 import java.net.HttpURLConnection;
 import java.net.URL;
 
-/** 小丘原生壳：先等服务就绪（遮罩），失败自动重试——绝不给用户糊错误页 */
+import java.io.File;
+
+/** 小丘原生壳：🎙语音（注入热会话）+ 对话/场景/工具/设置 四页。 */
 public class MainActivity extends Activity {
     private WebView web;
     private TextView splash;
     private Button[] btns;
     private int currentTab = 0;
     private int retries = 0;
-    private volatile String loadingBase = "";
+    private volatile boolean recording = false;
 
     private static final String[] TABS = {"💬 对话", "⚡ 场景", "🔧 工具", "⚙ 设置"};
     private static final String[] URLS = {
@@ -42,8 +47,6 @@ public class MainActivity extends Activity {
 
     @Override protected void onCreate(Bundle b) {
         super.onCreate(b);
-        // 小丘在前台时屏幕常亮（配合 L2 的 stay_on_while_plugged_in 充电常亮）
-        getWindow().addFlags(android.view.WindowManager.LayoutParams.FLAG_KEEP_SCREEN_ON);
         startService(new Intent(this, BridgeService.class));
         buildUi();
         switchTab(0);
@@ -59,7 +62,6 @@ public class MainActivity extends Activity {
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
-        s.setDatabaseEnabled(true);
         s.setCacheMode(WebSettings.LOAD_NO_CACHE);
         web.setWebViewClient(new WebViewClient() {
             @Override public void onReceivedError(WebView v, WebResourceRequest r, WebResourceError e) {
@@ -71,7 +73,15 @@ public class MainActivity extends Activity {
 
         LinearLayout bar = new LinearLayout(this);
         bar.setOrientation(LinearLayout.HORIZONTAL);
-        bar.setPadding(8, 8, 8, 8);
+        bar.setPadding(6, 6, 6, 6);
+        // 🎙 语音按钮（大）
+        Button mic = new Button(this);
+        mic.setText("🎙");
+        mic.setBackgroundColor(Color.parseColor("#3E7C59"));
+        mic.setTextColor(Color.WHITE);
+        mic.setOnClickListener(v -> { if (!recording) voiceFlow(); });
+        mic.setTextSize(18);
+        bar.addView(mic, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.9f));
         btns = new Button[TABS.length];
         for (int i = 0; i < TABS.length; i++) {
             final int idx = i;
@@ -81,7 +91,7 @@ public class MainActivity extends Activity {
             btn.setTextColor(i == 0 ? ACTIVE : IDLE);
             btn.setOnClickListener(v -> switchTab(idx));
             btns[i] = btn;
-            bar.addView(btn, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+            bar.addView(btn, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1.1f));
         }
         page.addView(bar, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -95,6 +105,7 @@ public class MainActivity extends Activity {
         splash.setGravity(Gravity.CENTER);
         splash.setTextColor(Color.parseColor("#3E7C59"));
         splash.setBackgroundColor(Color.parseColor("#F7F3EC"));
+        splash.setVisibility(View.GONE);
         root.addView(splash, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
@@ -103,7 +114,6 @@ public class MainActivity extends Activity {
 
     private void switchTab(int idx) {
         currentTab = idx;
-        retries = 0;
         for (int j = 0; j < btns.length; j++) btns[j].setTextColor(j == idx ? ACTIVE : IDLE);
         final String url = URLS[idx];
         int slash = url.indexOf('/', 7);
@@ -140,6 +150,56 @@ public class MainActivity extends Activity {
             return;
         }
         web.postDelayed(() -> switchTab(currentTab), 3000);
+    }
+
+    // ═══ 🎙 语音流：VAD 录音 → 识别 → 注入对话页输入框自动发送 ═══
+    private void voiceFlow() {
+        recording = true;
+        switchTab(0);
+        splash.setText("🎙 听你说…（说完停顿 1 秒自动结束）");
+        splash.setVisibility(View.VISIBLE);
+        new Thread(() -> {
+            try {
+                File wav = WavUtil.recordVad(this, 20, 2, 1200);
+                JSONObject sttEnv = Tools.call("stt_transcribe",
+                        new JSONObject().put("file", wav.getAbsolutePath()));
+                String heard = sttEnv.optString("data", "");
+                if (heard.isEmpty() || heard.startsWith("(")) {
+                    runOnUiThread(() -> {
+                        splash.setText("🎙 没听清，再试一次");
+                        splash.postDelayed(() -> splash.setVisibility(View.GONE), 1500);
+                        recording = false;
+                    });
+                    return;
+                }
+                final String text = heard;
+                runOnUiThread(() -> {
+                    splash.setVisibility(View.GONE);
+                    injectPrompt(text);
+                    recording = false;
+                });
+            } catch (Exception e) {
+                runOnUiThread(() -> {
+                    splash.setText("🎙 出错：" + e.getMessage());
+                    splash.postDelayed(() -> splash.setVisibility(View.GONE), 2000);
+                    recording = false;
+                });
+            }
+        }, "voice").start();
+    }
+
+    /** 向 pi-web-ui 输入框注入文本并回车发送（React 受控组件安全写法） */
+    private void injectPrompt(String text) {
+        switchTab(0);
+        web.postDelayed(() -> {
+            String js = "(function(){const ta=document.querySelector('textarea');if(!ta)return 'NO_TA';" +
+                    "const set=Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype,'value').set;" +
+                    "set.call(ta," + JSONObject.quote(text) + ");" +
+                    "ta.dispatchEvent(new Event('input',{bubbles:true}));ta.focus();" +
+                    "ta.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',keyCode:13,bubbles:true}));" +
+                    "return 'OK';})()";
+            web.evaluateJavascript(js, null);
+        }, 600);
     }
 
     private boolean waitUp(String url, int sec) {
