@@ -38,9 +38,9 @@ public class MainActivity extends Activity {
     private static final String[] TABS = {"💬 对话", "⚡ 场景", "🔧 工具", "⚙ 设置"};
     private static final String[] URLS = {
             "http://127.0.0.1:8182",
-            "http://127.0.0.1:8181/scenes.html",
-            "http://127.0.0.1:8181/tools.html",
-            "http://127.0.0.1:8181/settings.html"
+            "http://127.0.0.1:8181/#/scenes",
+            "http://127.0.0.1:8181/#/tools",
+            "http://127.0.0.1:8181/#/settings"
     };
     private static final int ACTIVE = 0xFF3E7C59;
     private static final int IDLE = 0xFF7A8471;
@@ -155,19 +155,17 @@ public class MainActivity extends Activity {
     // ═══ 🎙 语音流：VAD 录音 → 识别 → 注入对话页输入框自动发送 ═══
     private void voiceFlow() {
         recording = true;
-        switchTab(0);
-        splash.setText("🎙 听你说…（说完停顿 1 秒自动结束）");
-        splash.setVisibility(View.VISIBLE);
+        if (currentTab != 0) switchTab(0);
+        splashMsg("🎙 听你说…\n（说完停顿即结束）", 0);
         new Thread(() -> {
             try {
-                File wav = WavUtil.recordVad(this, 20, 2, 1200);
+                File wav = WavUtil.recordVad(this, 20, 2, 900);
                 JSONObject sttEnv = Tools.call("stt_transcribe",
                         new JSONObject().put("file", wav.getAbsolutePath()));
-                String heard = sttEnv.optString("data", "");
+                final String heard = sttEnv.optString("data", "");
                 if (heard.isEmpty() || heard.startsWith("(")) {
                     runOnUiThread(() -> {
-                        splash.setText("🎙 没听清，再试一次");
-                        splash.postDelayed(() -> splash.setVisibility(View.GONE), 1500);
+                        splashMsg("🎙 没听清，再试一次", 1500);
                         recording = false;
                     });
                     return;
@@ -175,31 +173,47 @@ public class MainActivity extends Activity {
                 final String text = heard;
                 runOnUiThread(() -> {
                     splash.setVisibility(View.GONE);
-                    injectPrompt(text);
                     recording = false;
+                    injectPrompt(text);
                 });
-            } catch (Exception e) {
+            } catch (final Exception e) {
                 runOnUiThread(() -> {
-                    splash.setText("🎙 出错：" + e.getMessage());
-                    splash.postDelayed(() -> splash.setVisibility(View.GONE), 2000);
+                    splashMsg("🎙 出错：" + e.getMessage(), 2500);
                     recording = false;
                 });
             }
         }, "voice").start();
     }
 
+    /** 提示层独占接口：所有状态提示走这里 */
+    private void splashMsg(String msg, long autoHideMs) {
+        runOnUiThread(() -> {
+            splash.setText(msg);
+            splash.setVisibility(View.VISIBLE);
+            if (autoHideMs > 0) splash.postDelayed(() -> splash.setVisibility(View.GONE), autoHideMs);
+        });
+    }
+
     /** 向 pi-web-ui 输入框注入文本并回车发送（React 受控组件安全写法） */
     private void injectPrompt(String text) {
-        switchTab(0);
-        web.postDelayed(() -> {
-            String js = "(function(){const ta=document.querySelector('textarea');if(!ta)return 'NO_TA';" +
-                    "const set=Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype,'value').set;" +
-                    "set.call(ta," + JSONObject.quote(text) + ");" +
-                    "ta.dispatchEvent(new Event('input',{bubbles:true}));ta.focus();" +
-                    "ta.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',keyCode:13,bubbles:true}));" +
-                    "return 'OK';})()";
-            web.evaluateJavascript(js, null);
-        }, 600);
+        if (currentTab != 0) switchTab(0);
+        final String[] attempt = {0 + ""};
+        web.postDelayed(new Runnable() {
+            int tries = 0;
+            @Override public void run() {
+                String js = "(function(){const ta=document.querySelector('textarea');if(!ta)return 'NO_TA';" +
+                        "const set=Object.getOwnPropertyDescriptor(window.HTMLTextAreaElement.prototype,'value').set;" +
+                        "set.call(ta," + JSONObject.quote(text) + ");" +
+                        "ta.dispatchEvent(new Event('input',{bubbles:true}));ta.focus();" +
+                        "ta.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',keyCode:13,bubbles:true}));" +
+                        "return 'OK';})()";
+                web.evaluateJavascript(js, r -> {
+                    String res = r != null ? r.replace("\"", "") : "";
+                    if (res.contains("OK")) return; // 注入成功
+                    if (tries++ < 5) web.postDelayed(this, 1200);
+                });
+            }
+        }, 1200);
     }
 
     private boolean waitUp(String url, int sec) {

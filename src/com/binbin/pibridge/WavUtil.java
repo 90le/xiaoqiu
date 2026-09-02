@@ -94,8 +94,8 @@ public class WavUtil {
             ambient += (int) Math.sqrt(sum / Math.max(1, n));
         }
         ambient /= 4;
-        int speechThreshold = Math.max(ambient * 3 + 200, 500);
-        int silenceThreshold = Math.max(ambient * 2 + 100, 350);
+        int speechThreshold = Math.max(ambient * 2 + 150, 400);
+        int silenceThreshold = Math.max(ambient + 100, 300);
         while (totalChunks < maxSec * 10) {
             int n = ar.read(chunk, 0, chunkSamples);
             if (n <= 0) continue;
@@ -112,7 +112,8 @@ public class WavUtil {
             totalChunks++;
             // 说完话 + 静音 1.2s + 已录超 minSec → 结束
             if (heardSpeech && totalChunks * 100 > minSec * 1000 && silenceChunks >= silenceMs / 100) break;
-            // 说个不停也在 maxSec 强制截断
+            // 无人声 5 秒快速退出
+            if (!heardSpeech && totalChunks * 100 >= 5000) break;
         }
         ar.stop();
         ar.release();

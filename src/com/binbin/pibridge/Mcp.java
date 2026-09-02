@@ -103,7 +103,9 @@ public class Mcp implements Runnable {
                     String apath = path.equals("/") || path.equals("/index.html") ? "www/index.html"
                             : (path.startsWith("/www/") ? path.substring(1) : "www" + path);
                     if (apath.contains("..")) throw new Exception("bad path");
-                    InputStream ais = Tools.ctx.getAssets().open(apath);
+                    InputStream ais;
+                    try { ais = Tools.ctx.getAssets().open(apath); }
+                    catch (Exception notFound) { ais = Tools.ctx.getAssets().open("www/index.html"); } // SPA fallback
                     ByteArrayOutputStream abo = new ByteArrayOutputStream();
                     byte[] ab = new byte[8192]; int an;
                     while ((an = ais.read(ab)) > 0) abo.write(ab, 0, an);
