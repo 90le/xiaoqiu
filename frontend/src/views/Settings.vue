@@ -7,7 +7,7 @@ const model = ref('glm-5.3-flash')
 const msg = ref('')
 const msgOk = ref(false)
 const perm = ref(null)
-const ball = ref(false)
+const savedKey = ref('')
 
 async function save() {
   msg.value = '保存中…'
@@ -17,13 +17,14 @@ async function save() {
     const d = (await r.json()).structuredContent
     msgOk.value = !!d.ok
     msg.value = d.ok ? d.data : (d.error ? d.error.message : '失败')
+    if (d.ok) savedKey.value = '已配置'
   } catch(e) { msgOk.value = false; msg.value = '网络错误' }
 }
 async function loadPerm() {
   try {
     const r = await fetch('/api/perm_status', { method:'POST' })
     perm.value = (await r.json()).structuredContent.data
-  } catch(e) { perm.value = null }
+  } catch(e) {}
 }
 async function toggleBall() {
   await fetch('/api/floatball', { method:'POST' })
@@ -37,9 +38,6 @@ const permRows = [
   { k:'accessibility', label:'无障碍', type:'a11y' },
   { k:'overlay', label:'悬浮窗', type:'overlay' },
   { k:'allFiles', label:'所有文件', type:'allfiles' },
-  { k:'queueBridge', label:'队列桥', type:null },
-  { k:'envReady', label:'pi 环境', type:null },
-  { k:'webui', label:'对话服务', type:null },
 ]
 onMounted(loadPerm)
 </script>
@@ -56,7 +54,7 @@ onMounted(loadPerm)
       <option value="zhipu">智谱开放平台</option>
       <option value="custom">自定义</option>
     </select>
-    <label>API Key</label>
+    <label>API Key <span v-if="savedKey" class="ok" style="font-size:11px;">{{ savedKey }}</span></label>
     <input v-model="key" type="password" placeholder="粘贴你的 API Key">
     <label>默认模型</label>
     <input v-model="model" type="text">
@@ -70,7 +68,7 @@ onMounted(loadPerm)
       <div v-for="r in permRows" :key="r.k" class="kv">
         <span>{{ r.label }}</span>
         <span :class="{ ok: perm[r.k] }" style="cursor:pointer;" @click="r.type && openPerm(r.type)">
-          {{ perm[r.k] ? '✅' : '❌ 点击授权' }}
+          {{ perm[r.k] ? '✅' : '❌ 去授权' }}
         </span>
       </div>
     </div>
@@ -87,12 +85,13 @@ onMounted(loadPerm)
     <div class="kv"><span>版本</span><span>1.0.0-dev</span></div>
     <div class="kv"><span>引擎</span><span>pi coding-agent</span></div>
     <div class="kv"><span>语音识别</span><span>SenseVoice 离线</span></div>
+    <div class="kv"><span>工具</span><span>49 项</span></div>
   </div>
 </template>
 <style scoped>
+.msg { margin-top:12px; font-size:14px; text-align:center; min-height:18px; }
+.msg.ok { color:var(--hill); } .msg.bad { color:var(--bad); }
 .kv { display:flex; justify-content:space-between; font-size:13px; padding:6px 0; border-bottom:1px dashed var(--line); }
 .kv:last-child { border:0; }
 .ok { color:var(--hill); font-weight:600; }
-.msg { margin-top:12px; font-size:14px; text-align:center; min-height:18px; }
-.msg.ok { color:var(--hill); } .msg.bad { color:var(--bad); }
 </style>

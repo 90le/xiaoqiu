@@ -1,19 +1,16 @@
 <script setup>
 import { ref } from 'vue'
-const out = ref('')
-const busy = ref(false)
+const results = ref({})
+const busy = ref({})
 async function run(tool, args, tag) {
-  busy.value = true
-  out.value = tag + ' 执行中…'
+  busy.value = { ...busy.value, [tag]: true }
   try {
     const r = await fetch('/api/' + tool, { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(args||{}) })
     const d = (await r.json()).structuredContent
-    if (d.ok) {
-      const s = typeof d.data === 'string' ? d.data : JSON.stringify(d.data, null, 1)
-      out.value = tag + ' ✅\n' + (s.length > 1200 ? s.slice(0,1200)+'…' : s)
-    } else out.value = tag + ' ❌ ' + (d.error ? d.error.message : '失败')
-  } catch(e) { out.value = tag + ' ❌ 网络错误' }
-  busy.value = false
+    const s = d.ok ? (typeof d.data === 'string' ? d.data : JSON.stringify(d.data, null, 1)) : '❌ ' + (d.error ? d.error.message : '失败')
+    results.value = { ...results.value, [tag]: (d.ok ? '✅ ' : '') + (s.length > 900 ? s.slice(0,900)+'…' : s) }
+  } catch(e) { results.value = { ...results.value, [tag]: '❌ 网络错误' } }
+  busy.value = { ...busy.value, [tag]: false }
 }
 const cards = [
   { icon:'🔋', t:'电池状态', d:'电量/温度/充电', tool:'battery_status' },
@@ -28,18 +25,22 @@ const cards = [
   <div class="h1">场景</div>
   <div class="sub">一键直达，小丘替你办</div>
   <div class="grid">
-    <div v-for="c in cards" :key="c.t" class="card tap" @click="run(c.tool, c.args||{}, c.t)">
-      <div class="ico">{{ c.icon }}</div><div class="t">{{ c.t }}</div><div class="d">{{ c.d }}</div>
+    <div v-for="c in cards" :key="c.t" class="card tap" @click="!busy[c.t] && run(c.tool, c.args||{}, c.t)">
+      <div class="ico">{{ c.icon }}</div>
+      <div class="t">{{ c.t }} <span v-if="busy[c.t]" class="spin">⟳</span></div>
+      <div class="d">{{ c.d }}</div>
     </div>
   </div>
-  <div v-if="out" class="card out">{{ out }}</div>
+  <div v-for="(v, k) in results" :key="k" class="card out"><b>{{ k }}</b><br>{{ v }}</div>
 </template>
 <style scoped>
 .grid { display:grid; grid-template-columns:1fr 1fr; gap:12px; }
-.tap { cursor:pointer; transition:transform .06s; }
+.tap { cursor:pointer; transition:transform .06s, box-shadow .15s; }
 .tap:active { transform:scale(.97); }
 .ico { font-size:26px; }
 .t { font-size:15px; font-weight:600; margin:8px 0 3px; }
 .d { font-size:12px; color:var(--muted); }
+.spin { display:inline-block; animation:rot 1s linear infinite; color:var(--hill); }
+@keyframes rot { to { transform:rotate(360deg) } }
 .out { white-space:pre-wrap; word-break:break-all; font-size:13px; }
 </style>
