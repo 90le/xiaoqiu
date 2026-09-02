@@ -96,7 +96,7 @@ public class WakeService extends Service {
                         Log.i("PiBridge", "唤醒监听就绪（SenseVoice 分块模式）");
                     }
                     // 分块采集 2.8 秒 → 本地识别 → 检测唤醒词
-                    int total = (int) (16000 * 2.8);
+                    int total = (int) (16000 * 1.6);
                     short[] buf = new short[total];
                     int got = 0;
                     while (got < total && running && !VoiceCore.running && !Tools.micBusy) {
@@ -146,8 +146,11 @@ public class WakeService extends Service {
                 execCommand(carry);
                 return;
             }
-            Tools.call("tts_speak", new org.json.JSONObject().put("text", "在"));
-            Thread.sleep(600);
+            try { // 提示音：50ms 即响，比云TTS快3秒
+                android.media.ToneGenerator tg = new android.media.ToneGenerator(android.media.AudioManager.STREAM_MUSIC, 80);
+                tg.startTone(android.media.ToneGenerator.TONE_PROP_BEEP, 120);
+                Thread.sleep(150);
+            } catch (Exception ignore) {}
             File wav = WavUtil.recordAutoStop(this, 15);
             if (wav == null) return;
             String heard = "";
