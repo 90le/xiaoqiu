@@ -580,6 +580,53 @@ public class Tools {
             }});
 
         // ═══ 位置 / 短信 / 通话 / 联系人 ═══
+        // ═══ 虚拟屏后台操控 v2（App级隐形副屏：无悬浮窗/主屏无感/画面直进内存）═══
+        def("vd", "隐形虚拟屏后台操控（用户无感）：create 创建 / launch 发射App到副屏 / shot 截副屏画面 / tap 点击 / swipe 滑动 / text 输入 / info 状态 / stop 销毁",
+            schema(props("action", prop("string", "create/launch/shot/tap/swipe/text/info/stop"),
+                    "pkg", prop("string", "launch: 应用包名"),
+                    "x", prop("number", "tap/swipe: x"), "y", prop("number", "tap/swipe: y"),
+                    "x2", prop("number", "swipe: 终点x"), "y2", prop("number", "swipe: 终点y"),
+                    "text", prop("string", "text: 要输入的文字"),
+                    "w", prop("number", "副屏宽 默认900"), "h", prop("number", "副屏高 默认2000")), "action"),
+            new H() { public JSONObject run(JSONObject a) throws Exception {
+                String act = a.optString("action");
+                if ("create".equals(act)) {
+                    JSONObject r = VdManager.create(ctx, a.optInt("w", 900), a.optInt("h", 2000));
+                    return r.has("error") ? err(r.getString("error"), r.optString("msg")) : ok(r);
+                }
+                if ("stop".equals(act)) { VdManager.destroy(); return ok("已销毁"); }
+                if ("info".equals(act)) {
+                    JSONObject o = new JSONObject();
+                    o.put("alive", VdManager.alive());
+                    if (VdManager.alive()) o.put("displayId", VdManager.displayId());
+                    return ok(o);
+                }
+                if (!VdManager.alive()) return err("NO_VD", "虚拟屏未创建，先 action=create");
+                if ("shot".equals(act)) {
+                    JSONObject r = VdManager.shot(ctx);
+                    return r.has("error") ? err(r.getString("error"), r.optString("msg")) : ok(r);
+                }
+                if ("launch".equals(act)) {
+                    JSONObject r = VdManager.launch(ctx, a.optString("pkg"));
+                    if (r != null) return r.has("error") ? err(r.getString("error"), r.optString("msg")) : ok(r);
+                    // App内通道失败 → L2 shell 兜底
+                    JSONObject c = (JSONObject) Tools.call("l2_exec", new JSONObject().put("timeout_sec", 40)
+                        .put("cmd", "am start --display " + VdManager.displayId()
+                            + " -n $(cmd package resolve-activity --brief " + a.optString("pkg") + " | tail -1) && echo __L2_OK__"));
+                    return String.valueOf(c).contains("__L2_OK__") ? ok("已发射（L2通道）") : err("LAUNCH_FAIL", String.valueOf(c));
+                }
+                // tap / swipe / text → L2 input -d
+                String cmd;
+                if ("tap".equals(act)) cmd = "input -d " + VdManager.displayId() + " tap " + a.optInt("x") + " " + a.optInt("y");
+                else if ("swipe".equals(act)) cmd = "input -d " + VdManager.displayId() + " swipe "
+                        + a.optInt("x") + " " + a.optInt("y") + " " + a.optInt("x2") + " " + a.optInt("y2");
+                else if ("text".equals(act)) cmd = "input -d " + VdManager.displayId() + " text '"
+                        + a.optString("text", "").replace(" ", "%s").replace("'", "") + "'";
+                else return err("BAD_ACTION", "未知 action: " + act);
+                JSONObject c = (JSONObject) Tools.call("l2_exec", new JSONObject().put("cmd", cmd));
+                return c.optBoolean("ok", false) ? ok(act + " 完成@副屏" + VdManager.displayId()) : err("INJECT_FAIL", String.valueOf(c));
+            }});
+
         def("apps_list", "列出已装应用（可按关键词过滤）",
             schema(props("filter", prop("string", "包名/应用名包含关键词"), "limit", prop("number", "上限默认 50"))), new H() { public JSONObject run(JSONObject a) throws Exception {
                 PackageManager pm = ctx.getPackageManager();
