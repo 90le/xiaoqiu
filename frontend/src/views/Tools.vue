@@ -1,16 +1,13 @@
 <script setup>
-import { ref, onMounted } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 const q = ref('')
 const all = ref([])
+const list = computed(() => all.value.filter(t => !q.value || (t.n + t.d).includes(q.value)))
 onMounted(async () => {
   const r = await fetch('/api/tools_list', { method:'POST' })
   const d = (await r.json()).structuredContent
   all.value = (d.data || []).map(s => { const i = s.indexOf(' — '); return { n: s.slice(0,i), d: s.slice(i+3) } })
 })
-const list = ref([])
-function render() {
-  list.value = all.value.filter(t => !q.value || (t.n + t.d).includes(q.value))
-}
 </script>
 <template>
   <div class="h1">工具箱</div>
