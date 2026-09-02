@@ -724,6 +724,15 @@ public class Tools {
                 return err("VERIFY_FAIL", "已执行但回读不符 期望=" + want + " 实际=" + got + " 状态=" + state);
             }});
 
+        def("ime_switch", "切换输入法：adb=ADBKeyboard（自动化中文注入用）/ sogou=搜狗（还给用户打字）。任务结束记得切回 sogou",
+            schema(props("target", prop("string", "adb/sogou")), "target"), new H() { public JSONObject run(JSONObject a) throws Exception {
+            String target = a.optString("target", "sogou");
+            String ime = target.equals("adb") ? "com.android.adbkeyboard/.AdbIME" : "com.sohu.inputmethod.sogou.xiaomi/.SogouIME";
+            JSONObject c = (JSONObject) Tools.call("l2_exec", new JSONObject().put("cmd",
+                    "ime enable " + ime + "; ime set " + ime + "; ime list -s | head -2"));
+            return c.optBoolean("ok", false) ? ok("已切换到 " + target) : err("IME_FAIL", String.valueOf(c));
+        }});
+
         def("apps_list", "列出已装应用（可按关键词过滤）",
             schema(props("filter", prop("string", "包名/应用名包含关键词"), "limit", prop("number", "上限默认 50"))), new H() { public JSONObject run(JSONObject a) throws Exception {
                 PackageManager pm = ctx.getPackageManager();
