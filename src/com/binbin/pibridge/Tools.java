@@ -634,6 +634,10 @@ public class Tools {
                     JSONObject r = VdManager.shot(ctx);
                     return r.has("error") ? err(r.getString("error"), r.optString("msg")) : ok(r);
                 }
+                if ("shot_grid".equals(act)) {
+                    JSONObject r = VdManager.shotGrid(ctx);
+                    return r.has("error") ? err(r.getString("error"), r.optString("msg")) : ok(r);
+                }
                 if ("launch".equals(act)) {
                     JSONObject r = VdManager.launch(ctx, a.optString("pkg"));
                     if (r != null) return r.has("error") ? err(r.getString("error"), r.optString("msg")) : ok(r);

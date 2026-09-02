@@ -1,5 +1,7 @@
 package com.binbin.pibridge;
 
+import org.json.JSONArray;
+import org.json.JSONObject;
 import android.app.Notification;
 import android.app.NotificationChannel;
 import android.app.NotificationManager;
@@ -48,6 +50,7 @@ public class BridgeService extends Service {
             try { Thread.sleep(2000); } catch (Exception ignore) {}
             if ("true".equals(Tools.loadCfg().optString("wake_on", "false"))) WakeService.start(this);
         }, "wake-restore").start();
+        startNotifyAnnouncer(); // 通知实时播报（cfg notify_announce 门控）
         // 环境引擎：首启自动装 pi 环境
         if (!EnvInstaller.isReady() && !EnvInstaller.isRunning()) {
             EnvInstaller.installAsync(new EnvInstaller.Cb() {
@@ -155,6 +158,46 @@ public class BridgeService extends Service {
                 .setContentIntent(pi)
                 .setOngoing(true);
         return Build.VERSION.SDK_INT >= 16 ? b.build() : b.getNotification();
+    }
+
+    /** 通知实时语音播报（"听"的实时化）：cfg notify_announce=true 生效；notify_announce_pkgs 白名单 */
+    private void startNotifyAnnouncer() {
+        new Thread(() -> {
+            long[] lastSeen = {System.currentTimeMillis()};
+            while (true) {
+                try {
+                    Thread.sleep(5000);
+                    if (!"true".equals(Tools.loadCfg().optString("notify_announce", "false"))) continue;
+                    if (Tools.micBusy) continue;
+                    java.io.File f = new java.io.File(getFilesDir(), "notify-log.json");
+                    if (!f.canRead()) continue;
+                    JSONArray arr = new JSONArray(new String(java.nio.file.Files.readAllBytes(f.toPath()), "UTF-8"));
+                    long newest = lastSeen[0];
+                    String pending = null;
+                    for (int i = arr.length() - 1; i >= 0; i--) {
+                        JSONObject o = arr.optJSONObject(i);
+                        if (o == null) continue;
+                        long t = o.optLong("time");
+                        if (t <= lastSeen[0]) break;
+                        newest = Math.max(newest, t);
+                        String allow = Tools.loadCfg().optString("notify_announce_pkgs", "com.tencent.mm");
+                        if (!allow.contains(o.optString("pkg"))) continue;
+                        if (pending == null) pending = "新消息：" + o.optString("title") + "，" + o.optString("text");
+                    }
+                    lastSeen[0] = newest;
+                    if (pending != null) {
+                        final String say = pending;
+                        new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                            try {
+                                Tools.call("tts_speak", new org.json.JSONObject()
+                                        .put("text", say).put("engine", "xiaomi"));
+                                android.util.Log.i("PiBridge", "播报通知: " + say);
+                            } catch (Exception ignore) {}
+                        });
+                    }
+                } catch (Exception ignore) {}
+            }
+        }, "notify-announcer").start();
     }
 
     @Override public IBinder onBind(Intent i) { return null; }

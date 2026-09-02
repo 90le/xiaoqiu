@@ -187,10 +187,13 @@ public class AdbService extends AccessibilityService {
                         for (AccessibilityWindowInfo w : wins) {
                             AccessibilityNodeInfo r = null;
                             try { r = w.getRoot(); } catch (Throwable e) { diag += " root异常:" + e; }
+                            diag += "[w" + w.getType() + "/" + w.getLayer() + ":";
                             if (r != null) {
-                                try { lastPkg.put(displayId, String.valueOf(r.getPackageName())); } catch (Exception ignore) {}
+                                String wp = String.valueOf(r.getPackageName());
+                                diag += wp + " 子节点" + r.getChildCount() + "]";
+                                try { lastPkg.put(displayId, wp); } catch (Exception ignore) {}
                                 walk(r, out, 0);
-                            }
+                            } else diag += "无根]";
                         }
                     }
                     diag += " 节点数:" + out.length();

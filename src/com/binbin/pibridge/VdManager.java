@@ -99,6 +99,48 @@ public class VdManager {
     }
 
     /** 最新一帧存 PNG（供 pi 视觉），无新帧返回 false */
+    /** 网格标注版截图（SoM思想）：6x10网格+A1..F10标签+坐标尺，pi 视觉定位精度大幅提升 */
+    public static synchronized JSONObject shotGrid(Context c) {
+        if (!alive() || last == null || last.isRecycled()) return err("NO_FRAME", "副屏无画面");
+        try {
+            Bitmap src = last.copy(last.getConfig(), true);
+            android.graphics.Canvas cv = new android.graphics.Canvas(src);
+            android.graphics.Paint lp = new android.graphics.Paint();
+            lp.setColor(0x88FF3030); lp.setStrokeWidth(2);
+            android.graphics.Paint tp = new android.graphics.Paint();
+            tp.setColor(0xFFFF3030); tp.setTextSize(34); tp.setFakeBoldText(true);
+            int cols = 6, rows = 10;
+            for (int i = 1; i < cols; i++) {
+                int x = src.getWidth() * i / cols;
+                cv.drawLine(x, 0, x, src.getHeight(), lp);
+            }
+            for (int j = 1; j < rows; j++) {
+                int y = src.getHeight() * j / rows;
+                cv.drawLine(0, y, src.getWidth(), y, lp);
+            }
+            String col = "ABCDEF";
+            for (int i = 0; i < cols; i++) for (int j = 0; j < rows; j++) {
+                int x = src.getWidth() * i / cols + 8;
+                int y = src.getHeight() * j / rows + 38;
+                cv.drawText(col.charAt(i) + "" + (j + 1), x, y, tp);
+            }
+            File dir = new File(c.getExternalFilesDir(null), "vd");
+            if (!dir.isDirectory()) dir.mkdirs();
+            File f = new File(dir, "grid.png");
+            FileOutputStream fo = new FileOutputStream(f);
+            src.compress(Bitmap.CompressFormat.PNG, 80, fo);
+            fo.close();
+            src.recycle();
+            File pub = new File("/storage/emulated/0/pibridge/shots/vd-grid.png");
+            try { java.nio.file.Files.copy(f.toPath(), pub.toPath(),
+                    java.nio.file.StandardCopyOption.REPLACE_EXISTING); } catch (Exception ignore) {}
+            JSONObject o = new JSONObject();
+            try { o.put("file", pub.getAbsolutePath()).put("grid", cols + "x" + rows)
+                    .put("hint", "网格标签A1-F10，格宽" + src.getWidth()/cols + "px 格高" + src.getHeight()/rows + "px"); } catch (Exception ignore) {}
+            return o;
+        } catch (Exception e) { return err("GRID_FAIL", e.toString()); }
+    }
+
     public static synchronized JSONObject shot(Context c) {
         if (!alive() || last == null || last.isRecycled()) return err("NO_FRAME", "副屏无画面（App 未渲染?）");
         try {
