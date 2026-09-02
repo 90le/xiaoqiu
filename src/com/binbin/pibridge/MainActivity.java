@@ -37,6 +37,7 @@ public class MainActivity extends Activity {
     private Button voiceSend;
     private Button micBtn;
     private String pendingHeard = "";
+    private int voiceGen = 0; // 语音播报代次：新发送使旧监视器失效
     private final java.util.concurrent.atomic.AtomicBoolean stopFlag = new java.util.concurrent.atomic.AtomicBoolean(false);
     private Button[] btns;
     private int currentTab = 0;
@@ -104,7 +105,7 @@ public class MainActivity extends Activity {
         voiceSend.setTextColor(Color.WHITE);
         voiceSend.setBackgroundColor(Color.parseColor("#E8853D"));
         voiceSend.setPadding(20, 8, 20, 8);
-        voiceSend.setOnClickListener(v -> { voiceStrip.setVisibility(View.GONE); injectPrompt(pendingHeard); });
+        voiceSend.setOnClickListener(v -> { voiceStrip.setVisibility(View.GONE); injectPrompt(pendingHeard, true); });
         voiceStrip.addView(voiceSend, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         page.addView(voiceStrip, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -252,8 +253,12 @@ public class MainActivity extends Activity {
         runOnUiThread(() -> { voiceMsg.setText(msg); voiceStrip.setVisibility(View.VISIBLE); });
     }
 
-    private void injectPrompt(String text) {
+    private void injectPrompt(String text) { injectPrompt(text, false); }
+
+    private void injectPrompt(String text, boolean speakReply) {
         if (currentTab != 0) switchTab(0);
+        final int gen = ++voiceGen;
+        if (speakReply) watchReplyAndSpeak(gen, text);
         final String[] attempt = {0 + ""};
         web.postDelayed(new Runnable() {
             int tries = 0;
@@ -273,8 +278,42 @@ public class MainActivity extends Activity {
         }, 1200);
     }
 
-    /** 向 pi-web-ui 输入框注入文本并回车发送（React 受控组件安全写法） */
-    
+    /** 监视对话页最新消息，流式输出稳定后 TTS 播报 */
+    private void watchReplyAndSpeak(final int gen, final String sentText) {
+        final int[] polls = {0};
+        final int[] stable = {0};
+        final String[] last = {""};
+        web.postDelayed(new Runnable() {
+            @Override public void run() {
+                if (gen != voiceGen || polls[0]++ > 90) return; // 新发送/超时(~4.5min)终止
+                web.evaluateJavascript(
+                    "(function(){var n=document.querySelectorAll('.msg-text');return n.length?n[n.length-1].innerText:'';})()",
+                    v -> {
+                        if (gen != voiceGen) return;
+                        String t = v == null ? "" : v;
+                        if (t.length() > 1 && t.startsWith("\"") && t.endsWith("\""))
+                            t = t.substring(1, t.length() - 1);
+                        t = t.replace("\\n", " ").replace("\\\"", "\"").trim();
+                        if (t.isEmpty() || t.equals(sentText) || t.contains(sentText)) {
+                            stable[0] = 0; last[0] = t;
+                            web.postDelayed(this, 3000); return;
+                        }
+                        if (t.equals(last[0])) {
+                            stable[0]++;
+                            if (stable[0] >= 2 && t.length() > 2) { // 6s 无变化=回答完成
+                                String say = t.length() > 220 ? t.substring(0, 220) + "……" : t;
+                                try {
+                                    Tools.call("tts_speak", new JSONObject().put("text", say));
+                                } catch (Exception ignored) {}
+                                return;
+                            }
+                        } else { stable[0] = 0; }
+                        last[0] = t;
+                        web.postDelayed(this, 3000);
+                    });
+            }
+        }, 6000);
+    }
 
     private boolean waitUp(String url, int sec) {
         long deadline = System.currentTimeMillis() + sec * 1000L;
