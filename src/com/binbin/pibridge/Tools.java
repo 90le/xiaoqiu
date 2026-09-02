@@ -94,8 +94,9 @@ public class Tools {
             c.setRequestMethod("POST"); c.setConnectTimeout(4000); c.setReadTimeout(25000); c.setDoOutput(true);
             c.setRequestProperty("Authorization", "Bearer " + key);
             c.setRequestProperty("Content-Type", "application/json");
+            String voice = loadCfg().optString("tts_voice", "tongtong");
             JSONObject body = new JSONObject().put("model", "glm-tts").put("input", text)
-                    .put("voice", "tongtong").put("response_format", "wav");
+                    .put("voice", voice).put("response_format", "wav");
             java.io.OutputStream os = c.getOutputStream();
             os.write(body.toString().getBytes("UTF-8")); os.close();
             int code = c.getResponseCode();
@@ -106,11 +107,14 @@ public class Tools {
                 Log.w("PiBridge", "云TTS HTTP " + code + ": " + bo.toString("UTF-8"));
                 return false;
             }
+            java.io.ByteArrayOutputStream ab = new java.io.ByteArrayOutputStream();
+            java.io.InputStream is = c.getInputStream();
+            byte[] b = new byte[8192]; int n; while ((n = is.read(b)) > 0) ab.write(b, 0, n);
+            is.close();
+            byte[] wav = trimLeadingBeep(ab.toByteArray());
             java.io.File out = new java.io.File(ctx.getCacheDir(), "cloud-tts.wav");
             java.io.FileOutputStream fo = new java.io.FileOutputStream(out);
-            java.io.InputStream is = c.getInputStream();
-            byte[] b = new byte[8192]; int n; while ((n = is.read(b)) > 0) fo.write(b, 0, n);
-            is.close(); fo.close();
+            fo.write(wav); fo.close();
             cloudPlayer = new MediaPlayer();
             cloudPlayer.setAudioAttributes(new android.media.AudioAttributes.Builder()
                     .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
@@ -123,6 +127,57 @@ public class Tools {
             return true;
         } catch (Exception e) { Log.w("PiBridge", "云TTS 失败: " + e); return false; }
     }
+    /** 裁掉 GLM-TTS 音频开头的提示嘟嘟声（恒定峰值纯音+静音段），定位到语音真实起点 */
+    static byte[] trimLeadingBeep(byte[] wav) {
+        try {
+            int dataPos = -1, dataLen = 0;
+            for (int i = 12; i + 8 <= wav.length; ) {
+                String id = new String(wav, i, 4, "ASCII");
+                int sz = (wav[i+4]&255) | (wav[i+5]&255)<<8 | (wav[i+6]&255)<<16 | (wav[i+7]&255)<<24;
+                if (id.equals("data")) { dataPos = i + 8; dataLen = sz; break; }
+                i += 8 + sz + (sz & 1);
+            }
+            if (dataPos < 0 || dataLen <= 0) return wav;
+            int n = Math.min(dataLen, wav.length - dataPos) / 2;
+            int win = 2400; // 0.1s @24kHz
+            int windows = n / win;
+            if (windows < 10) return wav;
+            int[] peaks = new int[windows];
+            for (int w = 0; w < windows; w++) {
+                int peak = 0;
+                for (int j = 0; j < win; j++) {
+                    int idx = dataPos + (w*win + j)*2;
+                    if (idx + 1 >= wav.length) break;
+                    int s = (short)((wav[idx]&255) | (wav[idx+1]<<8));
+                    if (Math.abs(s) > peak) peak = Math.abs(s);
+                }
+                peaks[w] = peak;
+            }
+            // 开头是否嘟嘟声：前几窗口峰值>300 且近似恒定
+            boolean hasBeep = peaks[0] > 300;
+            if (hasBeep) for (int w = 1; w < Math.min(windows, 6); w++)
+                if (Math.abs(peaks[w] - peaks[0]) > peaks[0] * 0.25f) { hasBeep = false; break; }
+            if (!hasBeep) return wav;
+            int w = 0;
+            while (w < windows && peaks[w] > 100) w++;   // 越过嘟嘟
+            while (w < windows && peaks[w] <= 100) w++;  // 越过静音
+            int skip = w * win;
+            if (skip <= 0 || skip >= n) return wav;
+            int newLen = (n - skip) * 2;
+            byte[] outB = new byte[dataPos + newLen];
+            System.arraycopy(wav, 0, outB, 0, dataPos);
+            System.arraycopy(wav, dataPos + skip*2, outB, dataPos, newLen);
+            // 修正长度字段：RIFF size(@4)、data size(@dataPos-4)
+            patchInt(outB, 4, outB.length - 8);
+            patchInt(outB, dataPos - 4, newLen);
+            Log.i("PiBridge", "云TTS 已裁剪提示音 " + skip + " 样本");
+            return outB;
+        } catch (Exception e) { Log.w("PiBridge", "裁剪失败(用原音频): " + e); return wav; }
+    }
+    static void patchInt(byte[] b, int pos, int v) {
+        b[pos] = (byte)(v & 255); b[pos+1] = (byte)((v>>8) & 255); b[pos+2] = (byte)((v>>16) & 255); b[pos+3] = (byte)((v>>24) & 255);
+    }
+
     static void stopCloud() {
         try { if (cloudPlayer != null) { cloudPlayer.stop(); cloudPlayer.release(); cloudPlayer = null; } } catch (Exception ignore) {}
     }

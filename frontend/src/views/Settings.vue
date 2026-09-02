@@ -47,16 +47,34 @@ const ttsMsgOk = ref(true)
 const testing = ref('')
 
 const engines = [
-  { id:'auto',   icon:'✨', name:'智能优先',      desc:'推荐 · 有额度用云端童童，没额度用小米本地', note:'永远不会哑，绝大多数用户选这个' },
-  { id:'cloud',  icon:'☁️', name:'云端 · 童童',   desc:'GLM-TTS · 音色最自然',   note:'需智谱TTS额度；只云不回退时选这个' },
+  { id:'auto',   icon:'✨', name:'智能优先',      desc:'推荐 · 有额度用云端，没额度用小米本地', note:'永远不会哑，绝大多数用户选这个' },
+  { id:'cloud',  icon:'☁️', name:'云端音色',      desc:'GLM-TTS · 音色最自然',   note:'需智谱TTS额度；只云不回退时选这个' },
   { id:'xiaomi', icon:'📱', name:'小米本地',      desc:'免费离线 · 已调优音调',   note:'换其他品牌手机自动改用该机系统音色' },
 ]
+const voices = [
+  { id:'tongtong', name:'彤彤（女·温暖，默认）' },
+  { id:'chuichui', name:'锤锤' },
+  { id:'xiaochen', name:'小陈' },
+  { id:'jam',      name:'Jam（动物圈）' },
+  { id:'kazi',     name:'卡兹（动物圈）' },
+  { id:'douji',    name:'豆几（动物圈）' },
+  { id:'luodo',    name:'罗多（动物圈）' },
+]
+const ttsVoice = ref('tongtong')
+async function pickVoice() {
+  await fetch('/api/cfg_set', { method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ key:'tts_voice', value: ttsVoice.value }) })
+  ttsMsg.value = '音色已切换，下次试听生效'
+  ttsMsgOk.value = true
+  setTimeout(() => { ttsMsg.value = '' }, 2500)
+}
 
 async function loadCfg() {
   try {
     const r = await fetch('/api/cfg_get', { method:'POST' })
     const d = (await r.json()).structuredContent
     if (d.ok && d.data.tts_engine) ttsEngine.value = d.data.tts_engine
+    if (d.ok && d.data.tts_voice) ttsVoice.value = d.data.tts_voice
   } catch(e) {}
 }
 async function pickEngine(id) {
@@ -113,6 +131,12 @@ onMounted(loadCfg)
         </div>
         <div class="engine-desc">{{ e.desc }}</div>
         <div class="engine-note">{{ e.note }}</div>
+        <div v-if="e.id === 'cloud' && ttsEngine === 'cloud'" style="margin-top:8px;">
+          <label style="font-size:11px;color:var(--muted);">音色</label>
+          <select v-model="ttsVoice" @change="pickVoice" style="font-size:13px;">
+            <option v-for="v in voices" :key="v.id" :value="v.id">{{ v.name }}</option>
+          </select>
+        </div>
         <div class="engine-foot">
           <button class="mini-btn" @click.stop="testVoice(e.id)">
             {{ testing === e.id ? '播放中…' : '🔊 试听' }}
