@@ -205,6 +205,9 @@ public class Tools {
 
     /** 口语化改写：长文本/含格式 → 短口语朗读稿；短文本原样返回 */
     static String voiceFriendly(String text) {
+        if ("false".equals(loadCfg().optString("voice_rewrite", "true"))) {
+            return text.replaceAll("```[\\s\\S]*?```", "，代码部分从略，").replaceAll("[#*`>\\[\\]]", "").replaceAll("\\n+", "，").trim();
+        }
         String clean = text.replaceAll("```[\\s\\S]*?```", "，代码部分从略，").replaceAll("[#*`>\\[\\]]", "").replaceAll("\\n+", "，").trim();
         boolean markdowny = text.contains("```") || text.contains("\n- ") || text.contains("\n#") || text.contains("**");
         if (!markdowny && clean.length() <= 200) return clean;

@@ -43,6 +43,11 @@ public class BridgeService extends Service {
         startPui();
         // 悬浮球状态恢复（上次开过就自动出现）
         if (FloatBall.savedOn(this)) MAIN.post(() -> FloatBall.show(this));
+        // 全局唤醒词：上次开着就自动恢复
+        new Thread(() -> {
+            try { Thread.sleep(2000); } catch (Exception ignore) {}
+            if ("true".equals(Tools.loadCfg().optString("wake_on", "false"))) WakeService.start(this);
+        }, "wake-restore").start();
         // 环境引擎：首启自动装 pi 环境
         if (!EnvInstaller.isReady() && !EnvInstaller.isRunning()) {
             EnvInstaller.installAsync(new EnvInstaller.Cb() {
