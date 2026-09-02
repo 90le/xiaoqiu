@@ -2,6 +2,7 @@ package com.binbin.pibridge;
 
 import android.app.Activity;
 import android.content.Intent;
+import android.view.MotionEvent;
 import android.view.View;
 import android.content.Intent;
 import android.graphics.Color;
@@ -30,8 +31,13 @@ import java.io.File;
 public class MainActivity extends Activity {
     private WebView web;
     private TextView splash;
-    private TextView voiceStrip;
+    private LinearLayout voiceStrip;
+    private TextView voiceMsg;
+    private Button voiceCancel;
+    private Button voiceSend;
     private Button micBtn;
+    private String pendingHeard = "";
+    private final java.util.concurrent.atomic.AtomicBoolean stopFlag = new java.util.concurrent.atomic.AtomicBoolean(false);
     private Button[] btns;
     private int currentTab = 0;
     private int retries = 0;
@@ -73,11 +79,33 @@ public class MainActivity extends Activity {
         page.addView(web, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
-        voiceStrip = new TextView(this);
+        voiceStrip = new LinearLayout(this);
+        voiceStrip.setOrientation(LinearLayout.HORIZONTAL);
+        voiceStrip.setGravity(Gravity.CENTER_VERTICAL);
         voiceStrip.setBackgroundColor(Color.parseColor("#3E7C59"));
-        voiceStrip.setTextColor(Color.WHITE);
-        voiceStrip.setPadding(28, 20, 28, 20);
+        voiceStrip.setPadding(28, 16, 28, 16);
         voiceStrip.setVisibility(View.GONE);
+        voiceMsg = new TextView(this);
+        voiceMsg.setTextColor(Color.WHITE);
+        voiceMsg.setTextSize(14);
+        voiceMsg.setPadding(0, 0, 16, 0);
+        voiceStrip.addView(voiceMsg, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 1f));
+        voiceCancel = new Button(this);
+        voiceCancel.setText("取消");
+        voiceCancel.setTextSize(13);
+        voiceCancel.setTextColor(Color.WHITE);
+        voiceCancel.setBackgroundColor(Color.parseColor("#5F8A73"));
+        voiceCancel.setPadding(20, 8, 20, 8);
+        voiceCancel.setOnClickListener(v -> { voiceStrip.setVisibility(View.GONE); });
+        voiceStrip.addView(voiceCancel, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+        voiceSend = new Button(this);
+        voiceSend.setText("发送");
+        voiceSend.setTextSize(13);
+        voiceSend.setTextColor(Color.WHITE);
+        voiceSend.setBackgroundColor(Color.parseColor("#E8853D"));
+        voiceSend.setPadding(20, 8, 20, 8);
+        voiceSend.setOnClickListener(v -> { voiceStrip.setVisibility(View.GONE); injectPrompt(pendingHeard); });
+        voiceStrip.addView(voiceSend, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         page.addView(voiceStrip, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
 
@@ -89,7 +117,18 @@ public class MainActivity extends Activity {
         micBtn.setText("🎙");
         micBtn.setBackgroundColor(Color.parseColor("#3E7C59"));
         micBtn.setTextColor(Color.WHITE);
-        micBtn.setOnClickListener(v -> { if (!recording) voiceFlow(); });
+        micBtn.setOnTouchListener((v, ev) -> {
+            switch (ev.getActionMasked()) {
+                case MotionEvent.ACTION_DOWN:
+                    if (!recording) startVoiceCapture();
+                    return true;
+                case MotionEvent.ACTION_UP:
+                case MotionEvent.ACTION_CANCEL:
+                    if (recording) stopVoiceCapture();
+                    return true;
+            }
+            return false;
+        });
         micBtn.setTextSize(18);
         bar.addView(micBtn, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.9f));
         btns = new Button[TABS.length];
@@ -163,60 +202,56 @@ public class MainActivity extends Activity {
     }
 
     // ═══ 🎙 语音流：VAD 录音 → 识别 → 注入对话页输入框自动发送 ═══
-    private void voiceFlow() {
+    private void startVoiceCapture() {
         recording = true;
         if (currentTab != 0) switchTab(0);
-        splashMsg("🎙 听你说…\n（说完停顿即结束）", 0);
+        voiceStrip.setVisibility(View.VISIBLE);
+        voiceMsg.setText("🎙 录音中…松手结束");
+        voiceCancel.setVisibility(View.GONE);
+        voiceSend.setVisibility(View.GONE);
+        micBtn.setText("⏺ 松手");
+        micBtn.setBackgroundColor(Color.parseColor("#C24B3C"));
+        stopFlag.set(false);
         new Thread(() -> {
             try {
-                File wav = WavUtil.recordVad(this, 20, 2, 900);
+                File wav = WavUtil.recordUntil(this, stopFlag, 60);
+                voiceMsg("识别中…");
                 JSONObject sttEnv = Tools.call("stt_transcribe",
                         new JSONObject().put("file", wav.getAbsolutePath()));
-                final String heard = sttEnv.optString("data", "");
-                final String heardF = heard;
+                String heard = sttEnv.optString("data", "").trim();
+                final String h = heard;
                 runOnUiThread(() -> {
-                    strip("🧠 识别完成，小丘思考中…");
                     recording = false;
                     micBtn.setText("🎙");
                     micBtn.setBackgroundColor(Color.parseColor("#3E7C59"));
-                    injectPrompt(heardF);
-                    stripFade("✅ 已发送给小丘", 2500);
+                    if (h.isEmpty() || h.startsWith("(")) {
+                        voiceMsg("没听清，再试一次");
+                        voiceStrip.postDelayed(() -> voiceStrip.setVisibility(View.GONE), 1800);
+                    } else {
+                        pendingHeard = h;
+                        voiceMsg("🗣 " + h);
+                        voiceCancel.setVisibility(View.VISIBLE);
+                        voiceSend.setVisibility(View.VISIBLE);
+                    }
                 });
             } catch (final Exception e) {
                 runOnUiThread(() -> {
-                    strip("🎙 出错：" + e.getMessage(), 2500);
                     recording = false;
                     micBtn.setText("🎙");
                     micBtn.setBackgroundColor(Color.parseColor("#3E7C59"));
+                    voiceMsg("🎙 出错：" + e.getMessage());
+                    voiceStrip.postDelayed(() -> voiceStrip.setVisibility(View.GONE), 2500);
                 });
             }
-        }, "voice").start();
+        }, "voice-hold").start();
     }
 
-    private void strip(String msg) {
-        runOnUiThread(() -> { voiceStrip.setText(msg); voiceStrip.setVisibility(View.VISIBLE); });
-    }
-    private void strip(String msg, long autoHideMs) {
-        strip(msg);
-        runOnUiThread(() -> voiceStrip.postDelayed(() -> voiceStrip.setVisibility(View.GONE), autoHideMs));
-    }
-    private void stripFade(String msg, long ms) {
-        runOnUiThread(() -> {
-            voiceStrip.setText(msg); voiceStrip.setVisibility(View.VISIBLE);
-            voiceStrip.postDelayed(() -> voiceStrip.setVisibility(View.GONE), ms);
-        });
+    private void stopVoiceCapture() { stopFlag.set(true); }
+
+    private void voiceMsg(String msg) {
+        runOnUiThread(() -> { voiceMsg.setText(msg); voiceStrip.setVisibility(View.VISIBLE); });
     }
 
-    /** 提示层独占接口：所有状态提示走这里 */
-    private void splashMsg(String msg, long autoHideMs) {
-        runOnUiThread(() -> {
-            splash.setText(msg);
-            splash.setVisibility(View.VISIBLE);
-            if (autoHideMs > 0) splash.postDelayed(() -> splash.setVisibility(View.GONE), autoHideMs);
-        });
-    }
-
-    /** 向 pi-web-ui 输入框注入文本并回车发送（React 受控组件安全写法） */
     private void injectPrompt(String text) {
         if (currentTab != 0) switchTab(0);
         final String[] attempt = {0 + ""};
@@ -231,12 +266,15 @@ public class MainActivity extends Activity {
                         "return 'OK';})()";
                 web.evaluateJavascript(js, r -> {
                     String res = r != null ? r.replace("\"", "") : "";
-                    if (res.contains("OK")) return; // 注入成功
+                    if (res.contains("OK")) return;
                     if (tries++ < 5) web.postDelayed(this, 1200);
                 });
             }
         }, 1200);
     }
+
+    /** 向 pi-web-ui 输入框注入文本并回车发送（React 受控组件安全写法） */
+    
 
     private boolean waitUp(String url, int sec) {
         long deadline = System.currentTimeMillis() + sec * 1000L;

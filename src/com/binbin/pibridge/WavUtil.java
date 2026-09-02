@@ -125,6 +125,39 @@ public class WavUtil {
         return wav;
     }
 
+    /** 按住说话模式：持续录音直到 stop 置位（上限 maxSec 秒） */
+    public static File recordUntil(Context c, java.util.concurrent.atomic.AtomicBoolean stop, int maxSec) throws Exception {
+        int minBuf = AudioRecord.getMinBufferSize(RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
+        AudioRecord ar = new AudioRecord(MediaRecorder.AudioSource.MIC, RATE,
+                AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
+                Math.max(minBuf, RATE * 2 * 2));
+        if (ar.getState() != android.media.AudioRecord.STATE_INITIALIZED) {
+            ar.release();
+            throw new IllegalStateException("麦克风初始化失败");
+        }
+        int totalSamples = RATE * maxSec;
+        ByteArrayOutputStream pcm = new ByteArrayOutputStream(totalSamples * 2);
+        short[] chunk = new short[RATE / 5];
+        ar.startRecording();
+        long start = System.currentTimeMillis();
+        while (!stop.get() && (System.currentTimeMillis() - start) < maxSec * 1000L) {
+            int n = ar.read(chunk, 0, chunk.length);
+            if (n > 0) {
+                for (int i = 0; i < n; i++) {
+                    pcm.write(chunk[i] & 0xFF);
+                    pcm.write((chunk[i] >> 8) & 0xFF);
+                }
+            }
+        }
+        ar.stop();
+        ar.release();
+        File dir = new File("/storage/emulated/0/Download/pibridge");
+        if (!dir.isDirectory()) dir.mkdirs();
+        File wav = new File(dir, "hold-" + System.currentTimeMillis() + ".wav");
+        writeWav(wav, pcm.toByteArray(), RATE, 1, 16);
+        return wav;
+    }
+
     public static float[] readWav(File f, int[] rateOut) throws IOException {
         FileInputStream fi = new FileInputStream(f);
         ByteArrayOutputStream all = new ByteArrayOutputStream();
