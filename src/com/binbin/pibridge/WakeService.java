@@ -27,6 +27,7 @@ import java.io.File;
 /** 全局唤醒词服务：息屏/任意界面喊「小丘」即可唤醒执行（sherpa KWS 离线） */
 public class WakeService extends Service {
     private static final String CH = "wake";
+    private AudioRecord ar; // 常驻字段：服务任何退出路径都能立即释放麦克风
     private static volatile boolean running = false;
     private static KeywordSpotter kws;
     private static String lastKeyword = "";
@@ -87,7 +88,6 @@ public class WakeService extends Service {
             File dir = new File(getFilesDir(), "sherpa/kws/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01");
             while (running) {
                 try {
-                    // mic 让位：连续对话/按住说话进行中则暂停 KWS
             AudioRecord ar = null;
                     if (ar == null) {
                         int minBuf = AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
@@ -129,6 +129,7 @@ public class WakeService extends Service {
         } catch (Exception e) {
             Log.w("PiBridge", "wake fatal: " + e);
         } finally {
+            releaseMic();
             running = false;
             wl.release();
         }
@@ -182,5 +183,13 @@ public class WakeService extends Service {
         } catch (Exception e) { Log.w("PiBridge", "execCommand: " + e); }
     }
 
-    @Override public void onDestroy() { running = false; writeState(this, false); super.onDestroy(); }
+    @Override public void onDestroy() {
+        running = false;
+        releaseMic();                 // 立刻关闭麦克风（不等录音块读完）
+        writeState(this, false);
+        super.onDestroy();
+    }
+    private void releaseMic() {
+        try { if (ar != null) { ar.stop(); ar.release(); ar = null; } } catch (Exception ignore) {}
+    }
 }
