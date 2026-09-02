@@ -826,6 +826,44 @@ public class Tools {
                 }
             }});
 
+        // ═══ 视觉问答（"看"的兜底王牌：GLM-4V 读图，无树App的界面理解）═══
+        def("vision_ask", "视觉问答：对本地图片提问（GLM-4V）。无结构树的App用它理解界面：问'列出图中店铺名和评分'、'找到搜索按钮的坐标'等",
+            schema(props("file", prop("string", "图片路径"), "q", prop("string", "问题")), "file", "q"),
+            new H() { public JSONObject run(JSONObject a) throws Exception {
+                String file = a.optString("file");
+                String q = a.optString("q", "描述这张图片的内容");
+                byte[] img = java.nio.file.Files.readAllBytes(new File(file).toPath());
+                String b64 = android.util.Base64.encodeToString(img, android.util.Base64.NO_WRAP);
+                String mime = file.toLowerCase().endsWith(".jpg") || file.toLowerCase().endsWith(".jpeg") ? "image/jpeg" : "image/png";
+                String key = fastKey();
+                if (key == null) return err("NO_KEY", "未配置 API Key");
+                JSONObject body = new JSONObject()
+                        .put("model", "glm-4v-flash")
+                        .put("messages", new org.json.JSONArray()
+                                .put(new JSONObject().put("role", "user").put("content", new org.json.JSONArray()
+                                        .put(new JSONObject().put("type", "image_url")
+                                                .put("image_url", new JSONObject().put("url", "data:" + mime + ";base64," + b64)))
+                                        .put(new JSONObject().put("type", "text").put("text", q)))))
+                        .put("max_tokens", 600);
+                javax.net.ssl.HttpsURLConnection c = (javax.net.ssl.HttpsURLConnection)
+                        new java.net.URL("https://open.bigmodel.cn/api/paas/v4/chat/completions").openConnection();
+                c.setRequestMethod("POST"); c.setConnectTimeout(8000); c.setReadTimeout(60000); c.setDoOutput(true);
+                c.setRequestProperty("Authorization", "Bearer " + key);
+                c.setRequestProperty("Content-Type", "application/json");
+                java.io.OutputStream os = c.getOutputStream();
+                os.write(body.toString().getBytes("UTF-8")); os.close();
+                int code = c.getResponseCode();
+                java.io.InputStream is = code < 400 ? c.getInputStream() : c.getErrorStream();
+                java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+                byte[] buf = new byte[4096]; int n; while (is != null && (n = is.read(buf)) > 0) bo.write(buf, 0, n);
+                if (is != null) is.close();
+                String resp = bo.toString("UTF-8");
+                if (code >= 400) return err("API_ERR", code + ": " + resp.substring(0, Math.min(300, resp.length())));
+                String content = new JSONObject(resp).getJSONArray("choices").getJSONObject(0)
+                        .getJSONObject("message").optString("content", "").trim();
+                return ok(new JSONObject().put("answer", content));
+            }});
+
         def("contacts_search", "搜联系人", schema(props("q", prop("string", "姓名关键词")), "q"), new H() { public JSONObject run(JSONObject a) throws Exception {
             Cursor c = ctx.getContentResolver().query(ContactsContract.CommonDataKinds.Phone.CONTENT_URI,
                     new String[]{ContactsContract.CommonDataKinds.Phone.DISPLAY_NAME, ContactsContract.CommonDataKinds.Phone.NUMBER},
