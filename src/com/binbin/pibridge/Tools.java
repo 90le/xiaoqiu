@@ -308,11 +308,12 @@ public class Tools {
         }});
 
         // ═══ TTS / 震动 / 手电 ═══
-        def("tts_speak", "语音朗读（引擎可配置：auto/cloud/xiaomi/system/neural）", schema(props("text", prop("string", "要念的话")), "text"),
+        def("tts_speak", "语音朗读（引擎可配置：auto/cloud/xiaomi/system/neural）", schema(props("text", prop("string", "要念的话"), "engine", prop("string", "临时引擎(auto/cloud/xiaomi/system/neural)，试听用")), "text", "engine"),
             new H() { public JSONObject run(JSONObject a) throws Exception {
                 final String text = a.optString("text");
                 String engine = "auto";
                 try { engine = loadCfg().optString("tts_engine", "auto"); } catch (Exception ignore) {}
+                try { if (a.has("engine") && !a.isNull("engine")) engine = a.getString("engine"); } catch (Exception ignore) {}
                 // 神经（实验，需已下载模型）
                 if (("neural".equals(engine) || "auto".equals(engine)) && SherpaTts.isReady()) {
                     new Thread(() -> SherpaTts.speak(text, 1.0f), "neural-tts").start();
@@ -325,9 +326,13 @@ public class Tools {
                     }, "cloud-tts").start();
                     return ok("开始朗读(云)");
                 }
-                if ("neural".equals(engine)) { // 选了神经但未就绪 → 本地兜底
-                    speakLocal(text);
-                    return ok("模型未就绪，已用本地引擎");
+                if ("neural".equals(engine)) { // 显式选神经：尝试初始化（初始化在后台线程）
+                    final boolean ready = SherpaTts.isReady();
+                    new Thread(() -> {
+                        if (ready || SherpaTts.init(ctx)) SherpaTts.speak(text, 1.0f);
+                        else speakLocal(text);
+                    }, "neural-tts").start();
+                    return ok(ready ? "开始朗读(神经)" : "神经引擎启动中，若失败将回退本地");
                 }
                 speakLocal(text);
                 return ok("开始朗读(本地)");
@@ -404,6 +409,12 @@ public class Tools {
                 }
             }, "tts-dl").start();
             return ok("下载已后台启动，用 tts_model_status 查进度");
+        }});
+        def("tts_model_delete", "删除神经TTS模型(释放163MB)", schema(new JSONObject()), new H() { public JSONObject run(JSONObject a) throws Exception {
+            File dir = new File(ctx.getFilesDir(), "sherpa/tts/vits-melo-tts-zh_en");
+            boolean okDel = rmRecur(dir);
+            new File(dir.getParentFile(), "NEURAL_ON").delete();
+            return ok(okDel ? "已删除" : "目录不存在");
         }});
         def("tts_model_status", "神经TTS模型状态", schema(new JSONObject()), new H() { public JSONObject run(JSONObject a) throws Exception {
             File dir = new File(ctx.getFilesDir(), "sherpa/tts");
@@ -1033,6 +1044,12 @@ public class Tools {
     /** IntentFilter 不能用匿名类继承简写，补个小类 */
 
     static com.k2fsa.sherpa.onnx.OfflineRecognizer sttRec;
+
+    static boolean rmRecur(File f) {
+        if (f == null || !f.exists()) return false;
+        if (f.isDirectory()) { File[] cs = f.listFiles(); if (cs != null) for (File c : cs) rmRecur(c); }
+        return f.delete();
+    }
 
     /** 全局配置 KV（files/cfg.json）：引擎选择等 */
     static JSONObject loadCfg() {
