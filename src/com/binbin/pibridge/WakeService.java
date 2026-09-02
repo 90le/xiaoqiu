@@ -88,7 +88,6 @@ public class WakeService extends Service {
             File dir = new File(getFilesDir(), "sherpa/kws/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01");
             while (running) {
                 try {
-            AudioRecord ar = null;
                     if (ar == null) {
                         int minBuf = AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
                         ar = new AudioRecord(MediaRecorder.AudioSource.MIC, 16000,
