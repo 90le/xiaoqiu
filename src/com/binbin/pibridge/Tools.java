@@ -639,8 +639,8 @@ public class Tools {
                     if (r != null) return r.has("error") ? err(r.getString("error"), r.optString("msg")) : ok(r);
                     // 锁屏检测：锁屏时系统禁止App渲染，诚实报错
                     JSONObject kg = (JSONObject) Tools.call("l2_exec", new JSONObject().put("cmd",
-                            "dumpsys window | grep mDreamingLockscreen"));
-                    if (String.valueOf(kg).contains("true"))
+                            "dumpsys window policy 2>/dev/null | grep 'showing='"));
+                    if (String.valueOf(kg).contains("showing=true"))
                         return err("LOCKED", "设备锁屏中，系统禁止后台App渲染。请解锁手机后重试");
                     // App内通道失败 → L2 shell 兜底（发射后校验落点，防污染主屏）
                     VdManager.track(a.optString("pkg"));
