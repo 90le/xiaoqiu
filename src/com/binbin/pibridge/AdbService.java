@@ -100,6 +100,7 @@ public class AdbService extends AccessibilityService {
     // ========== 读屏（控件树结构化输出，AI 直接理解界面） ==========
 
     public static JSONArray readTree() {
+        seq = 0;
         if (inst == null) return null;
         AccessibilityNodeInfo root = inst.getRootInActiveWindow();
         if (root == null) return null;
@@ -108,14 +109,21 @@ public class AdbService extends AccessibilityService {
         return out;
     }
 
+    private static int seq = 0; // 全局节点编号（截图/点击引用的稳定锚）
+
     private static void walk(AccessibilityNodeInfo n, JSONArray out, int depth) {
         if (out.length() >= 250 || depth > 15 || n == null) return;
         try {
             Rect r = new Rect();
             n.getBoundsInScreen(r);
             JSONObject o = new JSONObject();
+            o.put("i", seq++);
             CharSequence t = n.getText();
             if (t != null && t.length() > 0) o.put("text", t.length() > 80 ? t.toString().substring(0, 80) + "…" : t.toString());
+            if (n.isClickable() && (t == null || t.length() == 0) && n.getContentDescription() == null) {
+                String ht = harvest(n, 0); // 行容器：从子节点借文本
+                if (ht != null) o.put("text", ht.length() > 80 ? ht.substring(0, 80) + "…" : ht);
+            }
             CharSequence d = n.getContentDescription();
             if (d != null && d.length() > 0) o.put("desc", d.length() > 60 ? d.toString().substring(0, 60) + "…" : d.toString());
             String id = n.getViewIdResourceName();
@@ -134,6 +142,22 @@ public class AdbService extends AccessibilityService {
             if (o.length() > 1) out.put(o);
             for (int i = 0; i < n.getChildCount(); i++) walk(n.getChild(i), out, depth + 1);
         } catch (Exception ignore) {}
+    }
+
+    /** 深度收割后代的首个有效文本/描述（给可点击行容器用） */
+    private static String harvest(AccessibilityNodeInfo n, int d) {
+        if (n == null || d > 4) return null;
+        try {
+            CharSequence t = n.getText();
+            if (t != null && t.toString().trim().length() > 0) return t.toString().trim();
+            CharSequence ds = n.getContentDescription();
+            if (ds != null && ds.toString().trim().length() > 0) return ds.toString().trim();
+            for (int i = 0; i < n.getChildCount(); i++) {
+                String r = harvest(n.getChild(i), d + 1);
+                if (r != null) return r;
+            }
+        } catch (Exception ignore) {}
+        return null;
     }
 
     // ========== 文本直设（对可编辑节点 ACTION_SET_TEXT，绕过粘贴菜单） ==========
