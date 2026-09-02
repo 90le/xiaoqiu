@@ -817,17 +817,18 @@ public class Tools {
             return ok("已发送播放/暂停键");
         }});
 
-        def("network_info", "查网络：WiFi/流量、SSID、信号", schema(props()), new H() { public JSONObject run(JSONObject a) throws Exception {
+        def("network_info", "查网络：WiFi/蓝牙/飞行模式/流量开关（系统设置级免权限）+ 在线状态", schema(props()), new H() { public JSONObject run(JSONObject a) throws Exception {
             JSONObject o = new JSONObject();
-            ConnectivityManager cm = (ConnectivityManager) ctx.getSystemService(Context.CONNECTIVITY_SERVICE);
-            NetworkCapabilities nc = cm.getNetworkCapabilities(cm.getActiveNetwork());
-            o.put("online", nc != null && nc.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET));
-            o.put("wifi", nc != null && nc.hasTransport(NetworkCapabilities.TRANSPORT_WIFI));
+            o.put("wifiOn", Settings.Global.getInt(ctx.getContentResolver(), "wifi_on", 0) == 1);
+            o.put("btOn", Settings.Global.getInt(ctx.getContentResolver(), "bluetooth_on", 0) == 1);
+            o.put("airplane", Settings.Global.getInt(ctx.getContentResolver(), Settings.Global.AIRPLANE_MODE_ON, 0) == 1);
+            o.put("mobileData", Settings.Global.getInt(ctx.getContentResolver(), "mobile_data", -1));
             try {
-                WifiManager wm = (WifiManager) ctx.getApplicationContext().getSystemService(Context.WIFI_SERVICE);
-                android.net.wifi.WifiInfo wi = wm.getConnectionInfo();
-                o.put("ssid", wi.getSSID()); o.put("ip", ipStr(wi.getIpAddress())); o.put("linkSpeedMbps", wi.getLinkSpeed());
-            } catch (Exception e) { o.put("wifiDetail", "需定位权限"); }
+                ConnectivityManager cm = (ConnectivityManager) ctx.getSystemService(Context.CONNECTIVITY_SERVICE);
+                NetworkCapabilities nc = cm.getNetworkCapabilities(cm.getActiveNetwork());
+                o.put("online", nc != null && nc.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET));
+                o.put("onWifi", nc != null && nc.hasTransport(NetworkCapabilities.TRANSPORT_WIFI));
+            } catch (Throwable e) { o.put("connectivityError", "无权读取"); }
             return ok(o);
         }});
 
