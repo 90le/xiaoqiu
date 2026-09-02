@@ -45,14 +45,11 @@ const ttsEngine = ref('auto')
 const ttsMsg = ref('')
 const ttsMsgOk = ref(true)
 const testing = ref('')
-const modelStat = ref(null)
-let pollTimer = null
 
 const engines = [
-  { id:'cloud',  icon:'☁️', name:'云端 · 童童',   desc:'GLM-TTS · 音色最自然',   note:'需智谱TTS额度，未充值自动回退本地' },
-  { id:'xiaomi', icon:'📱', name:'小米本地',      desc:'手机自带引擎·免费离线',   note:'已调优音调，大多数用户的选择' },
-  { id:'neural', icon:'🧠', name:'本地神经网络',  desc:'完全离线·免费',          note:'兼容问题修复中，暂不可用（不会闪退）' },
-  { id:'system', icon:'⚙️', name:'系统默认',      desc:'安卓系统引擎',           note:'本机系统引擎=小米引擎，音色与小米本地一致' },
+  { id:'auto',   icon:'✨', name:'智能优先',      desc:'推荐 · 有额度用云端童童，没额度用小米本地', note:'永远不会哑，绝大多数用户选这个' },
+  { id:'cloud',  icon:'☁️', name:'云端 · 童童',   desc:'GLM-TTS · 音色最自然',   note:'需智谱TTS额度；只云不回退时选这个' },
+  { id:'xiaomi', icon:'📱', name:'小米本地',      desc:'免费离线 · 已调优音调',   note:'换其他品牌手机自动改用该机系统音色' },
 ]
 
 async function loadCfg() {
@@ -61,7 +58,6 @@ async function loadCfg() {
     const d = (await r.json()).structuredContent
     if (d.ok && d.data.tts_engine) ttsEngine.value = d.data.tts_engine
   } catch(e) {}
-  await loadModelStat()
 }
 async function pickEngine(id) {
   ttsEngine.value = id
@@ -82,31 +78,6 @@ async function testVoice(id) {
     setTimeout(() => { ttsMsg.value = '' }, 4000)
   } catch(e) { ttsMsg.value = '网络错误' }
   setTimeout(() => { testing.value = '' }, 3000)
-}
-async function loadModelStat() {
-  try {
-    const r = await fetch('/api/tts_model_status', { method:'POST' })
-    modelStat.value = (await r.json()).structuredContent.data
-  } catch(e) {}
-}
-async function downloadModel() {
-  ttsMsg.value = '模型下载已启动（163MB，请保持网络）'
-  ttsMsgOk.value = true
-  await fetch('/api/tts_model_download', { method:'POST' })
-  pollTimer = setInterval(async () => {
-    await loadModelStat()
-    if (modelStat.value && (modelStat.value.installed || modelStat.value.download.state === 'error')) {
-      clearInterval(pollTimer)
-      ttsMsg.value = modelStat.value.installed ? '模型就绪 ✅ 可选「本地神经网络」试听' : '下载失败，请重试'
-      ttsMsgOk.value = !!modelStat.value.installed
-    }
-  }, 5000)
-}
-async function deleteModel() {
-  ttsMsg.value = '已删除模型，释放空间'
-  await fetch('/api/tts_model_delete', { method:'POST' })
-  await loadModelStat()
-  setTimeout(() => { ttsMsg.value = '' }, 2500)
 }
 
 onMounted(loadPerm)
@@ -146,35 +117,12 @@ onMounted(loadCfg)
           <button class="mini-btn" @click.stop="testVoice(e.id)">
             {{ testing === e.id ? '播放中…' : '🔊 试听' }}
           </button>
-          <span v-if="e.id === 'neural' && modelStat" class="pill" :class="modelStat.installed ? 'ok-pill' : 'dim-pill'">
-            {{ modelStat.installed ? '模型已装 ' + modelStat.sizeMB + 'MB' : '需下载模型' }}
-          </span>
         </div>
       </div>
     </div>
     <div class="msg" :class="ttsMsgOk ? 'ok' : 'bad'" v-if="ttsMsg">{{ ttsMsg }}</div>
     <div style="font-size:11px;color:var(--muted);margin-top:10px;line-height:1.6;">
       💡 「智能优先」= 云端童童 → 小米本地 → 系统引擎，按可用性自动降级，永远不会哑。
-    </div>
-  </div>
-
-  <!-- ═══════ 神经模型管理 ═══════ -->
-  <div class="sec">🧠 神经模型管理 <span class="dim-tag">实验性</span></div>
-  <div class="card">
-    <div v-if="modelStat" class="kv">
-      <span>melo 中文模型（163MB）</span>
-      <span :class="{ ok: modelStat.installed }">
-        {{ modelStat.installed ? '✅ 已下载 ' + modelStat.sizeMB + 'MB'
-          : (modelStat.download.state === 'downloading' ? '⏳ 下载中 ' + (modelStat.download.pct || 0) + '%' : '未下载') }}
-      </span>
-    </div>
-    <div v-if="modelStat && modelStat.download.state === 'downloading'" class="progress"><div class="bar" :style="{ width: (modelStat.download.pct || 0) + '%' }"></div></div>
-    <div style="display:flex;gap:8px;margin-top:10px;">
-      <button v-if="modelStat && !modelStat.installed && modelStat.download.state !== 'downloading'" class="btn" @click="downloadModel">一键下载</button>
-      <button v-if="modelStat && modelStat.installed" class="btn ghost" @click="deleteModel">删除释放空间</button>
-    </div>
-    <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6;">
-      免费完全离线的神经网络音色。下载后到上方选择「本地神经网络」试听。
     </div>
   </div>
 
