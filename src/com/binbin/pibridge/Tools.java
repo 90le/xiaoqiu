@@ -69,7 +69,7 @@ public class Tools {
     private static volatile boolean ttsReady = false;
     private static int notifId = 100;
 
-    /** 本地兜底朗读：小米优先，系统其次（主线程投递） */
+    /** 本地兜底朗读：小米优先，系统其次（主线程投递）。注：本机系统默认引擎=mibrain，音色相同属正常 */
     static void speakLocal(final String text) {
         new Handler(Looper.getMainLooper()).post(new Runnable() { public void run() {
             if (miReady) {
@@ -308,34 +308,37 @@ public class Tools {
         }});
 
         // ═══ TTS / 震动 / 手电 ═══
-        def("tts_speak", "语音朗读（引擎可配置：auto/cloud/xiaomi/system/neural）", schema(props("text", prop("string", "要念的话"), "engine", prop("string", "临时引擎(auto/cloud/xiaomi/system/neural)，试听用")), "text", "engine"),
+        def("tts_speak", "语音朗读（引擎可配置：auto/cloud/xiaomi/system/neural）", schema(props("text", prop("string", "要念的话"), "engine", prop("string", "临时引擎，试听用")), "text", "engine"),
             new H() { public JSONObject run(JSONObject a) throws Exception {
                 final String text = a.optString("text");
                 String engine = "auto";
                 try { engine = loadCfg().optString("tts_engine", "auto"); } catch (Exception ignore) {}
                 try { if (a.has("engine") && !a.isNull("engine")) engine = a.getString("engine"); } catch (Exception ignore) {}
-                // 神经（实验，需已下载模型）
-                if (("neural".equals(engine) || "auto".equals(engine)) && SherpaTts.isReady()) {
+                // 神经：仅当历史上初始化成功过才可用（构造崩溃风险，绝不现场尝试）
+                if ("neural".equals(engine) && SherpaTts.isReady()) {
                     new Thread(() -> SherpaTts.speak(text, 1.0f), "neural-tts").start();
-                    return ok("开始朗读(神经)");
+                    return ok("开始朗读（本地神经网络）");
                 }
-                // 云（GLM-TTS 童童，失败自动降级）
+                if ("neural".equals(engine)) {
+                    speakLocal(text);
+                    return ok("神经引擎暂不可用（实验性），已用小米本地朗读");
+                }
+                // 云：快速失败，失败降级小米
                 if ("cloud".equals(engine) || "auto".equals(engine)) {
-                    new Thread(() -> {
-                        if (!cloudSpeak(text)) speakLocal(text);
-                    }, "cloud-tts").start();
-                    return ok("开始朗读(云)");
+                    if (cloudSpeak(text)) return ok("开始朗读（云端童童）");
+                    speakLocal(text);
+                    return ok("云额度不足，已用小米本地朗读");
                 }
-                if ("neural".equals(engine)) { // 显式选神经：尝试初始化（初始化在后台线程）
-                    final boolean ready = SherpaTts.isReady();
-                    new Thread(() -> {
-                        if (ready || SherpaTts.init(ctx)) SherpaTts.speak(text, 1.0f);
-                        else speakLocal(text);
-                    }, "neural-tts").start();
-                    return ok(ready ? "开始朗读(神经)" : "神经引擎启动中，若失败将回退本地");
+                if ("xiaomi".equals(engine)) { speakLocal(text); return ok("开始朗读（小米本地）"); }
+                // system
+                if (ttsInit()) {
+                    new Handler(Looper.getMainLooper()).post(new Runnable() { public void run() {
+                        tts.setPitch(1.12f); tts.setSpeechRate(1.05f);
+                        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "pi");
+                    }});
+                    return ok("开始朗读（系统引擎）");
                 }
-                speakLocal(text);
-                return ok("开始朗读(本地)");
+                return err("TTS_FAIL", "无可用语音引擎");
             }});
 
         def("tts_voices", "列出可用发音人", schema(new JSONObject()), new H() { public JSONObject run(JSONObject a) throws Exception {

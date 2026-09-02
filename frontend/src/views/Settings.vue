@@ -51,8 +51,8 @@ let pollTimer = null
 const engines = [
   { id:'cloud',  icon:'☁️', name:'云端 · 童童',   desc:'GLM-TTS · 音色最自然',   note:'需智谱TTS额度，未充值自动回退本地' },
   { id:'xiaomi', icon:'📱', name:'小米本地',      desc:'手机自带引擎·免费离线',   note:'已调优音调，大多数用户的选择' },
-  { id:'neural', icon:'🧠', name:'本地神经网络',  desc:'完全离线·免费',          note:'实验性：本机兼容性仍在优化' },
-  { id:'system', icon:'⚙️', name:'系统默认',      desc:'安卓系统引擎',           note:'最保守的兜底方案' },
+  { id:'neural', icon:'🧠', name:'本地神经网络',  desc:'完全离线·免费',          note:'兼容问题修复中，暂不可用（不会闪退）' },
+  { id:'system', icon:'⚙️', name:'系统默认',      desc:'安卓系统引擎',           note:'本机系统引擎=小米引擎，音色与小米本地一致' },
 ]
 
 async function loadCfg() {
@@ -74,9 +74,13 @@ async function pickEngine(id) {
 async function testVoice(id) {
   testing.value = id
   try {
-    await fetch('/api/tts_speak', { method:'POST', headers:{'Content-Type':'application/json'},
+    const r = await fetch('/api/tts_speak', { method:'POST', headers:{'Content-Type':'application/json'},
       body: JSON.stringify({ text:'你好，我是小丘，很高兴为你服务。', engine: id }) })
-  } catch(e) {}
+    const d = (await r.json()).structuredContent
+    ttsMsg.value = d.ok ? ('🔊 ' + d.data) : ('✗ ' + (d.error ? d.error.message : '失败'))
+    ttsMsgOk.value = !!d.ok
+    setTimeout(() => { ttsMsg.value = '' }, 4000)
+  } catch(e) { ttsMsg.value = '网络错误' }
   setTimeout(() => { testing.value = '' }, 3000)
 }
 async function loadModelStat() {
