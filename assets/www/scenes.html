@@ -29,6 +29,7 @@
   <div class="card" onclick="run('screen_state',{},' Screen')"><div class="ico">🔆</div><div class="t">屏幕状态</div><div class="d">亮灭/亮度</div></div>
   <div class="card" onclick="run('device_info',{},'📱 设备')"><div class="ico">📱</div><div class="t">设备信息</div><div class="d">型号/系统/存储</div></div>
   <div class="card" onclick="run('apps_list',{limit:200},'📦 应用')"><div class="ico">📦</div><div class="t">应用统计</div><div class="d">已装应用列表</div></div>
+  <div class="card" style="grid-column:1/-1;border:2px solid var(--hill);" onclick="voiceChat(this)"><div class="ico">🎙</div><div class="t">语音对话</div><div class="d">按一下，说 6 秒，小丘回答（录音→识别→pi→文字）</div></div>
 </div>
 <div id="out"></div>
 <script>
@@ -45,6 +46,23 @@ async function run(tool, args, tag) {
     } else out.textContent = tag + ' ❌ ' + (d.error ? d.error.message : '失败');
   } catch(e) { out.textContent = tag + ' ❌ 网络错误'; }
 }
+
+async function voiceChat(card) {
+  const out = document.getElementById('out');
+  out.style.display = 'block';
+  card.style.opacity = .5;
+  out.textContent = '🎙 录音 6 秒，请说话…';
+  try {
+    const r = await fetch('/api/voice_chat', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({seconds:6})});
+    const d = (await r.json()).structuredContent;
+    if (d.ok) {
+      const v = typeof d.data === 'string' ? JSON.parse(d.data) : d.data;
+      out.textContent = '🗣 你说：' + (v.heard||'(空)') + '\n\n🏔 小丘：' + (v.reply||'');
+    } else out.textContent = '❌ ' + (d.error?d.error.message:'失败');
+  } catch(e) { out.textContent = '❌ ' + e; }
+  card.style.opacity = 1;
+}
+
 </script>
 </body>
 </html>

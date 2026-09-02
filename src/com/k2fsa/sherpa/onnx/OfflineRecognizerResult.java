@@ -9,5 +9,11 @@ public class OfflineRecognizerResult {
     public String event = "";
     public float[] durations = new float[0];
 
+    public OfflineRecognizerResult(String text, String[] tokens, float[] timestamps,
+            String lang, String emotion, String event, float[] durations) {
+        this.text = text; this.tokens = tokens; this.timestamps = timestamps;
+        this.lang = lang; this.emotion = emotion; this.event = event; this.durations = durations;
+    }
+
     public String getText() { return text; }
 }
