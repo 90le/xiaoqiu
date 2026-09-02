@@ -548,26 +548,26 @@ public class Tools {
             File wav = WavUtil.record(ctx, sec);
             return ok(wav.getAbsolutePath() + " " + wav.length() + "B");
         }});
-        def("voice_chat", "语音对话一键闭环：录 N 秒→识别→pi 思考回答，返回 {heard, reply}",
-            schema(props("seconds", prop("number", "录音秒数默认6"))), new H() { public JSONObject run(JSONObject a) throws Exception {
-            int sec = a.optInt("seconds", 6);
-            if (sec < 3) sec = 3; if (sec > 30) sec = 30;
-            File wav = WavUtil.record(ctx, sec);
+        def("voice_chat", "语音对话（VAD 自动断句 + 持续会话上下文）：说完自动停→识别→pi 回答",
+            schema(props("max_seconds", prop("number", "最长录音秒默认20"))), new H() { public JSONObject run(JSONObject a) throws Exception {
+            int maxSec = a.optInt("max_seconds", 20);
+            if (maxSec < 4) maxSec = 4; if (maxSec > 60) maxSec = 60;
+            File wav = WavUtil.recordVad(ctx, maxSec, 2, 1200);
             JSONObject sttRes = Tools.call("stt_transcribe", new JSONObject().put("file", wav.getAbsolutePath()));
-            JSONObject sttData = sttRes.optJSONObject("data") != null ? sttRes.getJSONObject("data") : new JSONObject();
-            String heard = sttData.optString("data", sttRes.optString("data", ""));
-            // data 可能是字符串（识别文本）
-            if (sttData.has("data")) { Object o = sttData.get("data"); if (o instanceof String) heard = (String) o; }
-            if (heard == null || heard.isEmpty() || heard.startsWith("("))
-                return ok(new JSONObject().put("heard", "").put("reply", "没听清，请再说一遍"));
+            JSONObject sttEnv = sttRes.optJSONObject("structured") != null ? sttRes.getJSONObject("structured") : sttRes;
+            String heard = "";
+            Object d = sttEnv.opt("data");
+            if (d instanceof String) heard = (String) d;
+            else if (d instanceof JSONObject) heard = ((JSONObject) d).optString("text", "");
+            if (heard.isEmpty() || heard.startsWith("("))
+                return ok(new JSONObject().put("heard", "").put("reply", "没听清，请靠近手机再说一遍"));
             heard = heard.replace("'", "'\''");
             JSONObject piRes = Tools.call("env_run", new JSONObject()
-                .put("cmd", "cd ~ && pi -p '" + heard + "'")
+                .put("cmd", "cd ~ && pi -p --session-id xiaoqiu-voice '" + heard + "'")
                 .put("timeout_sec", 150));
-            JSONObject pid = piRes.optJSONObject("data") != null ? piRes.getJSONObject("data") : new JSONObject();
-            String reply = pid.optString("output", pid.optString("error", piRes.optString("error", "pi 无响应")));
-            JSONObject out = new JSONObject().put("heard", heard).put("reply", reply);
-            return ok(out);
+            JSONObject pd = piRes.optJSONObject("data") != null ? piRes.getJSONObject("data") : new JSONObject();
+            String reply = pd.optString("output", "pi 无响应");
+            return ok(new JSONObject().put("heard", heard).put("reply", reply));
         }});
 
         def("stt_transcribe", "语音转文字（SenseVoice 离线模型，输入 WAV 路径）",

@@ -67,6 +67,63 @@ public class WavUtil {
     }
 
     /** 读 WAV（16bit PCM），返回归一化 float 样本与采样率 */
+
+    /** VAD 录音：说完自动停（静音 1.2s 结束），最少 minSec 秒，最长 maxSec 秒 */
+    public static File recordVad(Context c, int maxSec, int minSec, int silenceMs) throws Exception {
+        int minBuf = AudioRecord.getMinBufferSize(RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
+        AudioRecord ar = new AudioRecord(MediaRecorder.AudioSource.MIC, RATE,
+                AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
+                Math.max(minBuf, RATE * 2 * 2));
+        if (ar.getState() != android.media.AudioRecord.STATE_INITIALIZED) {
+            ar.release();
+            throw new IllegalStateException("麦克风初始化失败");
+        }
+        int chunkSamples = RATE / 10; // 100ms
+        short[] chunk = new short[chunkSamples];
+        ByteArrayOutputStream pcm = new ByteArrayOutputStream(maxSec * RATE * 2);
+        ar.startRecording();
+        long start = System.currentTimeMillis();
+        int speechChunks = 0, silenceChunks = 0, totalChunks = 0;
+        boolean heardSpeech = false;
+        int ambient = 0;
+        // 环境音采样（前 400ms）
+        for (int i = 0; i < 4; i++) {
+            int n = ar.read(chunk, 0, chunkSamples);
+            long sum = 0;
+            for (int j = 0; j < n; j++) sum += (long) chunk[j] * chunk[j];
+            ambient += (int) Math.sqrt(sum / Math.max(1, n));
+        }
+        ambient /= 4;
+        int speechThreshold = Math.max(ambient * 3 + 200, 500);
+        int silenceThreshold = Math.max(ambient * 2 + 100, 350);
+        while (totalChunks < maxSec * 10) {
+            int n = ar.read(chunk, 0, chunkSamples);
+            if (n <= 0) continue;
+            long sum = 0;
+            for (int j = 0; j < n; j++) sum += (long) chunk[j] * chunk[j];
+            int rms = (int) Math.sqrt(sum / Math.max(1, n));
+            boolean isSpeech = rms > speechThreshold;
+            if (isSpeech) { heardSpeech = true; silenceChunks = 0; }
+            else if (heardSpeech) silenceChunks++;
+            for (int j = 0; j < n; j++) {
+                pcm.write(chunk[j] & 0xFF);
+                pcm.write((chunk[j] >> 8) & 0xFF);
+            }
+            totalChunks++;
+            // 说完话 + 静音 1.2s + 已录超 minSec → 结束
+            if (heardSpeech && totalChunks * 100 > minSec * 1000 && silenceChunks >= silenceMs / 100) break;
+            // 说个不停也在 maxSec 强制截断
+        }
+        ar.stop();
+        ar.release();
+        File dir = new File("/storage/emulated/0/Download/pibridge");
+        if (!dir.isDirectory()) dir.mkdirs();
+        File wav = new File(dir, "vad-" + System.currentTimeMillis() + ".wav");
+        byte[] data = pcm.toByteArray();
+        writeWav(wav, data, RATE, 1, 16);
+        return wav;
+    }
+
     public static float[] readWav(File f, int[] rateOut) throws IOException {
         FileInputStream fi = new FileInputStream(f);
         ByteArrayOutputStream all = new ByteArrayOutputStream();
