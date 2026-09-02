@@ -279,53 +279,74 @@ public class MainActivity extends Activity {
         }, 1200);
     }
 
-    /** 监视对话页最新消息，流式输出稳定后 TTS 播报 */
+    /** 监视对话页最新消息：检测「进行中…」消失+文本稳定后立即 TTS 播报 */
     private void watchReplyAndSpeak(final int gen, final String sentText) {
         final int[] polls = {0};
         final int[] stable = {0};
         final String[] last = {""};
+        final boolean[] busySeen = {false};
+        final int[] initCount = {-1};
         web.postDelayed(new Runnable() {
             @Override public void run() {
-                if (gen != voiceGen || polls[0]++ > 90) return; // 新发送/超时(~4.5min)终止
+                if (gen != voiceGen || polls[0]++ > 300) return; // 新发送/超时(~5min)终止
                 web.evaluateJavascript(
-                    "(function(){var n=document.querySelectorAll('.msg-text,.fp-markdown,[class*=markdown]');"
-                  + "if(!n.length)return 'N0';"
+                    "(function(){var busy=document.body.innerText.indexOf('进行中…')>=0;"
+                  + "var n=document.querySelectorAll('.msg-text,.fp-markdown,[class*=markdown]');"
+                  + "if(!n.length)return (busy?'B1':'B0')+'|N0';"
                   + "var last=n[n.length-1];"
-                  + "return (n.length+'|'+(last.innerText||last.textContent||'')).slice(0,600);})()",
+                  + "return (busy?'B1':'B0')+'|'+n.length+'|'+(last.innerText||last.textContent||'').slice(0,600);})()",
                     v -> {
                         if (gen != voiceGen) return;
                         String t = v == null ? "" : v;
                         if (t.length() > 1 && t.startsWith("\"") && t.endsWith("\""))
                             t = t.substring(1, t.length() - 1);
                         t = t.replace("\\n", " ").replace("\\\"", "\"").trim();
-                        Log.d("PiBridge", "watcher[" + polls[0] + "]=" + t);
-                        String body = t.contains("|") ? t.substring(t.indexOf('|') + 1) : t;
-                        if (t.equals("N0") || body.isEmpty() || body.equals(sentText) || body.contains(sentText)) {
-                            stable[0] = 0; last[0] = t;
-                            web.postDelayed(this, 3000); return;
+                        boolean busy = t.startsWith("B1");
+                        String rest = t.length() > 3 ? t.substring(3) : "";
+                        int cnt = -1;
+                        String body = "";
+                        int p2 = rest.indexOf('|');
+                        if (p2 > 0) {
+                            try { cnt = Integer.parseInt(rest.substring(0, p2)); } catch (Exception ignore) {}
+                            body = rest.substring(p2 + 1);
                         }
-                        if (t.equals(last[0])) {
-                            stable[0]++;
-                            if (stable[0] >= 2 && body.length() > 2) { // 6s 无变化=回答完成
-                                String say = body.length() > 220 ? body.substring(0, 220) + "……" : body;
-                                Log.d("PiBridge", "TTS触发: " + say);
-                                voiceMsg("🔊 朗读中…");
-                                final String fSay = say;
-                                new Thread(() -> {
-                                    try {
-                                        org.json.JSONObject env = Tools.call("tts_speak", new JSONObject().put("text", fSay));
-                                        Log.d("PiBridge", "tts_speak 结果: " + env);
-                                    } catch (Exception e) { Log.e("PiBridge", "tts_speak 异常", e); }
-                                }, "tts-report").start();
-                                voiceStrip.postDelayed(() -> voiceStrip.setVisibility(View.GONE), 8000);
-                                return;
-                            }
-                        } else { stable[0] = 0; }
+                        if (initCount[0] < 0) initCount[0] = cnt;
+                        Log.d("PiBridge", "watcher[" + polls[0] + "] busy=" + busy + " cnt=" + cnt + " body=" + body);
+                        if (busy) busySeen[0] = true;
+                        // 用户原话回显/空文本 → 跳过
+                        if (body.isEmpty() || body.equals(sentText) || body.contains(sentText)) {
+                            stable[0] = 0; last[0] = t;
+                            web.postDelayed(this, 1000); return;
+                        }
+                        if (busy) { // 还在流式，继续等
+                            stable[0] = 0; last[0] = t;
+                            web.postDelayed(this, 1000); return;
+                        }
+                        // 不在流式：必须是「见过流式」或「消息数变多」才是新答案
+                        if (!busySeen[0] && !(cnt > initCount[0] && initCount[0] >= 0)) {
+                            last[0] = t; stable[0] = 0;
+                            web.postDelayed(this, 1000); return;
+                        }
+                        if (t.equals(last[0])) stable[0]++; else stable[0] = 0;
                         last[0] = t;
-                        web.postDelayed(this, 3000);
+                        if (stable[0] >= 1 && body.length() > 2) { // 1 秒不变+非流式=完成
+                            String say = body.length() > 220 ? body.substring(0, 220) + "……" : body;
+                            Log.d("PiBridge", "TTS触发: " + say);
+                            voiceMsg("🔊 朗读中…");
+                            final String fSay = say;
+                            new Thread(() -> {
+                                try {
+                                    org.json.JSONObject env = Tools.call("tts_speak", new JSONObject().put("text", fSay));
+                                    Log.d("PiBridge", "tts_speak 结果: " + env);
+                                } catch (Exception e) { Log.e("PiBridge", "tts_speak 异常", e); }
+                            }, "tts-report").start();
+                            voiceStrip.postDelayed(() -> voiceStrip.setVisibility(View.GONE), 8000);
+                            return;
+                        }
+                        web.postDelayed(this, 1000);
                     });
             }
-        }, 6000);
+        }, 2000);
     }
 
     private boolean waitUp(String url, int sec) {
