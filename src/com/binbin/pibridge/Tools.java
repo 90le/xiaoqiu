@@ -651,9 +651,31 @@ public class Tools {
                     Tools.call("l2_exec", new JSONObject().put("cmd", "am force-stop " + a.optString("pkg")));
                     return err("LAUNCH_LANDED_MAIN", "未能发射到副屏（已清理），主屏未受影响");
                 }
-                // tap / swipe / text → L2 input -d
+                // tap / swipe / text / key / longpress / scroll_until
+                if ("scroll_until".equals(act)) {
+                    String target = a.optString("text", "");
+                    if (target.isEmpty()) return err("BAD", "scroll_until 需要 text");
+                    for (int round = 0; round < 8; round++) {
+                        AdbService.readTree(VdManager.displayId());
+                        JSONObject n = AdbService.findNodeByText(VdManager.displayId(), target);
+                        if (n != null) return ok(new JSONObject().put("found", true).put("node", n).put("rounds", round));
+                        Tools.call("l2_exec", new JSONObject().put("cmd", "input -d " + VdManager.displayId()
+                                + " swipe " + (VdManager.dispW()/2) + " " + (VdManager.dispH()*3/4) + " "
+                                + (VdManager.dispW()/2) + " " + (VdManager.dispH()/4)));
+                        Thread.sleep(900);
+                    }
+                    return ok(new JSONObject().put("found", false).put("hint", "滚到底也未出现"));
+                }
                 String cmd;
                 if ("tap".equals(act)) cmd = "input -d " + VdManager.displayId() + " tap " + a.optInt("x") + " " + a.optInt("y");
+                else if ("longpress".equals(act)) cmd = "input -d " + VdManager.displayId() + " swipe "
+                        + a.optInt("x") + " " + a.optInt("y") + " " + a.optInt("x") + " " + a.optInt("y") + " "
+                        + Math.max(a.optInt("ms", 600), 400);
+                else if ("key".equals(act)) {
+                    String k = a.optString("text", "back");
+                    int code = k.equals("back") ? 4 : k.equals("home") ? 3 : k.equals("enter") ? 66 : k.equals("esc") ? 111 : 4;
+                    cmd = "input -d " + VdManager.displayId() + " keyevent " + code;
+                }
                 else if ("swipe".equals(act)) cmd = "input -d " + VdManager.displayId() + " swipe "
                         + a.optInt("x") + " " + a.optInt("y") + " " + a.optInt("x2") + " " + a.optInt("y2");
                 else if ("text".equals(act)) cmd = "input -d " + VdManager.displayId() + " text '"
@@ -952,6 +974,34 @@ public class Tools {
             if (nodes == null) return err("NO_SERVICE", "辅助服务未开启或该屏无活动窗口; diag=" + AdbService.diag);
             try { return ok(new JSONObject().put("count", nodes.length()).put("nodes", nodes)); }
             catch (Exception e) { return err("INTERNAL", e.toString()); }
+        }});
+        def("ui_tap_node", "按结构树编号点击（先 ui_screen_read 得到编号 i，直接点击该节点中心，免算坐标；display=0 主屏，副屏传 displayId）",
+            schema(props("i", prop("number", "节点编号"), "display", prop("number", "屏幕ID 默认0主屏")), "i"), new H() { public JSONObject run(JSONObject a) throws Exception {
+            int disp = a.optInt("display", 0);
+            JSONObject n = AdbService.nodeByIndex(disp, a.optInt("i", -1));
+            if (n == null) return err("NO_NODE", "缓存树中无此编号，请先 ui_screen_read");
+            String[] parts = n.optString("xy").split(" ");
+            String[] lt = parts[0].split(",");
+            String[] wh = parts[1].split("x");
+            int x = Integer.parseInt(lt[0]) + Integer.parseInt(wh[0]) / 2;
+            int y = Integer.parseInt(lt[1]) + Integer.parseInt(wh[1]) / 2;
+            if (disp == 0) return AdbService.tap(x, y) ? ok("已点击节点#" + a.optInt("i") + " (" + x + "," + y + ")") : err("NO_SERVICE", "点击失败");
+            JSONObject c = (JSONObject) Tools.call("l2_exec", new JSONObject().put("cmd", "input -d " + disp + " tap " + x + " " + y));
+            return c.optBoolean("ok", false) ? ok("已点击副屏" + disp + "节点#" + a.optInt("i") + " (" + x + "," + y + ")") : err("INJECT_FAIL", String.valueOf(c));
+        }});
+        def("wait_node", "等待界面内容出现（页面加载/跳转后轮询树，找到即返回节点信息；比盲等可靠）",
+            schema(props("text", prop("string", "等待出现的文本"), "display", prop("number", "屏幕ID 默认0主屏"),
+                    "timeout_sec", prop("number", "最长等待 默认10秒")), "text"), new H() { public JSONObject run(JSONObject a) throws Exception {
+            int disp = a.optInt("display", 0);
+            long deadline = System.currentTimeMillis() + a.optInt("timeout_sec", 10) * 1000L;
+            String target = a.optString("text");
+            while (System.currentTimeMillis() < deadline) {
+                AdbService.readTree(disp);
+                JSONObject n = AdbService.findNodeByText(disp, target);
+                if (n != null) return ok(new JSONObject().put("found", true).put("node", n));
+                Thread.sleep(800);
+            }
+            return ok(new JSONObject().put("found", false).put("hint", "超时未出现，可能页面未加载或文本不符"));
         }});
         def("ui_set_text", "直接设置焦点输入框文本（display=0 主屏；传副屏 displayId 可在副屏输入，配合 vd）",
             schema(props("text", prop("string", "要设置的文本"), "display", prop("number", "屏幕ID 默认0主屏")), "text"), new H() { public JSONObject run(JSONObject a) {

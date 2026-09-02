@@ -9,6 +9,8 @@ import android.os.Build;
 import android.os.Bundle;
 import android.view.Display;
 import android.accessibilityservice.AccessibilityServiceInfo;
+import android.content.Context;
+import android.hardware.display.DisplayManager;
 import android.view.accessibility.AccessibilityEvent;
 import android.view.accessibility.AccessibilityNodeInfo;
 import android.view.accessibility.AccessibilityWindowInfo;
@@ -112,6 +114,39 @@ public class AdbService extends AccessibilityService {
     public static String diag = ""; // 副屏读树诊断
     public static JSONArray readTree() { return readTree(0); }
 
+    private static final android.util.SparseArray<JSONArray> lastTree = new android.util.SparseArray<>();
+
+    /** 取某屏上次读取树中编号为 idx 的节点信息（含 xy） */
+    public static JSONObject nodeByIndex(int displayId, int idx) {
+        JSONArray arr = lastTree.get(displayId, null);
+        if (arr == null) return null;
+        for (int k = 0; k < arr.length(); k++) {
+            JSONObject o = arr.optJSONObject(k);
+            if (o != null && o.optInt("i", -1) == idx) return o;
+        }
+        return null;
+    }
+
+    /** 在指定屏树里找首个含 target 文本的节点 */
+    public static JSONObject findNodeByText(int displayId, String target) {
+        JSONArray arr = lastTree.get(displayId, null);
+        if (arr == null) return null;
+        for (int k = 0; k < arr.length(); k++) {
+            JSONObject o = arr.optJSONObject(k);
+            if (o != null && (o.optString("text","").contains(target) || o.optString("desc","").contains(target))) return o;
+        }
+        return null;
+    }
+
+    private static int[] displaySize(int displayId) {
+        try {
+            DisplayManager dm = (DisplayManager) inst.getSystemService(Context.DISPLAY_SERVICE);
+            android.view.Display d = displayId > 0 ? dm.getDisplay(displayId) : dm.getDisplay(android.view.Display.DEFAULT_DISPLAY);
+            if (d != null) { android.view.Display.Mode m = d.getMode(); return new int[]{m.getPhysicalWidth(), m.getPhysicalHeight()}; }
+        } catch (Exception ignore) {}
+        return new int[]{1280, 2772};
+    }
+
     /** 读结构树；displayId>0 时读指定副屏（隐形虚拟屏同样可读，API33+） */
     public static JSONArray readTree(int displayId) {
         seq = 0;
@@ -144,6 +179,7 @@ public class AdbService extends AccessibilityService {
                         }
                     }
                     diag += " 节点数:" + out.length();
+                    if (out.length() > 0) lastTree.put(displayId, out);
                     return out.length() > 0 ? out : null;
                 }
                 return null;
@@ -151,6 +187,7 @@ public class AdbService extends AccessibilityService {
             AccessibilityNodeInfo root = inst.getRootInActiveWindow();
             if (root == null) return null;
             walk(root, out, 0);
+            if (out.length() > 0) lastTree.put(0, out);
             return out;
         } catch (Exception e) { return null; }
     }
@@ -163,6 +200,9 @@ public class AdbService extends AccessibilityService {
             Rect r = new Rect();
             n.getBoundsInScreen(r);
             JSONObject o = new JSONObject();
+            // 屏外虚拟节点剔除（长列表 App 动辄数千节点）
+            int[] ds = displaySize(0);
+            if (r.left >= ds[0] + 200 || r.top >= ds[1] + 200 || r.right <= -200 || r.bottom <= -200) return;
             o.put("i", seq++);
             CharSequence t = n.getText();
             if (t != null && t.length() > 0) o.put("text", t.length() > 80 ? t.toString().substring(0, 80) + "…" : t.toString());

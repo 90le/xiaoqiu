@@ -38,6 +38,8 @@ public class VdManager {
     public static void track(String pkg) { if (pkg != null) launched.add(pkg); }
     public static java.util.Set<String> launchedPkgs() { return new java.util.HashSet<>(launched); }
     public static int displayId() { return id; }
+    public static int dispW() { return w; }
+    public static int dispH() { return h; }
     public static boolean alive() { return vd != null && id > 0; }
 
     /** 创建隐形副屏（默认 900x2000@160dpi，够看清单又省内存） */
