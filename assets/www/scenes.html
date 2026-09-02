@@ -29,7 +29,7 @@
   <div class="card" onclick="run('screen_state',{},' Screen')"><div class="ico">🔆</div><div class="t">屏幕状态</div><div class="d">亮灭/亮度</div></div>
   <div class="card" onclick="run('device_info',{},'📱 设备')"><div class="ico">📱</div><div class="t">设备信息</div><div class="d">型号/系统/存储</div></div>
   <div class="card" onclick="run('apps_list',{limit:200},'📦 应用')"><div class="ico">📦</div><div class="t">应用统计</div><div class="d">已装应用列表</div></div>
-  <div class="card" style="grid-column:1/-1;border:2px solid var(--hill);" onclick="voiceChat(this)"><div class="ico">🎙</div><div class="t">语音对话</div><div class="d">按一下，说 6 秒，小丘回答（录音→识别→pi→文字）</div></div>
+  <div class="card" style="grid-column:1/-1;border:2px solid var(--hill);" onclick="voiceChat(this)"><div class="ico">🎙</div><div class="t">语音对话</div><div class="d">按一下说话，停顿自动结束（持续会话上下文）</div></div>
 </div>
 <div id="out"></div>
 <script>

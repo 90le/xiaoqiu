@@ -114,7 +114,7 @@ public class Mcp implements Runnable {
                             : apath.endsWith(".js") ? "text/javascript"
                             : apath.endsWith(".svg") ? "image/svg+xml"
                             : apath.endsWith(".png") ? "image/png" : "application/octet-stream";
-                    s.getOutputStream().write(("HTTP/1.1 200 OK\r\nContent-Type: " + mime + "\r\nContent-Length: " + bodyBytes.length + "\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+                    s.getOutputStream().write(("HTTP/1.1 200 OK\r\nContent-Type: " + mime + "\r\nContent-Length: " + bodyBytes.length + "\r\nCache-Control: no-cache, no-store\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.UTF_8));
                     s.getOutputStream().write(bodyBytes);
                     s.close();
                 } catch (Exception e2) {
