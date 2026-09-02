@@ -49,6 +49,7 @@ public class WakeService extends Service {
     @Override public void onCreate() {
         super.onCreate();
         Log.i("PiBridge", "WakeService onCreate");
+        Tools.init(this); // :kws 独立进程必须自行初始化 Tools（ctx/引擎/配置）
         NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
         nm.createNotificationChannel(new NotificationChannel(CH, "语音唤醒", NotificationManager.IMPORTANCE_LOW));
         Notification n = new Notification.Builder(this, CH)
@@ -67,44 +68,46 @@ public class WakeService extends Service {
         wl.acquire();
         try {
             File dir = new File(getFilesDir(), "sherpa/kws/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01");
-            File kwFile = new File(dir, "keywords.txt");
-            if (!dir.isDirectory() || !kwFile.isFile()) { Log.w("PiBridge", "唤醒模型未就绪"); running = false; return; }
-            Log.i("PiBridge", "KWS: 模型目录OK，开始初始化");
-            if (Tools.initKwsOnce(dir)) {
-                Log.i("PiBridge", "全局唤醒已启动，等待「小丘」");
-            } else { running = false; return; }
-            AudioRecord ar = null;
             while (running) {
                 try {
                     // mic 让位：连续对话/按住说话进行中则暂停 KWS
-                    if (VoiceCore.running || Tools.micBusy) { if (ar != null) { ar.stop(); ar.release(); ar = null; } Thread.sleep(250); continue; }
+            AudioRecord ar = null;
                     if (ar == null) {
                         int minBuf = AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
                         ar = new AudioRecord(MediaRecorder.AudioSource.MIC, 16000,
                                 AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, Math.max(minBuf, 16000 * 2 * 4));
                         ar.startRecording();
-                        OnlineStream stream = Tools.kwsCreateStream();
-                        if (stream == null) break;
-                        Tools.kwsSetStream(stream);
-                        Log.i("PiBridge", "KWS 流就绪");
+                        Log.i("PiBridge", "唤醒监听就绪（SenseVoice 分块模式）");
                     }
-                    short[] chunk = new short[1600]; // 100ms
-                    int n = ar.read(chunk, 0, chunk.length);
-                    if (n <= 0) continue;
-                    float[] f = new float[n];
-                    for (int i = 0; i < n; i++) f[i] = chunk[i] / 32768f;
-                    String kw = Tools.kwsFeed(f);
-                    if (kw != null && !kw.isEmpty() && !kw.equals(lastKeyword + "|")) {
-                        lastKeyword = kw;
-                        Log.i("PiBridge", "🔔 唤醒词命中: " + kw);
-                        // 让出麦克风做命令采集
+                    // 分块采集 2.8 秒 → 本地识别 → 检测唤醒词
+                    int total = (int) (16000 * 2.8);
+                    short[] buf = new short[total];
+                    int got = 0;
+                    while (got < total && running && !VoiceCore.running && !Tools.micBusy) {
+                        int n = ar.read(buf, got, total - got);
+                        if (n <= 0) break;
+                        got += n;
+                    }
+                    if (!running || got < total) { Thread.sleep(200); continue; }
+                    byte[] pcm = new byte[got * 2];
+                    for (int i = 0; i < got; i++) { pcm[i*2] = (byte)(buf[i] & 255); pcm[i*2+1] = (byte)((buf[i] >> 8) & 255); }
+                    File chunkWav = new File(getCacheDir(), "wake-chunk.wav");
+                    com.binbin.pibridge.WavUtil.writeWav(chunkWav, pcm, 16000, 1, 16);
+                    String txt = "";
+                    try {
+                        JSONObject env = Tools.call("stt_transcribe", new JSONObject().put("file", chunkWav.getAbsolutePath()));
+                        if (env != null && env.optBoolean("ok")) txt = env.optString("data", "");
+                    } catch (Exception ignore) {}
+                    chunkWav.delete();
+                    if (txt.contains("小丘")) {
+                        Log.i("PiBridge", "🔔 唤醒命中: " + txt);
                         if (ar != null) { ar.stop(); ar.release(); ar = null; }
-                        Tools.kwsClearStream();
-                        wakeRound(kw);
+                        // 若唤醒词后带了指令，一并处理；否则只回应
+                        wakeRound(txt);
+                        Thread.sleep(400);
                     }
                 } catch (Exception e) { Log.w("PiBridge", "wake loop: " + e); Thread.sleep(800); }
             }
-            if (ar != null) { try { ar.stop(); ar.release(); } catch (Exception ignore) {} }
         } catch (Exception e) {
             Log.w("PiBridge", "wake fatal: " + e);
         } finally {
@@ -114,12 +117,21 @@ public class WakeService extends Service {
     }
 
     /** 唤醒后：回应→采集指令→分流执行→回到监听 */
-    private void wakeRound(String kw) {
+    private void wakeRound(String heard0) {
         try {
+            String said = heard0 == null ? "" : heard0.replaceAll("[，。！？,.!?、\\s]+", "");
+            String[] wakes = {"小丘小丘", "你好小丘", "嘿小丘", "嗨小丘", "小丘"};
+            String carry = "";
+            for (String w0 : wakes) if (said.startsWith(w0)) { carry = said.substring(w0.length()); break; }
+            if (!carry.isEmpty()) {
+                Log.i("PiBridge", "唤醒携带指令: " + carry);
+                execCommand(carry);
+                return;
+            }
             Tools.call("tts_speak", new org.json.JSONObject().put("text", "在"));
             Thread.sleep(600);
             File wav = WavUtil.recordAutoStop(this, 15);
-            if (wav == null) return; // 没说指令，回监听
+            if (wav == null) return;
             String heard = "";
             try {
                 JSONObject env = Tools.call("stt_transcribe", new org.json.JSONObject().put("file", wav.getAbsolutePath()));
@@ -127,6 +139,13 @@ public class WakeService extends Service {
             } catch (Exception ignore) {}
             if (heard.isEmpty()) return;
             Log.i("PiBridge", "指令: " + heard);
+            execCommand(heard);
+        } catch (Exception e) { Log.w("PiBridge", "wakeRound: " + e); }
+    }
+
+    private void execCommand(String heard) {
+        try {
+            if (heard == null || heard.isEmpty()) return;
             if (heard.matches(".*(结束对话|停止聆听).*")) return;
             JSONObject fast = Tools.call("chat_fast", new org.json.JSONObject().put("q", heard));
             String answer = null;
@@ -136,14 +155,13 @@ public class WakeService extends Service {
             }
             if (answer != null && !answer.isEmpty()) {
                 Tools.call("tts_speak", new org.json.JSONObject().put("text", answer));
-                return; // 已播报，回监听
+                return;
             }
-            // 任务型 → 交接给 App 内 pi
             MainActivity.PENDING_TASK = heard;
             Intent i = new Intent(this, MainActivity.class);
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(i);
-        } catch (Exception e) { Log.w("PiBridge", "wakeRound: " + e); }
+        } catch (Exception e) { Log.w("PiBridge", "execCommand: " + e); }
     }
 
     @Override public void onDestroy() { running = false; super.onDestroy(); }

@@ -130,18 +130,18 @@ public class Tools {
     private static OnlineStream kwsStream;
 
     static boolean initKwsOnce(File dir) {
-        // 兼容性问题：KWS 构造器在本机触发 native 崩溃（进程死亡）。禁用直至版本匹配
-        Log.w("PiBridge", "KWS 已禁用（引擎兼容性问题修复中）");
-        return false;
-    }
-    static boolean initKwsOnceDisabled(File dir) {
         if (kws != null) return true;
-        Log.i("PiBridge", "KWS init: 构造前");
+        Log.i("PiBridge", "KWS init: 构造前（fp32 + 独立进程隔离）");
         try {
+            // fp32 优先（int8 量化版有崩溃嫌疑）
+            File enc = new File(dir, "encoder-epoch-12-avg-2-chunk-16-left-64.onnx");
+            if (!enc.isFile()) enc = new File(dir, "encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx");
+            File dec = new File(dir, "decoder-epoch-12-avg-2-chunk-16-left-64.onnx");
+            if (!dec.isFile()) dec = new File(dir, "decoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx");
+            File joi = new File(dir, "joiner-epoch-12-avg-2-chunk-16-left-64.onnx");
+            if (!joi.isFile()) joi = new File(dir, "joiner-epoch-12-avg-2-chunk-16-left-64.int8.onnx");
             OnlineTransducerModelConfig tr = new OnlineTransducerModelConfig(
-                    new File(dir, "encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx").getAbsolutePath(),
-                    new File(dir, "decoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx").getAbsolutePath(),
-                    new File(dir, "joiner-epoch-12-avg-2-chunk-16-left-64.int8.onnx").getAbsolutePath(),
+                    enc.getAbsolutePath(), dec.getAbsolutePath(), joi.getAbsolutePath(),
                     new com.k2fsa.sherpa.onnx.QnnConfig());
             OnlineModelConfig mc = new OnlineModelConfig();
             mc.setTransducer(tr);
@@ -389,6 +389,8 @@ public class Tools {
     static void def(String name, String desc, JSONObject schema, H h) { REG.put(name, new Tool(desc, schema, h)); }
 
     public static void init(Context c) {
+        if (doneInit) return;
+        doneInit = true;
         // TTS 预热：后台线程初始化（ttsInit 的 await 绝不能发生在主线程，否则 onInit 回调死锁）
         new Thread(() -> { boolean r = ttsInit(); Log.i("PiBridge", "TTS 预热: " + (r ? "就绪" : "失败")); }, "tts-prewarm").start();
         new Thread(() -> {
@@ -885,6 +887,8 @@ public class Tools {
         if (f.isDirectory()) { File[] cs = f.listFiles(); if (cs != null) for (File c : cs) rmRecur(c); }
         return f.delete();
     }
+
+    private static volatile boolean doneInit = false;
 
     /** 全局配置 KV（files/cfg.json）：引擎选择等 */
     static JSONObject loadCfg() {
