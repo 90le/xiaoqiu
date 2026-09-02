@@ -31,6 +31,7 @@
                 <category android:name="android.intent.category.LAUNCHER"/>
             </intent-filter>
         </activity>
+        <service android:name="com.binbin.pibridge.WakeService" />
         <service android:name="com.binbin.pibridge.BridgeService" android:exported="true"/>
         <service android:name="com.binbin.pibridge.AdbService" android:exported="false"
             android:label="pi 桥辅助服务"

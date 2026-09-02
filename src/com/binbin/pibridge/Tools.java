@@ -1,5 +1,12 @@
 package com.binbin.pibridge;
 
+import com.k2fsa.sherpa.onnx.FeatureConfig;
+import com.k2fsa.sherpa.onnx.KeywordSpotter;
+import com.k2fsa.sherpa.onnx.KeywordSpotterConfig;
+import com.k2fsa.sherpa.onnx.KeywordSpotterResult;
+import com.k2fsa.sherpa.onnx.OnlineModelConfig;
+import com.k2fsa.sherpa.onnx.OnlineStream;
+import com.k2fsa.sherpa.onnx.OnlineTransducerModelConfig;
 import android.util.Log;
 import android.app.Notification;
 import android.app.NotificationChannel;
@@ -117,6 +124,56 @@ public class Tools {
             return new JSONObject(bo.toString("UTF-8")).optString("text", "");
         } catch (Exception e) { Log.w("PiBridge", "云ASR 失败: " + e); return null; }
     }
+    // ═══ 全局唤醒词（sherpa KWS）═══
+    public static volatile boolean micBusy = false; // 按住说话等场景让出麦克风
+    private static KeywordSpotter kws;
+    private static OnlineStream kwsStream;
+
+    static boolean initKwsOnce(File dir) {
+        // 兼容性问题：KWS 构造器在本机触发 native 崩溃（进程死亡）。禁用直至版本匹配
+        Log.w("PiBridge", "KWS 已禁用（引擎兼容性问题修复中）");
+        return false;
+    }
+    static boolean initKwsOnceDisabled(File dir) {
+        if (kws != null) return true;
+        Log.i("PiBridge", "KWS init: 构造前");
+        try {
+            OnlineTransducerModelConfig tr = new OnlineTransducerModelConfig(
+                    new File(dir, "encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx").getAbsolutePath(),
+                    new File(dir, "decoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx").getAbsolutePath(),
+                    new File(dir, "joiner-epoch-12-avg-2-chunk-16-left-64.int8.onnx").getAbsolutePath(),
+                    new com.k2fsa.sherpa.onnx.QnnConfig());
+            OnlineModelConfig mc = new OnlineModelConfig();
+            mc.setTransducer(tr);
+            mc.setTokens(new File(dir, "tokens.txt").getAbsolutePath());
+            mc.setNumThreads(1);
+            KeywordSpotterConfig cfg = new KeywordSpotterConfig(new FeatureConfig(), mc, 4,
+                    new File(dir, "keywords.txt").getAbsolutePath(), 2.0f, 0.25f, 1);
+            Log.i("PiBridge", "KWS init: 构造中…");
+            kws = new KeywordSpotter(ctx.getAssets(), cfg);
+            Log.i("PiBridge", "KWS init: 构造完成");
+            return true;
+        } catch (Throwable e) { Log.w("PiBridge", "KWS 初始化失败: " + e); return false; }
+    }
+    static OnlineStream kwsCreateStream() { try { return kws.createStream(null); } catch (Exception e) { return null; } }
+    static void kwsSetStream(OnlineStream s) { kwsStream = s; }
+    static void kwsClearStream() { kwsStream = null; }
+    /** 喂音频，命中唤醒词返回词条，否则空串 */
+    static String kwsFeed(float[] samples) {
+        try {
+            if (kws == null || kwsStream == null) return "";
+            kwsStream.acceptWaveform(samples, 0);
+            while (kws.isReady(kwsStream)) kws.decode(kwsStream);
+            KeywordSpotterResult r = kws.getResult(kwsStream);
+            String kw = r == null ? "" : r.getKeyword();
+            if (kw != null && !kw.isEmpty()) {
+                kws.reset(kwsStream);
+                return kw;
+            }
+        } catch (Exception e) { Log.w("PiBridge", "kwsFeed: " + e); }
+        return "";
+    }
+
     /** 通用对话补全（glm-5.3-flash），失败返回 null */
     static String llmRaw(String system, String user) {
         try {
@@ -494,6 +551,14 @@ public class Tools {
         }});
 
         // ═══ 快脑：闲聊直答/意图分流 ═══
+        def("wake_service", "全局唤醒词开关(息屏喊小丘)", schema(props("action", prop("string", "start/stop/status")), "action"),
+            new H() { public JSONObject run(JSONObject a) throws Exception {
+                String act = a.optString("action", "status");
+                if ("start".equals(act)) { WakeService.start(ctx); return ok(WakeService.isRunning() ? "已启动" : "启动中"); }
+                if ("stop".equals(act)) { WakeService.stop(ctx); return ok("已停止"); }
+                return ok(new JSONObject().put("running", WakeService.isRunning()));
+            }});
+
         def("cfg_set", "写全局配置项", schema(props("key", prop("string", "键"), "value", prop("string", "值")), "key", "value"),
             new H() { public JSONObject run(JSONObject a) throws Exception {
                 JSONObject c = loadCfg(); c.put(a.getString("key"), a.getString("value")); saveCfg(c);

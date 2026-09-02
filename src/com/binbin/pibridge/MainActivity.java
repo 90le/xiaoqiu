@@ -211,6 +211,7 @@ public class MainActivity extends Activity {
     // ═══ 🎙 语音流：VAD 录音 → 识别 → 注入对话页输入框自动发送 ═══
     private void startVoiceCapture() {
         recording = true;
+        Tools.micBusy = true;
         if (currentTab != 0) switchTab(0);
         voiceStrip.setVisibility(View.VISIBLE);
         voiceMsg.setText("🎙 录音中…松手结束");
@@ -229,6 +230,7 @@ public class MainActivity extends Activity {
                 final String h = heard;
                 runOnUiThread(() -> {
                     recording = false;
+                    Tools.micBusy = false;
                     micBtn.setText("🎙");
                     micBtn.setBackgroundColor(Color.parseColor("#3E7C59"));
                     if (h.isEmpty() || h.startsWith("(")) {
@@ -242,6 +244,7 @@ public class MainActivity extends Activity {
                     }
                 });
             } catch (final Exception e) {
+                Tools.micBusy = false;
                 runOnUiThread(() -> {
                     recording = false;
                     micBtn.setText("🎙");

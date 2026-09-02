@@ -63,6 +63,8 @@ const voices = [
 const ttsVoice = ref('tongtong')
 const sttEngine = ref('local')
 const cloneId = ref('')
+const wakeOn = ref(false)
+const wakeStat = ref('')
 async function pickVoice() {
   await fetch('/api/cfg_set', { method:'POST', headers:{'Content-Type':'application/json'},
     body: JSON.stringify({ key:'tts_voice', value: ttsVoice.value }) })
@@ -74,6 +76,15 @@ async function saveClone() {
   if (!cloneId.value.trim()) return
   ttsVoice.value = cloneId.value.trim()
   await pickVoice()
+}
+async function toggleWake() {
+  const next = !wakeOn.value
+  wakeStat.value = next ? '启动中…' : '停止中…'
+  const r = await fetch('/api/wake_service', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action: next ? 'start' : 'stop' }) })
+  const d = (await r.json()).structuredContent
+  wakeOn.value = next && d.ok
+  wakeStat.value = next ? (d.ok ? '✅ 待命中，说「小丘」试试（支持息屏）' : '启动失败，请重试') : '已停止'
+  setTimeout(() => { wakeStat.value = '' }, 4000)
 }
 async function pickStt() {
   await fetch('/api/cfg_set', { method:'POST', headers:{'Content-Type':'application/json'},
@@ -93,6 +104,10 @@ async function loadCfg() {
       if (!['tongtong','chuichui','xiaochen','jam','kazi','douji','luodo'].includes(d.data.tts_voice)) cloneId.value = d.data.tts_voice
     }
     if (d.ok && d.data.stt_engine) sttEngine.value = d.data.stt_engine
+    try {
+      const r2 = await fetch('/api/wake_service', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({ action:'status' }) })
+      wakeOn.value = (await r2.json()).structuredContent.data.running
+    } catch(e) {}
   } catch(e) {}
 }
 async function pickEngine(id) {
