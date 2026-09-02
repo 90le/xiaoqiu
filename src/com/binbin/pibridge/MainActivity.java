@@ -30,6 +30,8 @@ import java.io.File;
 public class MainActivity extends Activity {
     private WebView web;
     private TextView splash;
+    private TextView voiceStrip;
+    private Button micBtn;
     private Button[] btns;
     private int currentTab = 0;
     private int retries = 0;
@@ -71,16 +73,24 @@ public class MainActivity extends Activity {
         page.addView(web, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
 
+        voiceStrip = new TextView(this);
+        voiceStrip.setBackgroundColor(Color.parseColor("#3E7C59"));
+        voiceStrip.setTextColor(Color.WHITE);
+        voiceStrip.setPadding(28, 20, 28, 20);
+        voiceStrip.setVisibility(View.GONE);
+        page.addView(voiceStrip, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
+
         LinearLayout bar = new LinearLayout(this);
         bar.setOrientation(LinearLayout.HORIZONTAL);
         bar.setPadding(6, 6, 6, 6);
         // 🎙 语音按钮（大）
-        Button mic = new Button(this);
+        micBtn = new Button(this);
         mic.setText("🎙");
-        mic.setBackgroundColor(Color.parseColor("#3E7C59"));
-        mic.setTextColor(Color.WHITE);
-        mic.setOnClickListener(v -> { if (!recording) voiceFlow(); });
-        mic.setTextSize(18);
+        micBtn.setBackgroundColor(Color.parseColor("#3E7C59"));
+        micBtn.setTextColor(Color.WHITE);
+        micBtn.setOnClickListener(v -> { if (!recording) voiceFlow(); });
+        micBtn.setTextSize(18);
         bar.addView(mic, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.9f));
         btns = new Button[TABS.length];
         for (int i = 0; i < TABS.length; i++) {
@@ -163,26 +173,38 @@ public class MainActivity extends Activity {
                 JSONObject sttEnv = Tools.call("stt_transcribe",
                         new JSONObject().put("file", wav.getAbsolutePath()));
                 final String heard = sttEnv.optString("data", "");
-                if (heard.isEmpty() || heard.startsWith("(")) {
-                    runOnUiThread(() -> {
-                        splashMsg("🎙 没听清，再试一次", 1500);
-                        recording = false;
-                    });
-                    return;
-                }
-                final String text = heard;
+                final String heardF = heard;
                 runOnUiThread(() -> {
-                    splash.setVisibility(View.GONE);
+                    strip("🧠 识别完成，小丘思考中…");
                     recording = false;
-                    injectPrompt(text);
+                    micBtn.setText("🎙");
+                    micBtn.setBackgroundColor(Color.parseColor("#3E7C59"));
+                    injectPrompt(heardF);
+                    stripFade("✅ 已发送给小丘", 2500);
                 });
             } catch (final Exception e) {
                 runOnUiThread(() -> {
-                    splashMsg("🎙 出错：" + e.getMessage(), 2500);
+                    strip("🎙 出错：" + e.getMessage(), 2500);
                     recording = false;
+                    micBtn.setText("🎙");
+                    micBtn.setBackgroundColor(Color.parseColor("#3E7C59"));
                 });
             }
         }, "voice").start();
+    }
+
+    private void strip(String msg) {
+        runOnUiThread(() -> { voiceStrip.setText(msg); voiceStrip.setVisibility(View.VISIBLE); });
+    }
+    private void strip(String msg, long autoHideMs) {
+        strip(msg);
+        runOnUiThread(() -> voiceStrip.postDelayed(() -> voiceStrip.setVisibility(View.GONE), autoHideMs));
+    }
+    private void stripFade(String msg, long ms) {
+        runOnUiThread(() -> {
+            voiceStrip.setText(msg); voiceStrip.setVisibility(View.VISIBLE);
+            voiceStrip.postDelayed(() -> voiceStrip.setVisibility(View.GONE), ms);
+        });
     }
 
     /** 提示层独占接口：所有状态提示走这里 */
