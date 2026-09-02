@@ -2,6 +2,8 @@ package com.binbin.pibridge;
 
 import android.content.Context;
 import android.content.Intent;
+import android.util.Log;
+import android.widget.TextView;
 import android.graphics.Color;
 import android.graphics.PixelFormat;
 import android.graphics.Rect;
@@ -29,6 +31,79 @@ public class FloatBall {
     private static int floatX, floatY;
 
     private static final android.os.Handler MAIN = new android.os.Handler(android.os.Looper.getMainLooper());
+    private static android.widget.LinearLayout stateBox;   // 球旁提示气泡
+    private static WindowManager.LayoutParams bubbleLp;
+    private static long lastTap = 0;
+    private static int openToken = 0;
+
+    /** 球旁动态提示气泡：直说当前状态与该做什么 */
+    private static void showBubble(Context c, int ballX, int ballW, int ballY, String main, String sub) {
+        try {
+            if (stateBox == null) {
+                android.widget.LinearLayout box = new android.widget.LinearLayout(c);
+                box.setOrientation(android.widget.LinearLayout.VERTICAL);
+                android.graphics.drawable.GradientDrawable bg = new android.graphics.drawable.GradientDrawable();
+                bg.setCornerRadius(dp(c, 14)); bg.setColor(0xF0141414);
+                box.setBackground(bg);
+                box.setPadding(dp(c, 14), dp(c, 10), dp(c, 14), dp(c, 10));
+                android.widget.TextView t1 = new android.widget.TextView(c);
+                t1.setTextColor(0xFFFFFFFF); t1.setTextSize(14); t1.setTypeface(null, android.graphics.Typeface.BOLD);
+                t1.setId(101);
+                android.widget.TextView t2 = new android.widget.TextView(c);
+                t2.setTextColor(0xFFD9D9D9); t2.setTextSize(12);
+                t2.setId(102);
+                box.addView(t1); box.addView(t2);
+                stateBox = box;
+                bubbleLp = new WindowManager.LayoutParams(
+                        dp(c, 215), WindowManager.LayoutParams.WRAP_CONTENT,
+                        WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                        WindowManager.LayoutParams.FLAG_NOT_TOUCHABLE | WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                        android.graphics.PixelFormat.TRANSLUCENT);
+            }
+            android.widget.TextView t1 = stateBox.findViewById(101);
+            android.widget.TextView t2 = stateBox.findViewById(102);
+            t1.setText(main);
+            boolean hasSub = sub != null && !sub.isEmpty();
+            t2.setText(sub == null ? "" : sub);
+            t2.setVisibility(hasSub ? View.VISIBLE : View.GONE);
+            int bw = dp(c, 215);
+            int bx;
+            if (dockSide == 1) bx = Math.max(dp(c, 4), ballX - bw - dp(c, 6));
+            else bx = Math.min(screenW(c) - bw - dp(c, 4), ballX + ballW + dp(c, 6));
+            bubbleLp.x = bx;
+            bubbleLp.y = Math.max(dp(c, 60), Math.min(ballY - dp(c, 8), screenH(c) - dp(c, 230)));
+            if (stateBox.getParent() == null) wm.addView(stateBox, bubbleLp);
+            else wm.updateViewLayout(stateBox, bubbleLp);
+            stateBox.setVisibility(View.VISIBLE);
+        } catch (Exception e) { Log.w("PiBridge", "bubble: " + e); }
+    }
+    private static void hideBubbleSoon(long ms) {
+        MAIN.postDelayed(() -> { try { if (stateBox != null && stateBox.getParent() != null) wm.removeView(stateBox); } catch (Exception ignore) {} }, ms);
+    }
+
+    /** VoiceCore 状态 → 球 + 气泡联动 */
+    private static void onVoiceState(Context c, TextView v, int ballX, int ballW, int ballY, String st, String info) {
+        int color = 0xE63E7C59; String txt = "丘";
+        String bMain = "", bSub = "";
+        if ("listen".equals(st)) {
+            color = 0xE6E8853D; txt = "🎙";
+            bMain = "🎧 请说话"; bSub = "说「小丘」+ 要求，例：小丘，今天几号？";
+        } else if ("think".equals(st)) {
+            color = 0xE6D9A441; txt = "💭";
+            bMain = "💭 想好啦/识别到"; bSub = info;
+        } else if ("speak".equals(st)) {
+            color = 0xE6447BA6; txt = "🔊";
+            bMain = "🔊 播报中"; bSub = info;
+        } else if ("exit".equals(st)) {
+            vibrate(c, 30);
+            bMain = "✅ " + (info == null || info.isEmpty() ? "对话结束" : info);
+            bSub = "";
+        }
+        v.setText(txt);
+        setBallColor(v, color);
+        if ("exit".equals(st)) { showBubble(c, ballX, ballW, ballY, bMain, bSub); hideBubbleSoon(1800); }
+        else if (!bMain.isEmpty()) showBubble(c, ballX, ballW, ballY, bMain, bSub);
+    }
     private static final int TOUCH_W = 36;   // 吸附态触摸区宽（视觉条 10px 贴边，其余向内延伸便于抓取）
     private static final int BAR_VISUAL = 10;
     private static final int BAR_H = 64;
@@ -91,13 +166,6 @@ public class FloatBall {
                     down[0] = ev.getRawX(); down[1] = ev.getRawY();
                     startPos[0] = fp.x; startPos[1] = fp.y;
                     moved[0] = false; dragging[0] = false;
-                    downAt[0] = System.currentTimeMillis();
-                    v.postDelayed(() -> {
-                        if (!dragging[0] && System.currentTimeMillis() - downAt[0] >= 580) {
-                            v.setText("🎙");
-                            vibrate(fc, 40); // 长按确认：震动提示已进入对话
-                        }
-                    }, 580);
                     return true;
                 case MotionEvent.ACTION_MOVE: {
                     float dx = ev.getRawX() - down[0], dy = ev.getRawY() - down[1];
@@ -142,31 +210,28 @@ public class FloatBall {
                             v.setText("丘");
                             try { wm.updateViewLayout(v, fp); } catch (Exception ignore) {}
                         } else {
-                            boolean longP = System.currentTimeMillis() - downAt[0] >= 580;
+                            // 对话中：单击=结束对话
                             if (VoiceCore.running) {
-                                // 对话中：轻点=结束对话
                                 VoiceCore.stop();
                                 v.setText("丘"); setBallColor(v, 0xE63E7C59);
+                                hideBubbleSoon(300);
                                 return true;
                             }
-                            if (longP) {
-                                // 原地待命对话：不跳转 App；说"小丘，xxx"直接干活
-                                VoiceCore.nextStandby = true; // 悬浮球=待命模式（需"小丘"唤醒）
+                            long now = System.currentTimeMillis();
+                            if (now - lastTap < 350) {
+                                // ⭐ 双击：开启待命语音对话（防误触：需两连击）
+                                lastTap = 0;
+                                openToken++;
+                                vibrate(fc, 40);
+                                VoiceCore.nextStandby = true;
                                 VoiceCore.start(new VoiceCore.Listener() {
                                     public void onState(String st, String info) {
-                                        android.os.Handler h = new android.os.Handler(android.os.Looper.getMainLooper());
-                                        h.post(() -> {
-                                            int color = 0xE63E7C59; String txt = "丘";
-                                            if ("listen".equals(st)) { color = 0xE6E8853D; txt = "🎙"; }
-                                            else if ("think".equals(st)) { color = 0xE6D9A441; txt = "💭"; }
-                                            else if ("speak".equals(st)) { color = 0xE6447BA6; txt = "🔊"; }
-                                            else if ("exit".equals(st)) { vibrate(fc, 30); }
-                                            v.setText(txt);
-                                            setBallColor(v, color);
-                                        });
+                                        final int bx2 = fp.x, bw2 = fp.width, by2 = fp.y;
+                                        MAIN.post(() -> onVoiceState(fc, v, bx2, bw2, by2, st, info));
                                     }
                                     public void onTask(String q) {
                                         MainActivity.PENDING_TASK = q;
+                                        hideBubbleSoon(800);
                                         Intent i = new Intent(fc, MainActivity.class);
                                         i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
                                         fc.startActivity(i);
@@ -175,9 +240,17 @@ public class FloatBall {
                                 });
                                 return true;
                             }
-                            Intent i = new Intent(fc, MainActivity.class);
-                            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-                            fc.startActivity(i);
+                            // 单击：延迟打开 App（若紧跟着第二击则让位给语音）
+                            lastTap = now;
+                            final int token = ++openToken;
+                            MAIN.postDelayed(() -> {
+                                if (token == openToken && !VoiceCore.running) {
+                                    Intent i = new Intent(fc, MainActivity.class);
+                                    i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                                    fc.startActivity(i);
+                                }
+                            }, 360);
+
                         }
                         return true;
                     }
