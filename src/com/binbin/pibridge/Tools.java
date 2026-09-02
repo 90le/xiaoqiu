@@ -678,8 +678,8 @@ public class Tools {
                 String cmd;
                 if ("tap".equals(act)) cmd = "input -d " + VdManager.displayId() + " tap " + a.optInt("x") + " " + a.optInt("y");
                 else if ("longpress".equals(act)) cmd = "input -d " + VdManager.displayId() + " swipe "
-                        + a.optInt("x") + " " + a.optInt("y") + " " + a.optInt("x") + " " + a.optInt("y") + " "
-                        + Math.max(a.optInt("ms", 600), 400);
+                        + a.optInt("x") + " " + a.optInt("y") + " " + (a.optInt("x") + 2) + " " + (a.optInt("y") + 1) + " "
+                        + Math.max(a.optInt("ms", 600), 400); // +2px偏移：MIUI忽略零距离滑动
                 else if ("key".equals(act)) {
                     String k = a.optString("text", "back");
                     int code = k.equals("back") ? 4 : k.equals("home") ? 3 : k.equals("enter") ? 66 : k.equals("esc") ? 111 : 4;
