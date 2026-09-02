@@ -1,5 +1,6 @@
 package com.binbin.pibridge;
 
+import android.util.Log;
 import android.app.Activity;
 import android.content.Intent;
 import android.view.MotionEvent;
@@ -287,24 +288,36 @@ public class MainActivity extends Activity {
             @Override public void run() {
                 if (gen != voiceGen || polls[0]++ > 90) return; // 新发送/超时(~4.5min)终止
                 web.evaluateJavascript(
-                    "(function(){var n=document.querySelectorAll('.msg-text');return n.length?n[n.length-1].innerText:'';})()",
+                    "(function(){var n=document.querySelectorAll('.msg-text,.fp-markdown,[class*=markdown]');"
+                  + "if(!n.length)return 'N0';"
+                  + "var last=n[n.length-1];"
+                  + "return (n.length+'|'+(last.innerText||last.textContent||'')).slice(0,600);})()",
                     v -> {
                         if (gen != voiceGen) return;
                         String t = v == null ? "" : v;
                         if (t.length() > 1 && t.startsWith("\"") && t.endsWith("\""))
                             t = t.substring(1, t.length() - 1);
                         t = t.replace("\\n", " ").replace("\\\"", "\"").trim();
-                        if (t.isEmpty() || t.equals(sentText) || t.contains(sentText)) {
+                        Log.d("PiBridge", "watcher[" + polls[0] + "]=" + t);
+                        String body = t.contains("|") ? t.substring(t.indexOf('|') + 1) : t;
+                        if (t.equals("N0") || body.isEmpty() || body.equals(sentText) || body.contains(sentText)) {
                             stable[0] = 0; last[0] = t;
                             web.postDelayed(this, 3000); return;
                         }
                         if (t.equals(last[0])) {
                             stable[0]++;
-                            if (stable[0] >= 2 && t.length() > 2) { // 6s 无变化=回答完成
-                                String say = t.length() > 220 ? t.substring(0, 220) + "……" : t;
-                                try {
-                                    Tools.call("tts_speak", new JSONObject().put("text", say));
-                                } catch (Exception ignored) {}
+                            if (stable[0] >= 2 && body.length() > 2) { // 6s 无变化=回答完成
+                                String say = body.length() > 220 ? body.substring(0, 220) + "……" : body;
+                                Log.d("PiBridge", "TTS触发: " + say);
+                                voiceMsg("🔊 朗读中…");
+                                final String fSay = say;
+                                new Thread(() -> {
+                                    try {
+                                        org.json.JSONObject env = Tools.call("tts_speak", new JSONObject().put("text", fSay));
+                                        Log.d("PiBridge", "tts_speak 结果: " + env);
+                                    } catch (Exception e) { Log.e("PiBridge", "tts_speak 异常", e); }
+                                }, "tts-report").start();
+                                voiceStrip.postDelayed(() -> voiceStrip.setVisibility(View.GONE), 8000);
                                 return;
                             }
                         } else { stable[0] = 0; }

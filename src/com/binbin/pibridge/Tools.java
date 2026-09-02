@@ -1,39 +1,74 @@
 package com.binbin.pibridge;
 
+import android.util.Log;
 import android.app.Notification;
+import android.util.Log;
 import android.app.NotificationChannel;
+import android.util.Log;
 import android.app.NotificationManager;
+import android.util.Log;
 import android.app.PendingIntent;
+import android.util.Log;
 import android.content.ClipData;
+import android.util.Log;
 import android.content.ClipboardManager;
+import android.util.Log;
 import android.content.Context;
+import android.util.Log;
 import android.content.Intent;
+import android.util.Log;
 import android.content.pm.PackageInfo;
+import android.util.Log;
 import android.content.pm.PackageManager;
+import android.util.Log;
 import android.database.Cursor;
+import android.util.Log;
 import android.hardware.camera2.CameraAccessException;
+import android.util.Log;
 import android.hardware.camera2.CameraCharacteristics;
+import android.util.Log;
 import android.hardware.camera2.CameraManager;
+import android.util.Log;
 import android.media.AudioManager;
+import android.util.Log;
 import android.media.MediaScannerConnection;
+import android.util.Log;
 import android.net.ConnectivityManager;
+import android.util.Log;
 import android.net.NetworkCapabilities;
+import android.util.Log;
 import android.net.Uri;
+import android.util.Log;
 import android.net.wifi.WifiManager;
+import android.util.Log;
 import android.os.BatteryManager;
+import android.util.Log;
 import android.os.Build;
+import android.util.Log;
 import android.os.Bundle;
+import android.util.Log;
 import android.os.Environment;
+import android.util.Log;
 import android.os.Handler;
+import android.util.Log;
 import android.os.Looper;
+import android.util.Log;
 import android.os.PowerManager;
+import android.util.Log;
 import android.os.StatFs;
+import android.util.Log;
 import android.os.VibrationEffect;
+import android.util.Log;
 import android.os.Vibrator;
+import android.util.Log;
 import android.provider.CallLog;
+import android.util.Log;
 import android.provider.ContactsContract;
+import android.util.Log;
 import android.provider.Settings;
+import android.util.Log;
 import android.speech.tts.TextToSpeech;
+import android.util.Log;
 import android.view.KeyEvent;
 import org.json.JSONArray;
 import org.json.JSONObject;
@@ -90,6 +125,8 @@ public class Tools {
     static void def(String name, String desc, JSONObject schema, H h) { REG.put(name, new Tool(desc, schema, h)); }
 
     public static void init(Context c) {
+        // TTS 预热：后台线程初始化（ttsInit 的 await 绝不能发生在主线程，否则 onInit 回调死锁）
+        new Thread(() -> { boolean r = ttsInit(); Log.i("PiBridge", "TTS 预热: " + (r ? "就绪" : "失败")); }, "tts-prewarm").start();
         ctx = c;
         if (REG.isEmpty()) reg();
     }
@@ -746,6 +783,11 @@ public class Tools {
 
     static synchronized boolean ttsInit() {
         if (ttsReady) return true;
+        if (Looper.myLooper() == Looper.getMainLooper()) {
+            // 主线程：不能 await（onInit 也投递在主线程→死锁）。异步初始化，本次先失败，预热线程通常会先行完成
+            if (tts == null) tts = new TextToSpeech(ctx, st -> { ttsReady = (st == TextToSpeech.SUCCESS); });
+            return false;
+        }
         final CountDownLatch l = new CountDownLatch(1);
         final boolean[] ok = {false};
         tts = new TextToSpeech(ctx, new TextToSpeech.OnInitListener() {
