@@ -26,6 +26,41 @@ async function loadPerm() {
     perm.value = (await r.json()).structuredContent.data
   } catch(e) {}
 }
+const ttsEngine = ref('auto')
+const ttsMsg = ref('')
+const modelStat = ref(null)
+async function loadCfg() {
+  try {
+    const r = await fetch('/api/cfg_get', { method:'POST' })
+    const d = (await r.json()).structuredContent
+    if (d.ok && d.data.tts_engine) ttsEngine.value = d.data.tts_engine
+  } catch(e) {}
+  await loadModelStat()
+}
+async function saveEngine() {
+  ttsMsg.value = '保存中…'
+  await fetch('/api/cfg_set', { method:'POST', headers:{'Content-Type':'application/json'},
+    body: JSON.stringify({ key:'tts_engine', value: ttsEngine.value }) })
+  ttsMsg.value = '已保存，下次朗读生效'
+  setTimeout(() => { ttsMsg.value = '' }, 2500)
+}
+async function loadModelStat() {
+  try {
+    const r = await fetch('/api/tts_model_status', { method:'POST' })
+    modelStat.value = (await r.json()).structuredContent.data
+  } catch(e) {}
+}
+async function downloadModel() {
+  ttsMsg.value = '下载已启动…'
+  await fetch('/api/tts_model_download', { method:'POST' })
+  pollTimer = setInterval(async () => {
+    await loadModelStat()
+    if (modelStat.value && (modelStat.value.installed || modelStat.value.download.state === 'error')) {
+      clearInterval(pollTimer); ttsMsg.value = modelStat.value.installed ? '模型就绪' : '下载失败，请重试'
+    }
+  }, 5000)
+}
+let pollTimer = null
 async function toggleBall() {
   await fetch('/api/floatball', { method:'POST' })
   await new Promise(r => setTimeout(r, 600))
@@ -40,6 +75,7 @@ const permRows = [
   { k:'allFiles', label:'所有文件', type:'allfiles' },
 ]
 onMounted(loadPerm)
+onMounted(loadCfg)
 </script>
 <template>
   <div style="display:flex;align-items:center;gap:8px;margin:6px 4px 2px;">
@@ -82,10 +118,30 @@ onMounted(loadPerm)
   </div>
 
   <div class="card">
+    <div style="font-weight:600;font-size:14px;margin-bottom:8px;">语音播报引擎</div>
+    <label>朗读音色来源</label>
+    <select v-model="ttsEngine" @change="saveEngine">
+      <option value="auto">智能优先（推荐）</option>
+      <option value="cloud">云端童童（自然度高，需额度）</option>
+      <option value="xiaomi">小米本地（免费离线）</option>
+      <option value="system">系统默认</option>
+      <option value="neural">本地神经网络（实验，需下载模型）</option>
+    </select>
+    <div class="msg ok" v-if="ttsMsg">{{ ttsMsg }}</div>
+    <div v-if="modelStat" style="margin-top:10px;">
+      <div class="kv"><span>神经模型（免费离线·163MB）</span>
+        <span :class="{ ok: modelStat.installed }">{{ modelStat.installed ? '✅ 已安装' : (modelStat.download.state === 'downloading' ? '下载中 ' + (modelStat.download.pct||0) + '%' : '未下载') }}</span>
+      </div>
+      <button v-if="!modelStat.installed && modelStat.download.state !== 'downloading'" class="btn" style="margin-top:8px;" @click="downloadModel">一键下载模型</button>
+      <div style="font-size:11px;color:var(--muted);margin-top:6px;">识别（SenseVoice）与本地模型均免费离线；云端音色更自然，需智谱账户有 TTS 额度。</div>
+    </div>
+  </div>
+
+  <div class="card">
     <div class="kv"><span>版本</span><span>1.0.0-dev</span></div>
     <div class="kv"><span>引擎</span><span>pi coding-agent</span></div>
     <div class="kv"><span>语音识别</span><span>SenseVoice 离线</span></div>
-    <div class="kv"><span>工具</span><span>49 项</span></div>
+    <div class="kv"><span>工具</span><span>52 项</span></div>
   </div>
 </template>
 <style scoped>

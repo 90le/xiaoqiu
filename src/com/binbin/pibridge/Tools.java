@@ -15,6 +15,7 @@ import android.database.Cursor;
 import android.hardware.camera2.CameraAccessException;
 import android.hardware.camera2.CameraCharacteristics;
 import android.hardware.camera2.CameraManager;
+import android.media.MediaPlayer;
 import android.media.AudioManager;
 import android.media.MediaScannerConnection;
 import android.net.ConnectivityManager;
@@ -63,8 +64,95 @@ public class Tools {
     public static final Map<String, Tool> REG = new LinkedHashMap<>();
     public static Context ctx;
     private static TextToSpeech tts;
+    private static volatile TextToSpeech miTts;   // 小米大脑引擎（小爱音色）
+    private static volatile boolean miReady = false;
     private static volatile boolean ttsReady = false;
     private static int notifId = 100;
+
+    /** 本地兜底朗读：小米优先，系统其次（主线程投递） */
+    static void speakLocal(final String text) {
+        new Handler(Looper.getMainLooper()).post(new Runnable() { public void run() {
+            if (miReady) {
+                miTts.setPitch(1.1f); miTts.setSpeechRate(1.05f);
+                miTts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "pi");
+            } else if (ttsInit()) {
+                tts.setPitch(1.12f); tts.setSpeechRate(1.05f);
+                tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "pi");
+            }
+        }});
+    }
+
+    private static MediaPlayer cloudPlayer;
+    /** 云 TTS：智谱 GLM-TTS（童童音色）；失败返回 false 由调用方回退 */
+    static boolean cloudSpeak(String text) {
+        try {
+            String key = fastKey();
+            if (key == null) return false;
+            stopCloud();
+            javax.net.ssl.HttpsURLConnection c = (javax.net.ssl.HttpsURLConnection)
+                    new java.net.URL("https://open.bigmodel.cn/api/paas/v4/audio/speech").openConnection();
+            c.setRequestMethod("POST"); c.setConnectTimeout(4000); c.setReadTimeout(25000); c.setDoOutput(true);
+            c.setRequestProperty("Authorization", "Bearer " + key);
+            c.setRequestProperty("Content-Type", "application/json");
+            JSONObject body = new JSONObject().put("model", "glm-tts").put("input", text)
+                    .put("voice", "tongtong").put("response_format", "wav");
+            java.io.OutputStream os = c.getOutputStream();
+            os.write(body.toString().getBytes("UTF-8")); os.close();
+            int code = c.getResponseCode();
+            if (code != 200) {
+                java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+                java.io.InputStream es = c.getErrorStream();
+                byte[] b = new byte[4096]; int n; while (es != null && (n = es.read(b)) > 0) bo.write(b, 0, n);
+                Log.w("PiBridge", "云TTS HTTP " + code + ": " + bo.toString("UTF-8"));
+                return false;
+            }
+            java.io.File out = new java.io.File(ctx.getCacheDir(), "cloud-tts.wav");
+            java.io.FileOutputStream fo = new java.io.FileOutputStream(out);
+            java.io.InputStream is = c.getInputStream();
+            byte[] b = new byte[8192]; int n; while ((n = is.read(b)) > 0) fo.write(b, 0, n);
+            is.close(); fo.close();
+            cloudPlayer = new MediaPlayer();
+            cloudPlayer.setAudioAttributes(new android.media.AudioAttributes.Builder()
+                    .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                    .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH).build());
+            cloudPlayer.setDataSource(out.getAbsolutePath());
+            cloudPlayer.setOnCompletionListener(MediaPlayer::release);
+            cloudPlayer.prepare();
+            cloudPlayer.start();
+            Log.i("PiBridge", "云TTS 播放中 " + out.length() + " 字节");
+            return true;
+        } catch (Exception e) { Log.w("PiBridge", "云TTS 失败: " + e); return false; }
+    }
+    static void stopCloud() {
+        try { if (cloudPlayer != null) { cloudPlayer.stop(); cloudPlayer.release(); cloudPlayer = null; } } catch (Exception ignore) {}
+    }
+
+    static volatile String preferredVoice = null;
+
+    /** 自动挑选好听的中文发音人：讯飞/小米引擎优先，记入缓存 */
+    static void applyPreferredVoice() {
+        try {
+            if (preferredVoice != null) {
+                for (android.speech.tts.Voice v : tts.getVoices())
+                    if (v.getName().equals(preferredVoice)) { tts.setVoice(v); return; }
+                preferredVoice = null;
+            }
+            android.speech.tts.Voice best = null; int bestScore = -1;
+            for (android.speech.tts.Voice v : tts.getVoices()) {
+                String name = v.getName().toLowerCase();
+                String loc = v.getLocale().toString().toLowerCase();
+                if (!loc.startsWith("zh")) continue;
+                int score = 0;
+                if (name.contains("xiaomi")) score += 5;
+                if (name.contains("iflytek") || name.contains("xunfei")) score += 4;
+                if (name.contains("female") || name.contains("girl") || name.contains("xiaomei") || name.contains("wanwan")) score += 3;
+                if (name.contains("network")) score += 1;
+                if (score > bestScore) { bestScore = score; best = v; }
+            }
+            if (best != null) { preferredVoice = best.getName(); tts.setVoice(best);
+                Log.i("PiBridge", "TTS 发音人选定: " + best.getName()); }
+        } catch (Exception e) { Log.w("PiBridge", "选声失败: " + e); }
+    }
 
     /** 读 pi 的 API Key（快脑与慢脑共用同一智谱账号） */
     static String fastKey() {
@@ -108,6 +196,22 @@ public class Tools {
     public static void init(Context c) {
         // TTS 预热：后台线程初始化（ttsInit 的 await 绝不能发生在主线程，否则 onInit 回调死锁）
         new Thread(() -> { boolean r = ttsInit(); Log.i("PiBridge", "TTS 预热: " + (r ? "就绪" : "失败")); }, "tts-prewarm").start();
+        new Thread(() -> {
+            try {
+                final java.util.concurrent.CountDownLatch l = new java.util.concurrent.CountDownLatch(1);
+                miTts = new TextToSpeech(ctx, st -> { miReady = (st == TextToSpeech.SUCCESS); l.countDown(); },
+                        "com.xiaomi.mibrain.speech");
+                l.await(5, java.util.concurrent.TimeUnit.SECONDS);
+                if (miReady) {
+                    miTts.setLanguage(new Locale("zh", "CN"));
+                    StringBuilder sb = new StringBuilder();
+                    android.speech.tts.Voice cur = miTts.getVoice();
+                    for (android.speech.tts.Voice v : miTts.getVoices())
+                        sb.append(v.getName()).append("(").append(v.getLocale()).append(") ");
+                    Log.i("PiBridge", "小米TTS 就绪 当前=" + (cur == null ? "?" : cur.getName()) + " 音色: " + sb);
+                } else Log.i("PiBridge", "小米TTS 初始化失败");
+            } catch (Throwable e) { Log.w("PiBridge", "小米TTS 异常: " + e); }
+        }, "mi-prewarm").start();
         ctx = c;
         if (REG.isEmpty()) reg();
     }
@@ -204,17 +308,115 @@ public class Tools {
         }});
 
         // ═══ TTS / 震动 / 手电 ═══
-        def("tts_speak", "语音朗读（中文 TTS）", schema(props("text", prop("string", "要念的话")), "text"),
+        def("tts_speak", "语音朗读（引擎可配置：auto/cloud/xiaomi/system/neural）", schema(props("text", prop("string", "要念的话")), "text"),
             new H() { public JSONObject run(JSONObject a) throws Exception {
-                if (!ttsInit()) return err("TTS_FAIL", "TTS 引擎初始化失败（手机可能没有中文语音包）");
-                String text = a.optString("text");
-                new Handler(Looper.getMainLooper()).post(new Runnable() { public void run() {
-                    tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "pi");
-                }});
-                return ok("开始朗读");
+                final String text = a.optString("text");
+                String engine = "auto";
+                try { engine = loadCfg().optString("tts_engine", "auto"); } catch (Exception ignore) {}
+                // 神经（实验，需已下载模型）
+                if (("neural".equals(engine) || "auto".equals(engine)) && SherpaTts.isReady()) {
+                    new Thread(() -> SherpaTts.speak(text, 1.0f), "neural-tts").start();
+                    return ok("开始朗读(神经)");
+                }
+                // 云（GLM-TTS 童童，失败自动降级）
+                if ("cloud".equals(engine) || "auto".equals(engine)) {
+                    new Thread(() -> {
+                        if (!cloudSpeak(text)) speakLocal(text);
+                    }, "cloud-tts").start();
+                    return ok("开始朗读(云)");
+                }
+                if ("neural".equals(engine)) { // 选了神经但未就绪 → 本地兜底
+                    speakLocal(text);
+                    return ok("模型未就绪，已用本地引擎");
+                }
+                speakLocal(text);
+                return ok("开始朗读(本地)");
             }});
 
+        def("tts_voices", "列出可用发音人", schema(new JSONObject()), new H() { public JSONObject run(JSONObject a) throws Exception {
+            if (!ttsInit()) return err("TTS_FAIL", "TTS 未初始化");
+            android.speech.tts.Voice defaultV = tts.getVoice();
+            JSONArray list = new JSONArray();
+            for (android.speech.tts.Voice v : tts.getVoices()) {
+                if (!v.getFeatures().contains("notInstalled")) {
+                    JSONObject o = new JSONObject();
+                    o.put("name", v.getName());
+                    o.put("locale", v.getLocale().toString());
+                    list.put(o);
+                }
+            }
+            JSONObject out = new JSONObject();
+            out.put("current", defaultV == null ? "" : defaultV.getName());
+            out.put("voices", list);
+            return ok(out);
+        }});
+
         // ═══ 快脑：闲聊直答/意图分流 ═══
+        def("cfg_set", "写全局配置项", schema(props("key", prop("string", "键"), "value", prop("string", "值")), "key", "value"),
+            new H() { public JSONObject run(JSONObject a) throws Exception {
+                JSONObject c = loadCfg(); c.put(a.getString("key"), a.getString("value")); saveCfg(c);
+                return ok("已保存");
+            }});
+        def("cfg_get", "读全局配置", schema(new JSONObject()), new H() { public JSONObject run(JSONObject a) throws Exception {
+            return ok(loadCfg());
+        }});
+        def("tts_model_download", "一键下载本地神经TTS模型(melo中文，约163MB，需几分钟)", schema(new JSONObject()), new H() { public JSONObject run(JSONObject a) throws Exception {
+            File dir = new File(ctx.getFilesDir(), "sherpa/tts");
+            if (new File(dir, "vits-melo-tts-zh_en/model.onnx").isFile()
+                    || new File(dir, "vits-melo-tts-zh_en/model.int8.onnx").isFile())
+                return ok("模型已存在，无需下载");
+            new Thread(() -> {
+                try {
+                    write(new File(dir, "download-status.json"), new JSONObject().put("state", "downloading").put("pct", 0).toString());
+                    File tgt = new File(dir, "melo.tar.bz2");
+                    String[] urls = {
+                        "https://github.com/k2-fsa/sherpa-onnx/releases/download/tts-models/vits-melo-tts-zh_en.tar.bz2",
+                        "https://hf-mirror.com/csukuangfj/vits-melo-tts-zh_en/resolve/main/model.onnx"
+                    };
+                    boolean okDl = false;
+                    try {
+                        java.net.URL u = new java.net.URL(urls[0]);
+                        java.net.HttpURLConnection c = (java.net.HttpURLConnection) u.openConnection();
+                        c.setConnectTimeout(8000); c.setReadTimeout(60000);
+                        long total = c.getContentLength();
+                        java.io.InputStream is = c.getInputStream();
+                        java.io.FileOutputStream fo = new java.io.FileOutputStream(tgt);
+                        byte[] b = new byte[65536]; long got = 0; int n;
+                        while ((n = is.read(b)) > 0) { fo.write(b, 0, n); got += n;
+                            if (total > 0 && got % (10*1024*1024) < b.length)
+                                write(new File(dir, "download-status.json"), new JSONObject().put("state","downloading").put("pct", got*100/total).toString());
+                        }
+                        is.close(); fo.close(); okDl = tgt.length() > 100000000;
+                    } catch (Exception e) { Log.w("PiBridge", "下载失败: " + e); }
+                    if (!okDl) { write(new File(dir, "download-status.json"), new JSONObject().put("state", "error").toString()); return; }
+                    // 用 bootstrap 的 tar 解包（App 可执行自身数据目录二进制）
+                    ProcessBuilder pb = new ProcessBuilder(ctx.getFilesDir() + "/usr/bin/tar", "xjf", tgt.getAbsolutePath(), "-C", dir.getAbsolutePath());
+                    pb.redirectErrorStream(true);
+                    Process p = pb.start();
+                    int code = p.waitFor();
+                    Log.i("PiBridge", "神经TTS 模型解包: exit=" + code);
+                    write(new File(dir, "download-status.json"),
+                            new JSONObject().put("state", code == 0 ? "done" : "error").put("pct", 100).toString());
+                    tgt.delete();
+                } catch (Throwable e) {
+                    Log.w("PiBridge", "模型下载异常: " + e);
+                    try { write(new File(dir, "download-status.json"), new JSONObject().put("state", "error").toString()); } catch (Exception ignore) {}
+                }
+            }, "tts-dl").start();
+            return ok("下载已后台启动，用 tts_model_status 查进度");
+        }});
+        def("tts_model_status", "神经TTS模型状态", schema(new JSONObject()), new H() { public JSONObject run(JSONObject a) throws Exception {
+            File dir = new File(ctx.getFilesDir(), "sherpa/tts");
+            File m = new File(dir, "vits-melo-tts-zh_en/model.onnx");
+            File m8 = new File(dir, "vits-melo-tts-zh_en/model.int8.onnx");
+            JSONObject o = new JSONObject();
+            o.put("installed", m.isFile() || m8.isFile());
+            o.put("sizeMB", (m.isFile() ? m.length() : m8.isFile() ? m8.length() : 0) / 1048576);
+            String st = "{}"; try { st = readFile(new File(dir, "download-status.json")); } catch (Exception ignore) {}
+            o.put("download", new JSONObject(st));
+            return ok(o);
+        }});
+
         def("chat_fast", "快脑：闲聊秒答，任务则返回 task 交慢脑(pi)", schema(props("q", prop("string", "用户的话")), "q"),
             new H() { public JSONObject run(JSONObject a) throws Exception {
                 String q = a.optString("q");
@@ -642,16 +844,17 @@ public class Tools {
                 String nat = ctx.getApplicationInfo().nativeLibraryDir;
                 System.load(nat + "/libonnxruntime.so");
                 System.load(nat + "/libsherpa-onnx-jni.so");
+                com.k2fsa.sherpa.onnx.OfflineSenseVoiceModelConfig sv =
+                        new com.k2fsa.sherpa.onnx.OfflineSenseVoiceModelConfig(
+                                mf.getAbsolutePath(), "", false, new com.k2fsa.sherpa.onnx.QnnConfig());
                 com.k2fsa.sherpa.onnx.OfflineModelConfig mc = new com.k2fsa.sherpa.onnx.OfflineModelConfig();
-                mc.senseVoice = new com.k2fsa.sherpa.onnx.OfflineSenseVoiceModelConfig(
-                        mf.getAbsolutePath(), "", false, new com.k2fsa.sherpa.onnx.QnnConfig());
-                mc.tokens = tk.getAbsolutePath();
-                mc.numThreads = 2;
-                android.util.Log.i("PiBridge", "STT-DIAG java侧 tokens=" + mc.tokens + " model=" + mc.senseVoice.model);
-                mc.debug = true;  // 临时：native 打印收到的配置
+                mc.setSenseVoice(sv);
+                mc.setTokens(tk.getAbsolutePath());
+                mc.setNumThreads(2);
+                mc.setDebug(true);
                 com.k2fsa.sherpa.onnx.OfflineRecognizerConfig cfg = new com.k2fsa.sherpa.onnx.OfflineRecognizerConfig();
-                cfg.modelConfig = mc;
-                cfg.decodingMethod = "greedy_search";
+                cfg.setModelConfig(mc);
+                cfg.setDecodingMethod("greedy_search");
                 sttRec = new com.k2fsa.sherpa.onnx.OfflineRecognizer(null, cfg);
             }
             float[] samples = WavUtil.readWav(file);
@@ -830,6 +1033,15 @@ public class Tools {
     /** IntentFilter 不能用匿名类继承简写，补个小类 */
 
     static com.k2fsa.sherpa.onnx.OfflineRecognizer sttRec;
+
+    /** 全局配置 KV（files/cfg.json）：引擎选择等 */
+    static JSONObject loadCfg() {
+        try { return new JSONObject(readFile(new File(ctx.getFilesDir(), "cfg.json"))); }
+        catch (Exception e) { return new JSONObject(); }
+    }
+    static void saveCfg(JSONObject c) {
+        try { write(new File(ctx.getFilesDir(), "cfg.json"), c.toString()); } catch (Exception ignore) {}
+    }
 
     static String readFile(File f) throws Exception {
         java.io.BufferedReader br = new java.io.BufferedReader(new java.io.InputStreamReader(new java.io.FileInputStream(f), "UTF-8"));
