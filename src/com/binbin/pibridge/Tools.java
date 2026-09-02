@@ -559,9 +559,14 @@ public class Tools {
         def("wake_service", "全局唤醒词开关(息屏喊小丘)", schema(props("action", prop("string", "start/stop/status")), "action"),
             new H() { public JSONObject run(JSONObject a) throws Exception {
                 String act = a.optString("action", "status");
-                if ("start".equals(act)) { WakeService.start(ctx); return ok(WakeService.isRunning() ? "已启动" : "启动中"); }
-                if ("stop".equals(act)) { WakeService.stop(ctx); return ok("已停止"); }
-                return ok(new JSONObject().put("running", WakeService.isRunning()));
+                if ("start".equals(act)) {
+                    WakeService.start(ctx);
+                    boolean up = false;
+                    for (int i = 0; i < 10 && !up; i++) { Thread.sleep(500); up = WakeService.readState(ctx); }
+                    return ok(new JSONObject().put("running", up));
+                }
+                if ("stop".equals(act)) { WakeService.stop(ctx); WakeService.writeState(ctx, false); return ok(new JSONObject().put("running", false)); }
+                return ok(new JSONObject().put("running", WakeService.readState(ctx)));
             }});
 
         def("cfg_set", "写全局配置项", schema(props("key", prop("string", "键"), "value", prop("string", "值")), "key", "value"),

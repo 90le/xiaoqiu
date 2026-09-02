@@ -44,6 +44,22 @@ public class WakeService extends Service {
     }
     private static final android.os.Handler MAIN = new android.os.Handler(Looper.getMainLooper());
 
+    /** 唤醒状态落文件：:kws 进程写，主进程读（跨进程唯一可信来源） */
+    static void writeState(Context c, boolean on) {
+        try {
+            Tools.write(new File(c.getFilesDir(), "wake-state.json"),
+                    new org.json.JSONObject().put("running", on).put("ts", System.currentTimeMillis()).toString());
+        } catch (Exception ignore) {}
+    }
+    static boolean readState(Context c) {
+        try {
+            org.json.JSONObject o = new org.json.JSONObject(
+                    new String(java.nio.file.Files.readAllBytes(new File(c.getFilesDir(), "wake-state.json").toPath()), "UTF-8"));
+            if (!o.optBoolean("running")) return false;
+            return System.currentTimeMillis() - o.optLong("ts") < 20000; // 心跳超20秒视为已死
+        } catch (Exception e) { return false; }
+    }
+
     @Override public IBinder onBind(Intent i) { return null; }
 
     @Override public void onCreate() {
@@ -59,6 +75,7 @@ public class WakeService extends Service {
                 .setOngoing(true).build();
         startForeground(2001, n);
         running = true;
+        writeState(this, true);
         new Thread(this::loop, "wake-kws").start();
     }
 
@@ -88,6 +105,7 @@ public class WakeService extends Service {
                         if (n <= 0) break;
                         got += n;
                     }
+                    writeState(this, true); // 心跳
                     if (!running || got < total) { Thread.sleep(200); continue; }
                     byte[] pcm = new byte[got * 2];
                     for (int i = 0; i < got; i++) { pcm[i*2] = (byte)(buf[i] & 255); pcm[i*2+1] = (byte)((buf[i] >> 8) & 255); }
@@ -164,5 +182,5 @@ public class WakeService extends Service {
         } catch (Exception e) { Log.w("PiBridge", "execCommand: " + e); }
     }
 
-    @Override public void onDestroy() { running = false; super.onDestroy(); }
+    @Override public void onDestroy() { running = false; writeState(this, false); super.onDestroy(); }
 }
