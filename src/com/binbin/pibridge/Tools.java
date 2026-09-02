@@ -367,6 +367,28 @@ public class Tools {
         } catch (Exception e) { return null; }
     }
 
+    // ═══ sysctl 系统开关辅助 ═══
+    static JSONObject sysctlReadAll(java.util.regex.Pattern p, String out) throws Exception { return null; }
+    static String sysctlVal(String out, String key) {
+        for (String pair : out.split("[;\\s]+")) {
+            int i = pair.indexOf('=');
+            if (i > 0 && pair.substring(0, i).trim().equals(key)) return pair.substring(i + 1).trim();
+        }
+        return "?";
+    }
+    static final String SYSCTL_DUMP =
+        "echo \"wifi=$(settings get global wifi_on);bt=$(settings get global bluetooth_on);"
+        + "airplane=$(settings get global airplane_mode_on);rotate=$(settings get system accelerometer_rotation);"
+        + "location=$(settings get secure location_mode);zen=$(settings get global zen_mode);"
+        + "bauto=$(settings get system screen_brightness_mode);mobile_data=$(settings get global mobile_data)\"";
+    static JSONObject sysctlReadAll(String out) throws Exception {
+        JSONObject o = new JSONObject();
+        o.put("wifi", sysctlVal(out, "wifi")).put("bluetooth", sysctlVal(out, "bt")).put("airplane", sysctlVal(out, "airplane"));
+        o.put("rotate", sysctlVal(out, "rotate")).put("location", sysctlVal(out, "location")).put("dnd", sysctlVal(out, "zen"));
+        o.put("brightnessAuto", sysctlVal(out, "bauto")).put("mobileData", sysctlVal(out, "mobile_data"));
+        return o;
+    }
+
     static JSONObject ok(Object data) {
         try { return new JSONObject().put("ok", true).put("data", data == null ? JSONObject.NULL : data).put("error", JSONObject.NULL); }
         catch (Exception e) { return err("INTERNAL", e.toString()); }
@@ -641,6 +663,36 @@ public class Tools {
                 return c.optBoolean("ok", false) ? ok(act + " 完成@副屏" + VdManager.displayId()) : err("INJECT_FAIL", String.valueOf(c));
             }});
 
+        // ═══ 系统开关静默控制（L1：免界面、秒级、带回读校验）═══
+        def("sysctl", "系统开关静默控制：read 读全部状态；wifi/bluetooth/rotate/location/dnd/brightness_auto 切换（on=true开 false关）。命令级实现不开界面，执行后回读校验",
+            schema(props("action", prop("string", "read/wifi/bluetooth/rotate/location/dnd/brightness_auto"),
+                    "on", prop("boolean", "true=开 false=关")), "action"),
+            new H() { public JSONObject run(JSONObject a) throws Exception {
+                String act = a.optString("action", "read");
+                if ("read".equals(act)) {
+                    JSONObject c = (JSONObject) Tools.call("l2_exec", new JSONObject().put("cmd", SYSCTL_DUMP));
+                    return ok(sysctlReadAll(c.optString("data")));
+                }
+                boolean on = a.optBoolean("on");
+                String set, getNs, getKey, want;
+                switch (act) {
+                    case "wifi": set = "svc wifi " + (on ? "enable" : "disable"); getNs = "global"; getKey = "wifi_on"; want = on ? "1" : "0"; break;
+                    case "bluetooth": set = "svc bluetooth " + (on ? "enable" : "disable"); getNs = "global"; getKey = "bluetooth_on"; want = on ? "1" : "0"; break;
+                    case "rotate": set = "settings put system accelerometer_rotation " + (on ? "1" : "0"); getNs = "system"; getKey = "accelerometer_rotation"; want = on ? "1" : "0"; break;
+                    case "location": set = "settings put secure location_mode " + (on ? "3" : "0"); getNs = "secure"; getKey = "location_mode"; want = on ? "3" : "0"; break;
+                    case "dnd": set = "settings put global zen_mode " + (on ? "1" : "0"); getNs = "global"; getKey = "zen_mode"; want = on ? "1" : "0"; break;
+                    case "brightness_auto": set = "settings put system screen_brightness_mode " + (on ? "1" : "0"); getNs = "system"; getKey = "screen_brightness_mode"; want = on ? "1" : "0"; break;
+                    default: return err("BAD_ACTION", "未知开关: " + act);
+                }
+                Tools.call("l2_exec", new JSONObject().put("cmd", set + "; sleep 1; settings get " + getNs + " " + getKey));
+                Thread.sleep(700);
+                JSONObject c2 = (JSONObject) Tools.call("l2_exec", new JSONObject().put("cmd", SYSCTL_DUMP));
+                JSONObject state = sysctlReadAll(c2.optString("data"));
+                String got = act.equals("brightness_auto") ? state.optString("brightnessAuto") : state.optString(act);
+                if (got.equals(want)) return ok(new JSONObject().put("applied", true).put(act, want).put("state", state));
+                return err("VERIFY_FAIL", "已执行但回读不符 期望=" + want + " 实际=" + got + " 状态=" + state);
+            }});
+
         def("apps_list", "列出已装应用（可按关键词过滤）",
             schema(props("filter", prop("string", "包名/应用名包含关键词"), "limit", prop("number", "上限默认 50"))), new H() { public JSONObject run(JSONObject a) throws Exception {
                 PackageManager pm = ctx.getPackageManager();
@@ -901,8 +953,10 @@ public class Tools {
             try { return ok(new JSONObject().put("count", nodes.length()).put("nodes", nodes)); }
             catch (Exception e) { return err("INTERNAL", e.toString()); }
         }});
-        def("ui_set_text", "直接设置当前焦点输入框的文本（无需剪贴板粘贴菜单）", schema(props("text", prop("string", "要设置的文本")), "text"), new H() { public JSONObject run(JSONObject a) {
-            String r = AdbService.setText(a.optString("text", ""));
+        def("ui_set_text", "直接设置焦点输入框文本（display=0 主屏；传副屏 displayId 可在副屏输入，配合 vd）",
+            schema(props("text", prop("string", "要设置的文本"), "display", prop("number", "屏幕ID 默认0主屏")), "text"), new H() { public JSONObject run(JSONObject a) {
+            int disp = a.optInt("display", 0);
+            String r = disp > 0 ? AdbService.setTextOnDisplay(disp, a.optString("text", "")) : AdbService.setText(a.optString("text", ""));
             return r.equals("已设置") ? ok(r) : err("SET_FAIL", r);
         }});
         def("ui_swipe", "模拟滑动", schema(props("x1", prop("number", "起x"), "y1", prop("number", "起y"),

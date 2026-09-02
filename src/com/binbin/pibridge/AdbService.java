@@ -208,6 +208,41 @@ public class AdbService extends AccessibilityService {
 
     // ========== 文本直设（对可编辑节点 ACTION_SET_TEXT，绕过粘贴菜单） ==========
 
+    /** 副屏文字输入：在指定副屏找可编辑节点（优先焦点）ACTION_SET_TEXT */
+    public static String setTextOnDisplay(int displayId, String text) {
+        if (inst == null) return "辅助服务未开启";
+        try {
+            Object arr = AccessibilityService.class.getMethod("getWindowsOnAllDisplays").invoke(inst);
+            if (!(arr instanceof android.util.SparseArray)) return "设备不支持";
+            Object l = ((android.util.SparseArray<?>) arr).get(displayId);
+            if (!(l instanceof java.util.List)) return "该屏无窗口";
+            AccessibilityNodeInfo anyEditable = null, focusedEditable = null;
+            for (AccessibilityWindowInfo w : (java.util.List<AccessibilityWindowInfo>) l) {
+                AccessibilityNodeInfo r = w.getRoot();
+                if (r != null) {
+                    if (focusedEditable == null) focusedEditable = findEditable(r, 0, true);
+                    if (anyEditable == null) anyEditable = findEditable(r, 0, false);
+                }
+            }
+            AccessibilityNodeInfo target = focusedEditable != null ? focusedEditable : anyEditable;
+            if (target == null) return "未找到可编辑节点";
+            android.os.Bundle args = new android.os.Bundle();
+            args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text);
+            return target.performAction(AccessibilityNodeInfo.ACTION_SET_TEXT, args) ? "已设置" : "节点拒绝设置";
+        } catch (Throwable e) { return "异常: " + e; }
+    }
+    private static AccessibilityNodeInfo findEditable(AccessibilityNodeInfo n, int d, boolean needFocus) {
+        if (n == null || d > 25) return null;
+        try {
+            if (n.isEditable() && (!needFocus || n.isFocused())) return n;
+            for (int i = 0; i < n.getChildCount(); i++) {
+                AccessibilityNodeInfo r = findEditable(n.getChild(i), d + 1, needFocus);
+                if (r != null) return r;
+            }
+        } catch (Exception ignore) {}
+        return null;
+    }
+
     public static String setText(String text) {
         if (inst == null) return "辅助服务未开启";
         AccessibilityNodeInfo root = inst.getRootInActiveWindow();
