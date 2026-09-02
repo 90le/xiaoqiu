@@ -86,12 +86,12 @@ public class MainActivity extends Activity {
         bar.setPadding(6, 6, 6, 6);
         // 🎙 语音按钮（大）
         micBtn = new Button(this);
-        mic.setText("🎙");
+        micBtn.setText("🎙");
         micBtn.setBackgroundColor(Color.parseColor("#3E7C59"));
         micBtn.setTextColor(Color.WHITE);
         micBtn.setOnClickListener(v -> { if (!recording) voiceFlow(); });
         micBtn.setTextSize(18);
-        bar.addView(mic, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.9f));
+        bar.addView(micBtn, new LinearLayout.LayoutParams(0, ViewGroup.LayoutParams.WRAP_CONTENT, 0.9f));
         btns = new Button[TABS.length];
         for (int i = 0; i < TABS.length; i++) {
             final int idx = i;
