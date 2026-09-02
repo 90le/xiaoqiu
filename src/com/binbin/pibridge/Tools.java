@@ -637,6 +637,11 @@ public class Tools {
                 if ("launch".equals(act)) {
                     JSONObject r = VdManager.launch(ctx, a.optString("pkg"));
                     if (r != null) return r.has("error") ? err(r.getString("error"), r.optString("msg")) : ok(r);
+                    // 锁屏检测：锁屏时系统禁止App渲染，诚实报错
+                    JSONObject kg = (JSONObject) Tools.call("l2_exec", new JSONObject().put("cmd",
+                            "dumpsys window | grep mDreamingLockscreen"));
+                    if (String.valueOf(kg).contains("true"))
+                        return err("LOCKED", "设备锁屏中，系统禁止后台App渲染。请解锁手机后重试");
                     // App内通道失败 → L2 shell 兜底（发射后校验落点，防污染主屏）
                     VdManager.track(a.optString("pkg"));
                     int did = VdManager.displayId();
@@ -1003,6 +1008,81 @@ public class Tools {
             }
             return ok(new JSONObject().put("found", false).put("hint", "超时未出现，可能页面未加载或文本不符"));
         }});
+        def("notify_read", "读取捕获的通知（微信/短信/物流等，最新在前）。首次使用需授权一次（返回 HINT 时转告用户去系统设置→通知使用权 勾选小丘）",
+            schema(props("limit", prop("number", "条数 默认20"), "pkg", prop("string", "按包名过滤 如 com.tencent.mm"))), new H() { public JSONObject run(JSONObject a) throws Exception {
+            File f = new File(ctx.getFilesDir(), "notify-log.json");
+            java.util.List<org.json.JSONObject> list = new java.util.ArrayList<>();
+            try {
+                JSONArray arr = new JSONArray(new String(java.nio.file.Files.readAllBytes(f.toPath()), "UTF-8"));
+                for (int i = 0; i < arr.length(); i++) list.add(arr.optJSONObject(i));
+            } catch (Exception ignore) {}
+            String pf = a.optString("pkg", "");
+            int limit = a.optInt("limit", 20);
+            JSONArray out = new JSONArray();
+            for (int i = list.size() - 1; i >= 0 && out.length() < limit; i--) {
+                JSONObject o = list.get(i);
+                if (o == null) continue;
+                if (!pf.isEmpty() && !o.optString("pkg","").contains(pf)) continue;
+                out.put(o);
+            }
+            if (list.isEmpty()) return err("HINT", "暂无捕获通知。请用户到 系统设置→通知使用权 允许小丘（或让用户在L2执行授权后发条通知测试）");
+            return ok(new JSONObject().put("count", out.length()).put("items", out));
+        }});
+        def("notify_clear", "清空通知捕获缓冲", schema(props()), new H() { public JSONObject run(JSONObject a) {
+            try { Tools.write(new File(ctx.getFilesDir(), "notify-log.json"), "[]"); } catch (Exception ignore) {}
+            return ok("已清空");
+        }});
+        def("ui_list_extract", "列表批量抽取（信息流/商品/搜索结果/聊天记录）：自动滚动+树合并去重，返回文本清单+首见坐标",
+            schema(props("display", prop("number", "屏幕ID 默认0主屏"),
+                    "max_swipes", prop("number", "最多滑动次数 默认5"),
+                    "contains", prop("string", "只保留含此关键词的条目 可空"))), new H() { public JSONObject run(JSONObject a) throws Exception {
+            int disp = a.optInt("display", 0);
+            int maxS = Math.min(a.optInt("max_swipes", 5), 12);
+            String kw = a.optString("contains", "");
+            java.util.LinkedHashSet<String> seen = new java.util.LinkedHashSet<>();
+            JSONArray items = new JSONArray();
+            for (int round = 0; round <= maxS; round++) {
+                JSONArray nodes = AdbService.readTree(disp);
+                if (nodes != null) for (int k = 0; k < nodes.length(); k++) {
+                    JSONObject n = nodes.optJSONObject(k);
+                    if (n == null || !n.has("text")) continue;
+                    String txt = n.optString("text").replace("\n", " ").trim();
+                    if (txt.length() < 2 || seen.contains(txt)) continue;
+                    if (!kw.isEmpty() && !txt.contains(kw)) continue;
+                    seen.add(txt);
+                    JSONObject item = new JSONObject();
+                    try { item.put("text", txt).put("xy", n.optString("xy")); } catch (Exception ignore) {}
+                    items.put(item);
+                }
+                if (round == maxS) break;
+                boolean moved;
+                if (disp == 0) moved = AdbService.swipe(640, 2000, 640, 1000, 250);
+                else {
+                    JSONObject c = (JSONObject) Tools.call("l2_exec", new JSONObject().put("cmd",
+                            "input -d " + disp + " swipe 450 1500 450 750"));
+                    moved = c.optBoolean("ok", false);
+                }
+                if (!moved) break;
+                try { Thread.sleep(900); } catch (Exception ignore) {}
+            }
+            return ok(new JSONObject().put("items", items).put("count", items.length()).put("pkg", AdbService.pkgOf(disp)));
+        }});
+        def("ui_page_info", "页面速览：前台包名/节点数/主要文本（快速判断当前在哪）",
+            schema(props("display", prop("number", "屏幕ID 默认0主屏"))), new H() { public JSONObject run(JSONObject a) throws Exception {
+            int disp = a.optInt("display", 0);
+            JSONArray nodes = AdbService.readTree(disp);
+            JSONObject o = new JSONObject();
+            o.put("pkg", AdbService.pkgOf(disp));
+            o.put("nodes", nodes == null ? 0 : nodes.length());
+            JSONArray texts = new JSONArray();
+            if (nodes != null) for (int k = 0; k < nodes.length() && texts.length() < 20; k++) {
+                JSONObject n = nodes.optJSONObject(k);
+                if (n != null && n.has("text")) texts.put(n.optString("text"));
+            }
+            o.put("texts", texts);
+            return ok(o);
+        }});
+
         def("ui_set_text", "直接设置焦点输入框文本（display=0 主屏；传副屏 displayId 可在副屏输入，配合 vd）",
             schema(props("text", prop("string", "要设置的文本"), "display", prop("number", "屏幕ID 默认0主屏")), "text"), new H() { public JSONObject run(JSONObject a) {
             int disp = a.optInt("display", 0);

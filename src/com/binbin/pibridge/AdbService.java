@@ -115,8 +115,20 @@ public class AdbService extends AccessibilityService {
     public static JSONArray readTree() { return readTree(0); }
 
     private static final android.util.SparseArray<JSONArray> lastTree = new android.util.SparseArray<>();
+    private static final android.util.SparseArray<String> lastPkg = new android.util.SparseArray<>();
 
     /** 取某屏上次读取树中编号为 idx 的节点信息（含 xy） */
+    public static String pkgOf(int displayId) { return lastPkg.get(displayId, "?"); }
+    public static int[] lastBounds(int displayId) {
+        JSONArray arr = lastTree.get(displayId, null);
+        if (arr == null || arr.length() == 0) return new int[]{0, 0};
+        JSONObject first = arr.optJSONObject(0);
+        if (first == null) return new int[]{0, 0};
+        try {
+            String[] p = first.optString("xy").split(" ")[0].split(",");
+            return new int[]{Integer.parseInt(p[0]), Integer.parseInt(p[1])};
+        } catch (Exception e) { return new int[]{0, 0}; }
+    }
     public static JSONObject nodeByIndex(int displayId, int idx) {
         JSONArray arr = lastTree.get(displayId, null);
         if (arr == null) return null;
@@ -175,7 +187,10 @@ public class AdbService extends AccessibilityService {
                         for (AccessibilityWindowInfo w : wins) {
                             AccessibilityNodeInfo r = null;
                             try { r = w.getRoot(); } catch (Throwable e) { diag += " root异常:" + e; }
-                            if (r != null) walk(r, out, 0);
+                            if (r != null) {
+                                try { lastPkg.put(displayId, String.valueOf(r.getPackageName())); } catch (Exception ignore) {}
+                                walk(r, out, 0);
+                            }
                         }
                     }
                     diag += " 节点数:" + out.length();
@@ -186,6 +201,7 @@ public class AdbService extends AccessibilityService {
             }
             AccessibilityNodeInfo root = inst.getRootInActiveWindow();
             if (root == null) return null;
+            try { lastPkg.put(0, String.valueOf(root.getPackageName())); } catch (Exception ignore) {}
             walk(root, out, 0);
             if (out.length() > 0) lastTree.put(0, out);
             return out;
