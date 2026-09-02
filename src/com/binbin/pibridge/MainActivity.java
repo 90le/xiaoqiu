@@ -286,6 +286,7 @@ public class MainActivity extends Activity {
         if (VoiceCore.running) return;
         if (currentTab != 0) switchTab(0);
         voiceCancel.setVisibility(View.VISIBLE);
+        VoiceCore.nextStandby = false; // App 内=对话模式（无需唤醒词）
         VoiceCore.start(new VoiceCore.Listener() {
             public void onState(String st, String info) {
                 switch (st) {

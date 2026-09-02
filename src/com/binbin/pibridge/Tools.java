@@ -148,11 +148,11 @@ public class Tools {
 
     /** 口语化改写：长文本/含格式 → 短口语朗读稿；短文本原样返回 */
     static String voiceFriendly(String text) {
-        String clean = text.replaceAll("```[\\s\\S]*?```", "代码略。").replaceAll("[#*`>\\[\\]]", "").replaceAll("\\n+", "，").trim();
+        String clean = text.replaceAll("```[\\s\\S]*?```", "，代码部分从略，").replaceAll("[#*`>\\[\\]]", "").replaceAll("\\n+", "，").trim();
         boolean markdowny = text.contains("```") || text.contains("\n- ") || text.contains("\n#") || text.contains("**");
-        if (clean.length() <= 80 && !markdowny) return clean;
-        String r = llmRaw("把内容改写成适合朗读的中文口语短文：30到100字，口语化，去掉所有格式符号、emoji和列表，保留关键数字和结论。只输出改写结果。",
-                clean.length() > 800 ? clean.substring(0, 800) : clean);
+        if (!markdowny && clean.length() <= 200) return clean;
+        String r = llmRaw("把内容改写成适合朗读的中文口语。要求：保留全部关键信息和数字，不遗漏要点；去掉所有格式符号、emoji和列表标记；句子通顺自然；篇幅以不遗漏信息为准，尽量精炼。只输出改写结果。",
+                clean.length() > 1000 ? clean.substring(0, 1000) : clean);
         return (r == null || r.isEmpty()) ? clean : r;
     }
 

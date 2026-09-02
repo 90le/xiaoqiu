@@ -13,13 +13,25 @@ public class VoiceCore {
     }
 
     public static volatile boolean running = false;
+    public static volatile boolean standby = false; // 待命模式：需"小丘"唤醒词才响应
     private static Listener cb;
     private static int gen = 0;
     private static int miss = 0;
 
-    public static void start(Listener l) {
+    /** 唤醒词（多样性：单喊/叠喊/问候式）；返回剥离唤醒词后的指令，null=未唤醒 */
+    static String stripWake(String h) {
+        String norm = h.replaceAll("[，。！？,.!?、\\s]+", "");
+        String[] wakes = {"小丘小丘", "你好小丘", "嘿小丘", "嗨小丘", "小丘"};
+        for (String w : wakes) if (norm.startsWith(w)) return norm.substring(w.length());
+        return null;
+    }
+
+    public static volatile boolean nextStandby = false; // 下一次 start 的模式（供调用方静态设置）
+    public static void start(Listener l) { start(l, nextStandby); }
+
+    public static void start(Listener l, boolean standbyMode) {
         if (running) return;
-        cb = l; running = true; gen++; miss = 0;
+        cb = l; running = true; gen++; miss = 0; standby = standbyMode;
         emit("listen", "");
         final int g = gen;
         new Thread(() -> {
@@ -47,7 +59,7 @@ public class VoiceCore {
         catch (Exception e) { exit(g, "录音出错: " + e.getMessage()); return; }
         if (!running || g != gen) return;
         if (wav == null) {
-            if (++miss >= 2) { exit(g, "没听到说话，对话结束"); return; }
+            if (++miss >= (standby ? 4 : 2)) { exit(g, "没听到说话，对话结束"); return; }
             round(g); return;
         }
         miss = 0;
@@ -57,11 +69,22 @@ public class VoiceCore {
             if (env != null && env.optBoolean("ok")) heard = env.optString("data", "").trim();
         } catch (Exception ignore) {}
         if (!running || g != gen) return;
-        final String h = heard;
+        String h = heard;
         if (h.isEmpty()) { round(g); return; }
-        if (h.matches(".*(结束对话|退出对话|停止对话).*")) { exit(g, "好的，对话结束"); return; }
-        emit("think", h);
-        new Thread(() -> think(g, h), "vc-think").start();
+        if (standby) {
+            String rest = stripWake(h);
+            if (rest == null) { emit("listen", "未唤醒"); round(g); return; } // 无唤醒词→忽略继续听
+            if (rest.isEmpty()) { // 只喊了名字 → 应答
+                emit("speak", "在呢");
+                new Thread(() -> { try { Tools.call("tts_speak", new JSONObject().put("text", "在呢，请讲。")); } catch (Exception ignore) {} }).start();
+                return;
+            }
+            h = rest;
+        }
+        final String cmd = h;
+        if (cmd.matches(".*(结束对话|退出对话|停止对话).*")) { exit(g, "好的，对话结束"); return; }
+        emit("think", cmd);
+        new Thread(() -> think(g, cmd), "vc-think").start();
     }
 
     private static void think(final int g, final String heard) {

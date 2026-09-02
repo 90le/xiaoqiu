@@ -150,7 +150,8 @@ public class FloatBall {
                                 return true;
                             }
                             if (longP) {
-                                // 原地连续语音对话：不跳转 App，球变色即状态
+                                // 原地待命对话：不跳转 App；说"小丘，xxx"直接干活
+                                VoiceCore.nextStandby = true; // 悬浮球=待命模式（需"小丘"唤醒）
                                 VoiceCore.start(new VoiceCore.Listener() {
                                     public void onState(String st, String info) {
                                         android.os.Handler h = new android.os.Handler(android.os.Looper.getMainLooper());
