@@ -106,7 +106,7 @@ public class MainActivity extends Activity {
         voiceSend.setTextColor(Color.WHITE);
         voiceSend.setBackgroundColor(Color.parseColor("#E8853D"));
         voiceSend.setPadding(20, 8, 20, 8);
-        voiceSend.setOnClickListener(v -> { voiceStrip.setVisibility(View.GONE); injectPrompt(pendingHeard, true); });
+        voiceSend.setOnClickListener(v -> { voiceStrip.setVisibility(View.GONE); fastOrSlow(pendingHeard); });
         voiceStrip.addView(voiceSend, new LinearLayout.LayoutParams(ViewGroup.LayoutParams.WRAP_CONTENT, ViewGroup.LayoutParams.WRAP_CONTENT));
         page.addView(voiceStrip, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT));
@@ -249,6 +249,34 @@ public class MainActivity extends Activity {
     }
 
     private void stopVoiceCapture() { stopFlag.set(true); }
+
+    /** 两脑分流：快脑能答秒答+朗读；任务才交给慢脑(pi) */
+    private void fastOrSlow(String q) {
+        final String query = q;
+        voiceMsg("🤔 想想…");
+        voiceStrip.setVisibility(View.VISIBLE);
+        new Thread(() -> {
+            String answer = null;
+            try {
+                JSONObject env = Tools.call("chat_fast", new JSONObject().put("q", query));
+                if (env.optBoolean("ok")) {
+                    JSONObject d = env.optJSONObject("data");
+                    if (d != null && "chat".equals(d.optString("type"))) answer = d.optString("answer", "");
+                }
+            } catch (Exception ignored) {}
+            final String fAns = answer;
+            runOnUiThread(() -> {
+                if (fAns == null || fAns.isEmpty()) {
+                    injectPrompt(query, true); // 慢脑接管 + 完成播报
+                } else {
+                    pendingHeard = fAns;
+                    voiceMsg("💬 " + fAns);
+                    new Thread(() -> { try { Tools.call("tts_speak", new JSONObject().put("text", fAns)); } catch (Exception ignored) {} }, "tts-fast").start();
+                    voiceStrip.postDelayed(() -> voiceStrip.setVisibility(View.GONE), 10000);
+                }
+            });
+        }, "fast-brain").start();
+ }
 
     private void voiceMsg(String msg) {
         runOnUiThread(() -> { voiceMsg.setText(msg); voiceStrip.setVisibility(View.VISIBLE); });

@@ -66,6 +66,21 @@ public class Tools {
     private static volatile boolean ttsReady = false;
     private static int notifId = 100;
 
+    /** 读 pi 的 API Key（快脑与慢脑共用同一智谱账号） */
+    static String fastKey() {
+        try {
+            java.io.File f = new java.io.File(ctx.getFilesDir(), "home/.pi/agent/auth.json");
+            if (!f.isFile()) return null;
+            java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+            java.io.FileInputStream fi = new java.io.FileInputStream(f);
+            byte[] b = new byte[4096]; int n; while ((n = fi.read(b)) > 0) bo.write(b, 0, n);
+            fi.close();
+            JSONObject auth = new JSONObject(bo.toString("UTF-8"));
+            JSONObject prov = auth.optJSONObject("zai-coding-cn");
+            return prov == null ? null : prov.optString("key", null);
+        } catch (Exception e) { return null; }
+    }
+
     static JSONObject ok(Object data) {
         try { return new JSONObject().put("ok", true).put("data", data == null ? JSONObject.NULL : data).put("error", JSONObject.NULL); }
         catch (Exception e) { return err("INTERNAL", e.toString()); }
@@ -197,6 +212,49 @@ public class Tools {
                     tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "pi");
                 }});
                 return ok("开始朗读");
+            }});
+
+        // ═══ 快脑：闲聊直答/意图分流 ═══
+        def("chat_fast", "快脑：闲聊秒答，任务则返回 task 交慢脑(pi)", schema(props("q", prop("string", "用户的话")), "q"),
+            new H() { public JSONObject run(JSONObject a) throws Exception {
+                String q = a.optString("q");
+                String key = fastKey();
+                if (key == null) return err("NO_KEY", "未配置 API Key");
+                String sysPrompt = "你是「小丘」的快脑。判断用户输入属于哪类，只输出一行JSON不要其他内容："
+                  + "闲聊/常识/计算/翻译/简单知识问答（不需要操作手机、不需要写代码、不需要多步骤）→ {\"type\":\"chat\",\"answer\":\"<口语一两句直接回答>\"}；"
+                  + "需要动手执行的任务（写代码/改文件/操作App/查实时信息/多步骤）→ {\"type\":\"task\",\"reply\":\"<一句话确认>\"}。answer/reply用中文口语，简短。";
+                JSONObject body = new JSONObject()
+                        .put("model", "glm-5.3-flash")
+                        .put("messages", new org.json.JSONArray()
+                                .put(new JSONObject().put("role", "system").put("content", sysPrompt))
+                                .put(new JSONObject().put("role", "user").put("content", q)))
+                        .put("max_tokens", 400).put("temperature", 0.3);
+                javax.net.ssl.HttpsURLConnection c = (javax.net.ssl.HttpsURLConnection)
+                        new java.net.URL("https://open.bigmodel.cn/api/coding/paas/v4/chat/completions").openConnection();
+                c.setRequestMethod("POST"); c.setConnectTimeout(5000); c.setReadTimeout(20000); c.setDoOutput(true);
+                c.setRequestProperty("Authorization", "Bearer " + key);
+                c.setRequestProperty("Content-Type", "application/json");
+                java.io.OutputStream os = c.getOutputStream();
+                os.write(body.toString().getBytes("UTF-8")); os.close();
+                int code = c.getResponseCode();
+                java.io.InputStream is = code < 400 ? c.getInputStream() : c.getErrorStream();
+                java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+                byte[] buf = new byte[4096]; int n; while (is != null && (n = is.read(buf)) > 0) bo.write(buf, 0, n);
+                if (is != null) is.close();
+                String resp = bo.toString("UTF-8");
+                if (code >= 400) return err("API_ERR", code + ": " + resp.substring(0, Math.min(200, resp.length())));
+                String content = new JSONObject(resp).getJSONArray("choices").getJSONObject(0)
+                        .getJSONObject("message").optString("content", "").trim();
+                try {
+                    String j = content;
+                    if (j.contains("{")) j = j.substring(j.indexOf('{'), j.lastIndexOf('}') + 1);
+                    JSONObject r = new JSONObject(j);
+                    if ("task".equals(r.optString("type")))
+                        return ok(new JSONObject().put("type", "task").put("reply", r.optString("reply", "好的，交给我处理")));
+                    return ok(new JSONObject().put("type", "chat").put("answer", r.optString("answer", content)));
+                } catch (Exception e) {
+                    return ok(new JSONObject().put("type", "chat").put("answer", content));
+                }
             }});
 
         def("vibrate", "震动", schema(props("ms", prop("number", "毫秒，默认 300"))), new H() { public JSONObject run(JSONObject a) {
