@@ -594,7 +594,13 @@ public class Tools {
                     JSONObject r = VdManager.create(ctx, a.optInt("w", 900), a.optInt("h", 2000));
                     return r.has("error") ? err(r.getString("error"), r.optString("msg")) : ok(r);
                 }
-                if ("stop".equals(act)) { VdManager.destroy(); return ok("已销毁"); }
+                if ("stop".equals(act)) {
+                    // 关键：先杀掉副屏上的App，否则系统会把任务回迁主屏前台，打扰用户
+                    for (String pkg : VdManager.launchedPkgs())
+                        Tools.call("l2_exec", new JSONObject().put("cmd", "am force-stop " + pkg));
+                    VdManager.destroy();
+                    return ok("副屏已销毁（App已清理，无回迁）");
+                }
                 if ("info".equals(act)) {
                     JSONObject o = new JSONObject();
                     o.put("alive", VdManager.alive());
@@ -609,11 +615,19 @@ public class Tools {
                 if ("launch".equals(act)) {
                     JSONObject r = VdManager.launch(ctx, a.optString("pkg"));
                     if (r != null) return r.has("error") ? err(r.getString("error"), r.optString("msg")) : ok(r);
-                    // App内通道失败 → L2 shell 兜底
+                    // App内通道失败 → L2 shell 兜底（发射后校验落点，防污染主屏）
+                    VdManager.track(a.optString("pkg"));
+                    int did = VdManager.displayId();
                     JSONObject c = (JSONObject) Tools.call("l2_exec", new JSONObject().put("timeout_sec", 40)
-                        .put("cmd", "am start --display " + VdManager.displayId()
-                            + " -n $(cmd package resolve-activity --brief " + a.optString("pkg") + " | tail -1) && echo __L2_OK__"));
-                    return String.valueOf(c).contains("__L2_OK__") ? ok("已发射（L2通道）") : err("LAUNCH_FAIL", String.valueOf(c));
+                        .put("cmd", "am start --display " + did
+                            + " -n $(cmd package resolve-activity --brief " + a.optString("pkg") + " | tail -1) >/dev/null 2>&1; sleep 2; "
+                            + "if dumpsys activity activities | grep -A3 'Display #" + did + " ' | grep -q '" + a.optString("pkg") + "'; "
+                            + "then echo __ON_VD__; else echo __ON_MAIN__; fi"));
+                    String out = String.valueOf(c);
+                    if (out.contains("__ON_VD__")) return ok("已发射到隐形副屏" + did);
+                    // 落主屏了：立刻击杀，绝不占用户前台
+                    Tools.call("l2_exec", new JSONObject().put("cmd", "am force-stop " + a.optString("pkg")));
+                    return err("LAUNCH_LANDED_MAIN", "未能发射到副屏（已清理），主屏未受影响");
                 }
                 // tap / swipe / text → L2 input -d
                 String cmd;

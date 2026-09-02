@@ -34,6 +34,9 @@ public class VdManager {
     private static int id = -1, w, h;
     private static android.os.HandlerThread vdThread; // 帧回调线程（ImageReader 需要 looper）
 
+    private static final java.util.Set<String> launched = new java.util.HashSet<>();
+    public static void track(String pkg) { if (pkg != null) launched.add(pkg); }
+    public static java.util.Set<String> launchedPkgs() { return new java.util.HashSet<>(launched); }
     public static int displayId() { return id; }
     public static boolean alive() { return vd != null && id > 0; }
 
@@ -118,7 +121,7 @@ public class VdManager {
         try { if (reader != null) reader.close(); } catch (Exception ignore) {}
         try { if (last != null) last.recycle(); } catch (Exception ignore) {}
         if (vdThread != null) vdThread.quitSafely();
-        vd = null; reader = null; last = null; id = -1; vdThread = null;
+        vd = null; reader = null; last = null; id = -1; vdThread = null; launched.clear();
     }
 
     private static JSONObject res(String msg) { JSONObject o = new JSONObject(); try { o.put("msg", msg); } catch (Exception ignore) {} return o; }
