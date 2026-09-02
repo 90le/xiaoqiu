@@ -632,7 +632,9 @@ public class Tools {
                 if (!VdManager.alive()) return err("NO_VD", "虚拟屏未创建，先 action=create");
                 if ("shot".equals(act)) {
                     JSONObject r = VdManager.shot(ctx);
-                    return r.has("error") ? err(r.getString("error"), r.optString("msg")) : ok(r);
+                    if (r.has("error")) return err(r.getString("error"), r.optString("msg"));
+                    if (r.optLong("size", 999999) < 30000) r.put("warning", "画面疑似黑屏/空，建议重新 vd launch 目标App后再shot");
+                    return ok(r);
                 }
                 if ("shot_grid".equals(act)) {
                     JSONObject r = VdManager.shotGrid(ctx);
@@ -1031,6 +1033,43 @@ public class Tools {
             try { return ok(new JSONObject().put("count", nodes.length()).put("nodes", nodes)); }
             catch (Exception e) { return err("INTERNAL", e.toString()); }
         }});
+        def("ui_find", "在结构树中查找全部含指定文本的节点（返回所有匹配的编号/坐标/可点击性），比 wait_node 更全面",
+            schema(props("text", prop("string", "要找的文本"), "display", prop("number", "屏幕ID 默认0主屏")), "text"), new H() { public JSONObject run(JSONObject a) throws Exception {
+            int disp = a.optInt("display", 0);
+            JSONArray nodes = AdbService.readTree(disp);
+            JSONArray hits = new JSONArray();
+            if (nodes != null) for (int k = 0; k < nodes.length(); k++) {
+                JSONObject n = nodes.optJSONObject(k);
+                if (n == null) continue;
+                if (n.optString("text","").contains(a.optString("text")) || n.optString("desc","").contains(a.optString("text"))) {
+                    JSONObject h = new JSONObject();
+                    try { h.put("i", n.optInt("i")).put("text", n.optString("text")).put("xy", n.optString("xy")).put("click", n.optBoolean("click")); } catch (Exception ignore) {}
+                    hits.put(h);
+                }
+            }
+            return ok(new JSONObject().put("matches", hits.length()).put("nodes", hits));
+        }});
+        def("notify_wait", "阻塞等待新通知（来微信/短信消息即刻返回，用于'消息来了叫我'场景）",
+            schema(props("timeout_sec", prop("number", "最长等待 默认30秒"), "pkg", prop("string", "按包名过滤 可空"))), new H() { public JSONObject run(JSONObject a) throws Exception {
+            File f = new File(ctx.getFilesDir(), "notify-log.json");
+            long base = f.canRead() ? f.lastModified() : 0;
+            long deadline = System.currentTimeMillis() + a.optInt("timeout_sec", 30) * 1000L;
+            String pf = a.optString("pkg", "");
+            while (System.currentTimeMillis() < deadline) {
+                Thread.sleep(1500);
+                if (!f.canRead() || f.lastModified() <= base) continue;
+                JSONArray arr = new JSONArray(new String(java.nio.file.Files.readAllBytes(f.toPath()), "UTF-8"));
+                JSONArray out = new JSONArray();
+                for (int i = arr.length() - 1; i >= 0 && out.length() < 5; i--) {
+                    JSONObject o = arr.optJSONObject(i);
+                    if (o == null) continue;
+                    if (!pf.isEmpty() && !o.optString("pkg","").contains(pf)) continue;
+                    out.put(o);
+                }
+                if (out.length() > 0) return ok(new JSONObject().put("got", true).put("items", out));
+            }
+            return ok(new JSONObject().put("got", false).put("hint", "等待期内无新通知"));
+        }});
         def("ui_tap_node", "按结构树编号点击（先 ui_screen_read 得到编号 i，直接点击该节点中心，免算坐标；display=0 主屏，副屏传 displayId）",
             schema(props("i", prop("number", "节点编号"), "display", prop("number", "屏幕ID 默认0主屏")), "i"), new H() { public JSONObject run(JSONObject a) throws Exception {
             int disp = a.optInt("display", 0);
@@ -1083,29 +1122,39 @@ public class Tools {
             try { Tools.write(new File(ctx.getFilesDir(), "notify-log.json"), "[]"); } catch (Exception ignore) {}
             return ok("已清空");
         }});
-        def("ui_list_extract", "列表批量抽取（信息流/商品/搜索结果/聊天记录）：自动滚动+树合并去重，返回文本清单+首见坐标",
+        def("ui_list_extract", "列表批量抽取v2（信息流/商品/搜索结果）：自动滚动+去重合并；until_text 命中即停；连续空转自动早停",
             schema(props("display", prop("number", "屏幕ID 默认0主屏"),
                     "max_swipes", prop("number", "最多滑动次数 默认5"),
-                    "contains", prop("string", "只保留含此关键词的条目 可空"))), new H() { public JSONObject run(JSONObject a) throws Exception {
+                    "contains", prop("string", "只保留含此关键词的条目 可空"),
+                    "until_text", prop("string", "滚动直到此文本出现即停 可空"))), new H() { public JSONObject run(JSONObject a) throws Exception {
             int disp = a.optInt("display", 0);
             int maxS = Math.min(a.optInt("max_swipes", 5), 12);
             String kw = a.optString("contains", "");
+            String until = a.optString("until_text", "");
             java.util.LinkedHashSet<String> seen = new java.util.LinkedHashSet<>();
             JSONArray items = new JSONArray();
+            JSONObject hit = null;
+            int emptyRounds = 0;
             for (int round = 0; round <= maxS; round++) {
                 JSONArray nodes = AdbService.readTree(disp);
+                int fresh = 0;
                 if (nodes != null) for (int k = 0; k < nodes.length(); k++) {
                     JSONObject n = nodes.optJSONObject(k);
                     if (n == null || !n.has("text")) continue;
                     String txt = n.optString("text").replace("\n", " ").trim();
                     if (txt.length() < 2 || seen.contains(txt)) continue;
                     if (!kw.isEmpty() && !txt.contains(kw)) continue;
-                    seen.add(txt);
+                    seen.add(txt); fresh++;
                     JSONObject item = new JSONObject();
                     try { item.put("text", txt).put("xy", n.optString("xy")); } catch (Exception ignore) {}
                     items.put(item);
                 }
+                if (!until.isEmpty()) {
+                    JSONObject n = AdbService.findNodeByText(disp, until);
+                    if (n != null) { hit = n; break; }
+                }
                 if (round == maxS) break;
+                if (fresh == 0) { emptyRounds++; if (emptyRounds >= 2) break; } else emptyRounds = 0;
                 boolean moved;
                 if (disp == 0) moved = AdbService.swipe(640, 2000, 640, 1000, 250);
                 else {
@@ -1116,7 +1165,9 @@ public class Tools {
                 if (!moved) break;
                 try { Thread.sleep(900); } catch (Exception ignore) {}
             }
-            return ok(new JSONObject().put("items", items).put("count", items.length()).put("pkg", AdbService.pkgOf(disp)));
+            JSONObject r = new JSONObject().put("items", items).put("count", items.length()).put("pkg", AdbService.pkgOf(disp));
+            if (hit != null) try { r.put("until_hit", hit); } catch (Exception ignore) {}
+            return ok(r);
         }});
         def("ui_page_info", "页面速览：前台包名/节点数/主要文本（快速判断当前在哪）",
             schema(props("display", prop("number", "屏幕ID 默认0主屏"))), new H() { public JSONObject run(JSONObject a) throws Exception {
