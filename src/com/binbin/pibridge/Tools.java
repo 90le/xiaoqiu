@@ -1103,6 +1103,108 @@ public class Tools {
                         .put("preview", preview.toString().trim()));
             }});
 
+        // ═══ 权限体检医生（检查→自动修复→引导跳转）═══
+        // ═══ 设备状态与唤醒（锁屏能力体系）═══
+        def("device_state", "设备状态：locked锁屏/screen亮灭/can_full_operate锁屏下能否全功能操作。操作前先查此工具",
+            schema(props()), new H() { public JSONObject run(JSONObject a) throws Exception {
+                JSONObject o = new JSONObject();
+                android.app.KeyguardManager km = (android.app.KeyguardManager) ctx.getSystemService(Context.KEYGUARD_SERVICE);
+                android.os.PowerManager pm2 = (android.os.PowerManager) ctx.getSystemService(Context.POWER_SERVICE);
+                boolean locked = km.isKeyguardLocked();
+                boolean screenOn = pm2.isInteractive();
+                o.put("locked", locked).put("screen_on", screenOn);
+                o.put("secure_lock", km.isKeyguardSecure());
+                o.put("can_full_operate", !locked);
+                if (locked) o.put("hint", "锁屏中：L1命令/settings/通知/记忆可用，UI类操作需解锁（device_wake可试唤醒）");
+                return ok(o);
+            }});
+        def("device_wake", "唤醒屏幕并尝试解锁（仅滑动锁有效，PIN/密码锁只能唤醒到锁屏）。返回唤醒后的设备状态",
+            schema(props()), new H() { public JSONObject run(JSONObject a) throws Exception {
+                JSONArray seq = new JSONArray();
+                seq.put("input keyevent 224"); // KEYCODE_WAKEUP
+                seq.put("input keyevent 82");  // 解锁滑动锁
+                for (int i = 0; i < seq.length(); i++) {
+                    try { Tools.call("l2_exec", new JSONObject().put("cmd", seq.optString(i)).put("timeout_sec", 15)); } catch (Exception ignore) {}
+                    try { Thread.sleep(800); } catch (Exception ignore) {}
+                }
+                try { Thread.sleep(1500); } catch (Exception ignore) {}
+                android.app.KeyguardManager km = (android.app.KeyguardManager) ctx.getSystemService(Context.KEYGUARD_SERVICE);
+                return ok(new JSONObject().put("unlocked", !km.isKeyguardLocked())
+                        .put("hint", km.isKeyguardSecure() ? "安全锁需手动输入PIN" : "滑动锁已尝试自动解锁"));
+            }});
+
+        def("perm_doctor", "权限体检医生：check=全量检查14项能力状态；fix_all=自动修复全部可自动修复项；fix=修复单项",
+            schema(props("action", prop("string", "check/fix_all/fix"), "name", prop("string", "fix时的单项名")), "action"),
+            new H() { public JSONObject run(JSONObject a) throws Exception {
+                String act = a.optString("action", "check");
+                JSONArray items = new JSONArray();
+                boolean a11yOn = false, nlsOn = false, secureOk = false, storageOk = false;
+                boolean camOk = false, micOk = false, conOk = false, smsOk = false, callOk = false;
+                boolean locOk = false, overlayOk = false, battOk = false;
+                try { a11yOn = String.valueOf(Settings.Secure.getString(ctx.getContentResolver(), "enabled_accessibility_services")).contains("com.pihost"); } catch (Exception ignore) {}
+                try { nlsOn = String.valueOf(Settings.Secure.getString(ctx.getContentResolver(), "enabled_notification_listeners")).contains("com.pihost"); } catch (Exception ignore) {}
+                try { Settings.Secure.putString(ctx.getContentResolver(), "__probe__", "1"); Settings.Secure.putString(ctx.getContentResolver(), "__probe__", null); secureOk = true; } catch (Exception ignore) {}
+                try { storageOk = new java.io.File("/storage/emulated/0/pibridge/.wtest").createNewFile(); if (storageOk) new java.io.File("/storage/emulated/0/pibridge/.wtest").delete(); } catch (Exception ignore) {}
+                try { camOk = ctx.checkPermission("android.permission.CAMERA", android.os.Process.myPid(), android.os.Process.myUid()) == 0; } catch (Exception ignore) {}
+                try { micOk = ctx.checkPermission("android.permission.RECORD_AUDIO", android.os.Process.myPid(), android.os.Process.myUid()) == 0; } catch (Exception ignore) {}
+                try { conOk = ctx.checkPermission("android.permission.READ_CONTACTS", android.os.Process.myPid(), android.os.Process.myUid()) == 0; } catch (Exception ignore) {}
+                try { smsOk = ctx.checkPermission("android.permission.READ_SMS", android.os.Process.myPid(), android.os.Process.myUid()) == 0; } catch (Exception ignore) {}
+                try { callOk = ctx.checkPermission("android.permission.READ_CALL_LOG", android.os.Process.myPid(), android.os.Process.myUid()) == 0; } catch (Exception ignore) {}
+                try { locOk = ctx.checkPermission("android.permission.ACCESS_FINE_LOCATION", android.os.Process.myPid(), android.os.Process.myUid()) == 0; } catch (Exception ignore) {}
+                try { overlayOk = Settings.canDrawOverlays(ctx); } catch (Exception ignore) {}
+                try { android.os.PowerManager pm2 = (android.os.PowerManager) ctx.getSystemService(Context.POWER_SERVICE); battOk = pm2.isIgnoringBatteryOptimizations("com.pihost"); } catch (Exception ignore) {}
+                String[][] table = {
+                    {"accessibility", String.valueOf(a11yOn), "settings", "辅助服务"},
+                    {"notification", String.valueOf(nlsOn), "cmd", "通知监听"},
+                    {"secure_settings", String.valueOf(secureOk), "settings", "安全设置写入"},
+                    {"storage", String.valueOf(storageOk), "grant", "文件存储"},
+                    {"camera", String.valueOf(camOk), "grant", "相机"},
+                    {"mic", String.valueOf(micOk), "grant", "麦克风"},
+                    {"contacts", String.valueOf(conOk), "grant", "联系人"},
+                    {"sms", String.valueOf(smsOk), "grant", "短信"},
+                    {"calllog", String.valueOf(callOk), "grant", "通话记录"},
+                    {"location", String.valueOf(locOk), "grant", "精确定位"},
+                    {"overlay", String.valueOf(overlayOk), "appops", "悬浮窗"},
+                    {"battery", String.valueOf(battOk), "l2", "电池白名单"},
+                };
+                for (String[] row : table) {
+                    JSONObject it = new JSONObject();
+                    it.put("name", row[0]).put("ok", row[1]).put("desc", row[3]);
+                    it.put("auto_fixable", true);
+                    items.put(it);
+                }
+                if ("check".equals(act)) {
+                    boolean allOk = a11yOn && nlsOn && secureOk && storageOk && camOk && micOk && conOk && smsOk && callOk && locOk && overlayOk && battOk;
+                    return ok(new JSONObject().put("items", items).put("all_ok", allOk));
+                }
+                String single = "fix".equals(act) ? a.optString("name", "") : null;
+                JSONArray fixed = new JSONArray();
+                for (String[] row : table) {
+                    String nm = row[0];
+                    if (row[1].equals("true")) continue;
+                    if (single != null && !nm.equals(single)) continue;
+                    String fcmd = null;
+                    if ("accessibility".equals(nm)) fcmd = "settings put secure enabled_accessibility_services com.pihost/com.binbin.pibridge.AdbService; settings put secure accessibility_enabled 1";
+                    else if ("notification".equals(nm)) fcmd = "cmd notification allow_listener com.pihost/com.binbin.pibridge.NotifyListener";
+                    else if ("storage".equals(nm)) fcmd = "appops set com.pihost MANAGE_EXTERNAL_STORAGE allow";
+                    else if ("overlay".equals(nm)) fcmd = "appops set com.pihost SYSTEM_ALERT_WINDOW allow";
+                    else if ("battery".equals(nm)) fcmd = "dumpsys deviceidle whitelist +com.pihost";
+                    else if ("camera".equals(nm)) fcmd = "pm grant com.pihost android.permission.CAMERA";
+                    else if ("mic".equals(nm)) fcmd = "pm grant com.pihost android.permission.RECORD_AUDIO";
+                    else if ("contacts".equals(nm)) fcmd = "pm grant com.pihost android.permission.READ_CONTACTS";
+                    else if ("sms".equals(nm)) fcmd = "pm grant com.pihost android.permission.READ_SMS; pm grant com.pihost android.permission.SEND_SMS";
+                    else if ("calllog".equals(nm)) fcmd = "pm grant com.pihost android.permission.READ_CALL_LOG";
+                    else if ("location".equals(nm)) fcmd = "pm grant com.pihost android.permission.ACCESS_FINE_LOCATION";
+                    if (fcmd != null) {
+                        Tools.call("l2_exec", new JSONObject().put("cmd", fcmd).put("timeout_sec", 20));
+                        fixed.put(nm);
+                    }
+                }
+                JSONObject res = new JSONObject().put("fixed", fixed).put("note", "建议force-stop重启App使服务重新绑定");
+                return ok(res);
+            }
+            });
+
         def("macro_save", "保存宏：name英文标识，desc中文说明，steps为步骤数组JSON文本，每步包含tool与args两个字段，args支持p1到p3占位符",
             schema(props("name", prop("string", "宏名英文数字下划线"), "desc", prop("string", "中文说明"),
                     "steps", prop("string", "步骤数组JSON文本")), "name", "desc", "steps"),
