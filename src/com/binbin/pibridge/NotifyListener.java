@@ -16,6 +16,29 @@ import java.io.File;
  */
 public class NotifyListener extends NotificationListenerService {
     private static final int MAX = 60;
+    // 近期通知原引用（回复用：RemoteInput 在 sbn 对象里）
+    private static final java.util.LinkedHashMap<String, StatusBarNotification> recentSbn = new java.util.LinkedHashMap<>();
+    public static StatusBarNotification getSbn(String key) {
+        synchronized (NotifyListener.class) { return recentSbn.get(key); }
+    }
+    public static String findKey(String pkg, String match) {
+        synchronized (NotifyListener.class) {
+            java.util.Iterator<String> it = recentSbn.keySet().iterator();
+            String last = null;
+            while (it.hasNext()) {
+                String k = it.next();
+                StatusBarNotification s = recentSbn.get(k);
+                if (s == null) continue;
+                if (pkg != null && !pkg.isEmpty() && !s.getPackageName().contains(pkg)) continue;
+                if (match != null && !match.isEmpty()) {
+                    String t = String.valueOf(s.getNotification().extras.getCharSequence(android.app.Notification.EXTRA_TITLE, ""));
+                    if (!t.contains(match)) continue;
+                }
+                last = k;
+            }
+            return last;
+        }
+    }
 
     private static File file(Context c) {
         return new File(c.getFilesDir(), "notify-log.json");
@@ -32,8 +55,16 @@ public class NotifyListener extends NotificationListenerService {
             if ((title.isEmpty() && text.isEmpty() && big.isEmpty())) return;
             synchronized (NotifyListener.class) {
                 JSONArray arr = readArr(this);
+                synchronized (NotifyListener.class) {
+                    recentSbn.put(sbn.getKey(), sbn);
+                    while (recentSbn.size() > 30) {
+                        String eldest = recentSbn.keySet().iterator().next();
+                        recentSbn.remove(eldest);
+                    }
+                }
                 JSONObject o = new JSONObject();
                 o.put("pkg", sbn.getPackageName());
+                o.put("key", sbn.getKey());
                 if (!title.isEmpty()) o.put("title", title);
                 if (!text.isEmpty()) o.put("text", text);
                 if (!big.isEmpty() && !big.equals(text)) o.put("big", big);

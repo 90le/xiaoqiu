@@ -1,5 +1,7 @@
 package com.binbin.pibridge;
 
+import android.service.notification.StatusBarNotification;
+import android.app.RemoteInput;
 import com.k2fsa.sherpa.onnx.FeatureConfig;
 import com.k2fsa.sherpa.onnx.KeywordSpotter;
 import com.k2fsa.sherpa.onnx.KeywordSpotterConfig;
@@ -1032,6 +1034,38 @@ public class Tools {
             }});
 
         // ═══ 持久记忆（脑的长期存储：用户偏好/App特性/坐标校准/任何学到的知识）═══
+        def("notify_reply", "直接回复通知消息（微信/QQ原生回复通道，无需打开App、无需看屏、锁屏可回）。key 来自 notify_read；也可 pkg+match 定位。这是回微信的正解",
+            schema(props("text", prop("string", "回复内容"), "key", prop("string", "通知key（notify_read返回）可空"),
+                    "pkg", prop("string", "按包名定位 可空"), "match", prop("string", "按标题定位 可空")), "text"),
+            new H() { public JSONObject run(JSONObject a) throws Exception {
+                String text = a.optString("text");
+                if (text.isEmpty()) return err("BAD", "text 不能为空");
+                String key = a.optString("key", "");
+                StatusBarNotification sbn = null;
+                if (!key.isEmpty()) sbn = NotifyListener.getSbn(key);
+                if (sbn == null) {
+                    String k = NotifyListener.findKey(a.optString("pkg", ""), a.optString("match", a.optString("key","")));
+                    if (k != null) sbn = NotifyListener.getSbn(k);
+                }
+                if (sbn == null) return err("NOT_FOUND", "未找到匹配通知（可用 notify_read 查看 key）");
+                android.app.Notification.Action[] acts = sbn.getNotification().actions;
+                if (acts == null) return err("NO_ACTION", "该通知无动作按钮");
+                for (android.app.Notification.Action act : acts) {
+                    android.app.RemoteInput[] ris = act.getRemoteInputs();
+                    if (ris == null || ris.length == 0) continue;
+                    android.os.Bundle b = new android.os.Bundle();
+                    b.putCharSequence(ris[0].getResultKey(), text);
+                    android.content.Intent intent = new android.content.Intent();
+                    android.app.RemoteInput.addResultsToIntent(ris, intent, b);
+                    try {
+                        act.actionIntent.send(ctx, 0, intent);
+                        return ok(new JSONObject().put("replied", true).put("pkg", sbn.getPackageName())
+                                .put("via", "RemoteInput原生通道"));
+                    } catch (Exception e) { return err("SEND_FAIL", e.toString()); }
+                }
+                return err("NO_REMOTE_INPUT", "该通知不支持直接回复（无RemoteInput）");
+            }});
+
         def("memory_save", "持久保存知识（跨会话永存）：key 唯一标识，value 内容。用于：用户偏好、App界面特性（如'微信搜索按钮需偏移-30px'）、常用地址等",
             schema(props("key", prop("string", "唯一标识 如 user.pref.address / app.wechat.search_offset"), "value", prop("string", "知识内容")), "key", "value"),
             new H() { public JSONObject run(JSONObject a) throws Exception {
