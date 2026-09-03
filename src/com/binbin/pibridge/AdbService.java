@@ -324,6 +324,7 @@ public class AdbService extends AccessibilityService {
     }
 
     private static AccessibilityNodeInfo findLiveNode(int displayId, String target) {
+        liveMatch = null; liveMatchClick = null;
         try {
             if (displayId > 0 && Build.VERSION.SDK_INT >= 33) {
                 Object arr = AccessibilityService.class.getMethod("getWindowsOnAllDisplays").invoke(inst);
@@ -332,25 +333,28 @@ public class AdbService extends AccessibilityService {
                     if (l instanceof java.util.List) {
                         for (AccessibilityWindowInfo w : (java.util.List<AccessibilityWindowInfo>) l) {
                             AccessibilityNodeInfo r = w.getRoot();
-                            if (r != null) {
-                                AccessibilityNodeInfo f = liveWalk(r, target, 0);
-                                if (f != null) return f;
-                            }
+                            if (r != null) liveWalk(r, target, 0);
                         }
                     }
                 }
-                return null;
+                return liveMatchClick != null ? liveMatchClick : liveMatch;
             }
             AccessibilityNodeInfo root = inst.getRootInActiveWindow();
-            return root == null ? null : liveWalk(root, target, 0);
+            if (root != null) liveWalk(root, target, 0);
+            return liveMatchClick != null ? liveMatchClick : liveMatch;
         } catch (Throwable e) { return null; }
     }
+    private static AccessibilityNodeInfo liveMatch;
+    private static AccessibilityNodeInfo liveMatchClick;
     private static AccessibilityNodeInfo liveWalk(AccessibilityNodeInfo n, String target, int d) {
         if (n == null || d > 25) return null;
         try {
             String t = n.getText() == null ? "" : n.getText().toString();
             String ds = n.getContentDescription() == null ? "" : n.getContentDescription().toString();
-            if (target.length() > 0 && t.length() <= 40 && (t.contains(target) || ds.contains(target))) return n;
+            if (target.length() > 0 && t.length() <= 40 && (t.contains(target) || ds.contains(target))) {
+                if (liveMatch == null) liveMatch = n;
+                if (liveMatchClick == null && n.isClickable()) liveMatchClick = n;
+            }
             for (int i = 0; i < n.getChildCount(); i++) {
                 AccessibilityNodeInfo r = liveWalk(n.getChild(i), target, d + 1);
                 if (r != null) return r;
