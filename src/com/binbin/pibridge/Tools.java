@@ -380,6 +380,25 @@ public class Tools {
     }
     static JSONArray veCache; static String veCacheKey; static long veCacheTime; // vision_elements 同图缓存
     static String rpcStash; // pi_rpc 会话轮换时的状态摘要
+    static org.json.JSONArray relatedMemories(String pkg) {
+        org.json.JSONArray rel = new org.json.JSONArray();
+        if (pkg == null || pkg.isEmpty() || pkg.equals("?")) return rel;
+        try {
+            File mf = new File(ctx.getFilesDir(), "memory.json");
+            if (!mf.canRead()) return rel;
+            JSONObject mem = new JSONObject(new String(java.nio.file.Files.readAllBytes(mf.toPath()), "UTF-8"));
+            String sn = pkg.substring(pkg.lastIndexOf('.') + 1);
+            java.util.Iterator<String> it = mem.keys();
+            while (it.hasNext()) {
+                String k = it.next();
+                if (k.contains(sn) || k.contains(pkg)) {
+                    JSONObject e = mem.optJSONObject(k);
+                    if (e != null) rel.put(new JSONObject().put("key", k).put("v", e.optString("v")));
+                }
+            }
+        } catch (Exception ignore) {}
+        return rel;
+    }
     static final String SYSCTL_DUMP =
         "echo \"wifi=$(settings get global wifi_on);bt=$(settings get global bluetooth_on);"
         + "airplane=$(settings get global airplane_mode_on);rotate=$(settings get system accelerometer_rotation);"
@@ -676,7 +695,11 @@ public class Tools {
                             + "if dumpsys activity activities | grep -A3 'Display #" + did + " ' | grep -q '" + a.optString("pkg") + "'; "
                             + "then echo __ON_VD__; else echo __ON_MAIN__; fi"));
                     String out = String.valueOf(c);
-                    if (out.contains("__ON_VD__")) return ok("已发射到隐形副屏" + did);
+                    if (out.contains("__ON_VD__")) {
+                        JSONObject lo = new JSONObject().put("msg", "已发射到隐形副屏" + did)
+                                .put("displayId", did).put("memories", relatedMemories(a.optString("pkg")));
+                        return ok(lo);
+                    }
                     // 落主屏了：立刻击杀，绝不占用户前台
                     Tools.call("l2_exec", new JSONObject().put("cmd", "am force-stop " + a.optString("pkg")));
                     return err("LAUNCH_LANDED_MAIN", "未能发射到副屏（已清理），主屏未受影响");
@@ -1883,7 +1906,10 @@ public class Tools {
         def("ui_tap_text", "按文本原生点击（无障碍节点ACTION_CLICK，主屏副屏通用，免L2）。比坐标点击更可靠的首选方式",
             schema(props("text", prop("string", "节点文本（含匹配）"), "display", prop("number", "屏幕ID 默认0主屏")), "text"), new H() { public JSONObject run(JSONObject a) {
             String r = AdbService.clickByText(a.optInt("display", 0), a.optString("text"));
-            return r.startsWith("已点击") ? ok(r) : err("TAP_FAIL", r);
+            if (r.startsWith("已点击")) return ok(r);
+            JSONObject ef = err("TAP_FAIL", r);
+            try { ef.put("memory_hint", relatedMemories(AdbService.pkgOf(a.optInt("display", 0)))); } catch (Exception ignore) {}
+            return ef;
         }});
         def("ui_scroll_node", "原生节点滚动（找可滚动容器执行滚动动作，免坐标免L2）",
             schema(props("display", prop("number", "屏幕ID 默认0主屏"), "forward", prop("boolean", "true=向下滚动 默认"))), new H() { public JSONObject run(JSONObject a) {
