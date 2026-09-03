@@ -616,6 +616,7 @@ public class Tools {
                     "text", prop("string", "text: 要输入的文字"),
                     "w", prop("number", "副屏宽 默认900"), "h", prop("number", "副屏高 默认2000")), "action"),
             new H() { public JSONObject run(JSONObject a) throws Exception {
+                VdManager.touch(); // 任何 vd 操作都刷新空闲计时
                 String act = a.optString("action");
                 if ("create".equals(act)) {
                     JSONObject r = VdManager.create(ctx, a.optInt("w", 900), a.optInt("h", 2000));

@@ -36,6 +36,23 @@ public class VdManager {
 
     private static final java.util.Set<String> launched = new java.util.HashSet<>();
     private static String lastPkg = "";
+    private static long lastUse = System.currentTimeMillis();
+    public static void touch() { lastUse = System.currentTimeMillis(); }
+    static { // 空闲自动回收：3分钟无操作自动销毁副屏（防渲染/电池泄漏）
+        Thread idleT = new Thread(() -> {
+            while (true) {
+                try { Thread.sleep(30000); } catch (Exception ignore) {}
+                synchronized (VdManager.class) {
+                    if (vd != null && System.currentTimeMillis() - lastUse > 180000) {
+                        android.util.Log.i("PiBridge", "副屏空闲3分钟，自动回收");
+                        destroy();
+                    }
+                }
+            }
+        }, "vd-idle-recycler");
+        idleT.setDaemon(true);
+        idleT.start();
+    }
     public static void track(String pkg) { if (pkg != null && !pkg.isEmpty()) { launched.add(pkg); lastPkg = pkg; } }
     public static String lastLaunchedPkg() { return lastPkg; }
     public static java.util.Set<String> launchedPkgs() { return new java.util.HashSet<>(launched); }
@@ -46,7 +63,7 @@ public class VdManager {
 
     /** 创建隐形副屏（默认 900x2000@160dpi，够看清单又省内存） */
     public static synchronized JSONObject create(Context c, int width, int height) {
-        destroy();
+        touch();
         w = width <= 0 ? 900 : width;
         h = height <= 0 ? 2000 : height;
         reader = ImageReader.newInstance(w, h, PixelFormat.RGBA_8888, 3);
