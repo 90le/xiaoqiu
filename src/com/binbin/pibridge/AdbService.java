@@ -150,7 +150,7 @@ public class AdbService extends AccessibilityService {
         return null;
     }
 
-    private static int[] displaySize(int displayId) {
+    public static int[] displaySize(int displayId) {
         try {
             DisplayManager dm = (DisplayManager) inst.getSystemService(Context.DISPLAY_SERVICE);
             android.view.Display d = displayId > 0 ? dm.getDisplay(displayId) : dm.getDisplay(android.view.Display.DEFAULT_DISPLAY);

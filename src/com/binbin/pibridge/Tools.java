@@ -696,8 +696,18 @@ public class Tools {
                     return ok(new JSONObject().put("found", false).put("hint", "滚到底也未出现"));
                 }
                 String cmd;
-                if ("tap".equals(act)) cmd = "input -d " + VdManager.displayId() + " tap " + a.optInt("x") + " " + a.optInt("y");
+                boolean pm = "pm".equals(a.optString("unit", "px"));
+                int[] dsz = AdbService.displaySize(VdManager.displayId());
+                int cx1 = pm ? a.optInt("x") * dsz[0] / 1000 : a.optInt("x");
+                int cy1 = pm ? a.optInt("y") * dsz[1] / 1000 : a.optInt("y");
+                if ("tap".equals(act)) cmd = "input -d " + VdManager.displayId() + " tap " + cx1 + " " + cy1;
                 else if ("longpress".equals(act)) cmd = "input -d " + VdManager.displayId() + " swipe "
+                        + cx1 + " " + cy1 + " " + (cx1 + 2) + " " + (cy1 + 1) + " "
+                        + Math.max(a.optInt("ms", 600), 400); // +2px偏移：MIUI忽略零距离滑动
+                else if ("doubletap".equals(act)) cmd = "input -d " + VdManager.displayId() + " tap "
+                        + cx1 + " " + cy1 + "; input -d " + VdManager.displayId() + " tap "
+                        + cx1 + " " + cy1;
+                else if ("key".equals(act)) cmd = "input -d " + VdManager.displayId() + " swipe "
                         + a.optInt("x") + " " + a.optInt("y") + " " + (a.optInt("x") + 2) + " " + (a.optInt("y") + 1) + " "
                         + Math.max(a.optInt("ms", 600), 400); // +2px偏移：MIUI忽略零距离滑动
                 else if ("doubletap".equals(act)) cmd = "input -d " + VdManager.displayId() + " tap "
@@ -709,7 +719,9 @@ public class Tools {
                     cmd = "input -d " + VdManager.displayId() + " keyevent " + code;
                 }
                 else if ("swipe".equals(act)) cmd = "input -d " + VdManager.displayId() + " swipe "
-                        + a.optInt("x") + " " + a.optInt("y") + " " + a.optInt("x2") + " " + a.optInt("y2");
+                        + cx1 + " " + cy1 + " "
+                        + (pm ? a.optInt("x2") * dsz[0] / 1000 : a.optInt("x2")) + " "
+                        + (pm ? a.optInt("y2") * dsz[1] / 1000 : a.optInt("y2"));
                 else if ("text".equals(act)) cmd = "input -d " + VdManager.displayId() + " text '"
                         + a.optString("text", "").replace(" ", "%s").replace("'", "") + "'";
                 else return err("BAD_ACTION", "未知 action: " + act);
@@ -758,42 +770,41 @@ public class Tools {
 
         // ═══ 宏系统（操作录像回放）：把跑通的流程存成可复用技能 ═══
         // ═══ 结构化视觉（无树App的"树"：GLM-4V 输出带坐标的元素清单）═══
-        def("vision_tap", "视觉定位点击（自验证闭环）：截图→vision_elements找label→点击→复查是否生效；未生效自动偏移重试一次。小目标精准点击用（约40秒）",
+        def("vision_tap", "视觉千分比定位点击（自验证闭环，跨设备通用）：截图→vision_elements千分比定位→换算像素点击→页面签名复查→千分比偏移重试→校准自动入库",
             schema(props("label", prop("string", "要点击的元素名称（含匹配即可）"), "display", prop("number", "副屏ID 当前活着的"),
                     "kind", prop("string", "元素类型筛选 可空")), "label"),
             new H() { public JSONObject run(JSONObject a) throws Exception {
                 String label = a.optString("label");
                 String kind = a.optString("kind", "");
-                // 1. 截图
                 JSONObject s1 = VdManager.shot(ctx);
                 if (s1.has("error")) return err(s1.getString("error"), s1.optString("msg"));
                 String f1 = s1.optString("file");
-                // 2. 找元素
                 JSONObject els = (JSONObject) Tools.call("vision_elements", new JSONObject().put("file", f1).put("kind", kind));
                 if (!els.optBoolean("ok", false)) return els;
                 JSONArray list = els.optJSONObject("data") == null ? new JSONArray()
                         : els.optJSONObject("data").optJSONArray("elements");
-                int tx = -1, ty = -1; String matched = "";
+                int nx = -1, ny = -1; String matched = "";
                 StringBuilder sigB1 = new StringBuilder();
                 for (int k = 0; k < list.length(); k++) {
                     JSONObject e = list.optJSONObject(k);
                     if (e == null) continue;
                     sigB1.append(e.optString("label","")).append("|");
-                    if (e.optString("label","").contains(label) && tx < 0) {
-                        tx = e.optInt("x"); ty = e.optInt("y"); matched = e.optString("label");
+                    if (e.optString("label","").contains(label) && nx < 0) {
+                        nx = e.optInt("x"); ny = e.optInt("y"); matched = e.optString("label");
                     }
                 }
                 String sig1 = sigB1.toString();
-                if (tx < 0) return err("NOT_FOUND", "截图中未找到含『" + label + "』的元素，共" + list.length() + "个元素");
-                // 3. 点击
+                if (nx < 0) return err("NOT_FOUND", "截图中未找到含『" + label + "』的元素，共" + list.length() + "个元素");
+                // 千分比→像素（按当前副屏尺寸）
+                int[] ds = AdbService.displaySize(VdManager.displayId());
+                int px = nx * ds[0] / 1000, py = ny * ds[1] / 1000;
                 JSONObject c = (JSONObject) Tools.call("l2_exec", new JSONObject().put("cmd",
-                        "input -d " + VdManager.displayId() + " tap " + tx + " " + ty));
+                        "input -d " + VdManager.displayId() + " tap " + px + " " + py));
                 if (!c.optBoolean("ok", false)) return err("TAP_FAIL", String.valueOf(c));
                 try { Thread.sleep(2500); } catch (Exception ignore) {}
-                // 4. 复查
                 JSONObject s2 = VdManager.shot(ctx);
                 if (s2.has("error")) return ok(new JSONObject().put("tapped", true).put("verified", false)
-                        .put("at", tx + "," + ty).put("hint", "复查截图失败，请人工确认"));
+                        .put("at", nx + "," + ny + "‰").put("hint", "复查截图失败，请人工确认"));
                 JSONObject els2 = (JSONObject) Tools.call("vision_elements", new JSONObject().put("file", s2.optString("file")).put("kind", kind));
                 boolean pageChanged = false;
                 if (els2.optBoolean("ok", false)) {
@@ -804,15 +815,16 @@ public class Tools {
                         JSONObject e = l2.optJSONObject(k);
                         if (e != null) sigB2.append(e.optString("label","")).append("|");
                     }
-                    pageChanged = !sigB2.toString().equals(sig1); // 页面指纹变化=点击生效
+                    pageChanged = !sigB2.toString().equals(sig1);
                     if (pageChanged) return ok(new JSONObject().put("tapped", true).put("verified", true)
-                            .put("pageChanged", true).put("at", tx + "," + ty).put("matched", matched));
+                            .put("pageChanged", true).put("at", nx + "," + ny + "‰").put("matched", matched));
                 }
-                // 5. 偏移重试一次（±40px 十字）
+                // 千分比十字偏移重试（±40‰）
                 int[][] offs = {{40,0},{-40,0},{0,40},{0,-40}};
                 for (int[] off : offs) {
+                    int rpx = (nx + off[0]) * ds[0] / 1000, rpy = (ny + off[1]) * ds[1] / 1000;
                     Tools.call("l2_exec", new JSONObject().put("cmd",
-                            "input -d " + VdManager.displayId() + " tap " + (tx+off[0]) + " " + (ty+off[1])));
+                            "input -d " + VdManager.displayId() + " tap " + rpx + " " + rpy));
                     try { Thread.sleep(2000); } catch (Exception ignore) {}
                     JSONObject s3 = VdManager.shot(ctx);
                     if (s3.has("error")) continue;
@@ -825,26 +837,17 @@ public class Tools {
                             JSONObject e = l3.optJSONObject(k);
                             if (e != null) sigB3.append(e.optString("label","")).append("|");
                         }
-                        if (!sigB3.toString().equals(sig1)) {
-                            // 校准自动入库：偏移修正值存记忆，下次直接精准
-                            String pkg = VdManager.lastLaunchedPkg();
-                            if (!pkg.isEmpty()) {
-                                String mk = "app." + pkg + ".vision_offset." + label;
-                                try {
-                                    Tools.call("memory_save", new JSONObject().put("key", mk)
-                                            .put("value", "GLM-4V原坐标(" + tx + "," + ty + ") 实际命中(" + (tx+off[0]) + "," + (ty+off[1]) + ") 偏移" + off[0] + "," + off[1]));
-                                } catch (Exception ignore) {}
-                            }
-                            return ok(new JSONObject().put("tapped", true).put("verified", true)
-                                    .put("pageChanged", true).put("at", (tx+off[0]) + "," + (ty+off[1])).put("retried", true).put("matched", matched));
-                        }
+                        if (!sigB3.toString().equals(sig1)) return ok(new JSONObject().put("tapped", true).put("verified", true)
+                                .put("pageChanged", true).put("at", rpx + "," + rpy).put("retried", true)
+                                .put("matched", matched).put("calibration", "千分比修正" + off[0] + "," + off[1]));
                     }
                 }
                 return ok(new JSONObject().put("tapped", true).put("verified", false).put("pageChanged", false)
                         .put("hint", "页面签名未变化：点击可能无效果、或目标页与原页元素相同"));
             }});
 
-        def("vision_elements", "结构化视觉：截图→GLM-4V 返回可交互元素JSON清单（label/坐标）。微信等无树App用它替代 ui_screen_read。配套：vd shot 后调用",
+        // ═══ 结构化视觉（无树App的"树"：GLM-4V 输出千分比坐标元素清单，跨设备通用）═══
+        def("vision_elements", "结构化视觉：截图→GLM-4V 返回可交互元素JSON清单（千分比坐标label/x/y/type）。微信等无树App用它替代 ui_screen_read。配套：vd shot 后调用",
             schema(props("file", prop("string", "图片路径"), "kind", prop("string", "筛选 可空：button/input/item 全部")), "file"),
             new H() { public JSONObject run(JSONObject a) throws Exception {
                 String file = a.optString("file");
@@ -854,17 +857,13 @@ public class Tools {
                 String mime = file.toLowerCase().endsWith(".jpg") || file.toLowerCase().endsWith(".jpeg") ? "image/jpeg" : "image/png";
                 String key = fastKey();
                 if (key == null) return err("NO_KEY", "未配置 API Key");
-                // 同图缓存：5分钟内相同图片直接返回（省时省钱）
                 String md5 = android.util.Base64.encodeToString(java.security.MessageDigest.getInstance("MD5").digest(img), android.util.Base64.NO_WRAP);
                 if (veCache != null && veCacheTime > System.currentTimeMillis() - 300000 && veCacheKey.equals(md5))
-                    return ok(new JSONObject().put("count", veCache.length()).put("elements", veCache).put("cached", true));
-                android.graphics.BitmapFactory.Options dbo = new android.graphics.BitmapFactory.Options();
-                dbo.inJustDecodeBounds = true;
-                android.graphics.BitmapFactory.decodeFile(file, dbo);
-                String q = "分析这张手机截图（实际尺寸" + dbo.outWidth + "x" + dbo.outHeight + "像素，坐标必须在此范围内）。"
+                    return ok(new JSONObject().put("count", veCache.length()).put("elements", veCache).put("cached", true).put("unit", "permille-0-1000"));
+                String q = "分析这张手机截图。用千分比坐标系描述元素位置：横向从左到右0-1000，纵向从上到下0-1000（例如屏幕正中=(500,500)，右下角=(1000,1000)）。"
                         + "找出最醒目的至多15个可交互元素（按钮/输入框/图标/页签/列表项/聊天行），label精简不超过10个字。"
-                        + "只输出严格JSON数组不要任何其他文字：[{\"label\":\"元素名称\",\"x\":中心x整数,\"y\":中心y整数,\"type\":\"button/input/item\"}]。"
-                        + (kind.isEmpty() ? "" : "只保留type为" + kind + "的元素。") + "坐标用元素中心的像素值。";
+                        + "只输出严格JSON数组不要任何其他文字：[{\"label\":\"元素名称\",\"x\":千分比x整数,\"y\":千分比y整数,\"type\":\"button/input/item\"}]。"
+                        + (kind.isEmpty() ? "" : "只保留type为" + kind + "的元素。");
                 JSONObject body = new JSONObject()
                         .put("model", "glm-4v-flash")
                         .put("messages", new org.json.JSONArray()
@@ -882,17 +881,17 @@ public class Tools {
                 os.write(body.toString().getBytes("UTF-8")); os.close();
                 int code = c.getResponseCode();
                 java.io.InputStream is = code < 400 ? c.getInputStream() : c.getErrorStream();
-                java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
-                byte[] buf = new byte[4096]; int n; while (is != null && (n = is.read(buf)) > 0) bo.write(buf, 0, n);
+                java.io.ByteArrayOutputStream bo2 = new java.io.ByteArrayOutputStream();
+                byte[] buf = new byte[4096]; int nn; while (is != null && (nn = is.read(buf)) > 0) bo2.write(buf, 0, nn);
                 if (is != null) is.close();
-                String resp = bo.toString("UTF-8");
+                String resp = bo2.toString("UTF-8");
                 if (code >= 400) return err("API_ERR", code + ": " + resp.substring(0, Math.min(300, resp.length())));
                 String content = new JSONObject(resp).getJSONArray("choices").getJSONObject(0)
                         .getJSONObject("message").optString("content", "").trim();
                 String jc = content.replace("```json", "").replace("```", "").trim();
                 int lb = jc.indexOf('['), rb = jc.lastIndexOf(']');
                 if (lb >= 0 && rb > lb) jc = jc.substring(lb, rb + 1);
-                else if (lb >= 0) { // 截断容错：补齐右括号
+                else if (lb >= 0) {
                     jc = jc.substring(lb);
                     int lastBrace = jc.lastIndexOf('}');
                     jc = lastBrace >= 0 ? jc.substring(0, lastBrace + 1) + "]" : "[]";
@@ -900,531 +899,13 @@ public class Tools {
                 try {
                     JSONArray els = new JSONArray(jc);
                     veCache = els; veCacheKey = md5; veCacheTime = System.currentTimeMillis();
-                    return ok(new JSONObject().put("count", els.length()).put("elements", els)
-                            .put("raw", content.length() > 500 ? content.substring(0, 500) : content));
+                    return ok(new JSONObject().put("count", els.length()).put("elements", els).put("cached", false).put("unit", "permille-0-1000"));
                 } catch (Exception e) {
                     return err("PARSE_FAIL", "模型未返回合法JSON: " + content.substring(0, Math.min(300, content.length())));
                 }
             }});
 
-        // ═══ pi 长驻会话（RPC 桥）：免冷启动 + 上下文记忆 ═══
-        def("pi_rpc", "与长驻pi会话对话（免冷启动，保留上下文记忆）。new=true 开新会话。返回pi的文字回复",
-            schema(props("prompt", prop("string", "给pi的指令"), "wait_sec", prop("number", "最长等待 默认120秒"),
-                    "new", prop("boolean", "true=先开新会话")), "prompt"),
-            new H() { public JSONObject run(JSONObject a) throws Exception {
-                String prompt = a.optString("prompt");
-                int waitS = a.optInt("wait_sec", 120);
-                String home = "/data/data/com.pihost/files/home";
-                File fifo = new File(home, ".pi-rpc-in");
-                File out = new File(home, ".pi-rpc-out.jsonl");
-                // 守护自愈（检查与启动分离，避免 pgrep 自匹配误判）
-                JSONObject chk = (JSONObject) Tools.call("env_run", new JSONObject().put("timeout_sec", 15)
-                        .put("cmd", "pgrep -f 'mode rp[c]' | head -1"));
-                boolean alive = String.valueOf(chk).matches("(?s).*\\d{2,}.*");
-                if (!alive) {
-                    Tools.call("env_run", new JSONObject().put("timeout_sec", 20)
-                            .put("cmd", "cd $HOME && [ -p .pi-rpc-in ] || mkfifo .pi-rpc-in; "
-                                    + "setsid sh -c 'tail -f .pi-rpc-in | pi --mode rpc >> .pi-rpc-out.jsonl 2>&1' >/dev/null 2>&1 < /dev/null & "
-                                    + "sleep 4; echo started"));
-                    try { Thread.sleep(1500); } catch (Exception ignore) {}
-                    chk = (JSONObject) Tools.call("env_run", new JSONObject().put("timeout_sec", 15)
-                            .put("cmd", "pgrep -f 'mode rp[c]' | head -1"));
-                    alive = String.valueOf(chk).matches("(?s).*\\d{2,}.*");
-                }
-                if (!alive) return err("DAEMON_FAIL", "RPC守护启动失败: " + chk);
-                if (a.optBoolean("new", false)) {
-                    Tools.call("env_run", new JSONObject().put("timeout_sec", 15)
-                            .put("cmd", "printf '%s\\n' '{\"type\":\"new_session\"}' > $HOME/.pi-rpc-in"));
-                    try { Thread.sleep(1500); } catch (Exception ignore) {}
-                }
-                long start = out.canRead() ? out.length() : 0;
-                // 写prompt到FIFO（tail -f 持有读端，写入不阻塞）；带上轮换摘要
-                String finalPrompt = prompt;
-                if (rpcStash != null) {
-                    finalPrompt = "【此前任务状态摘要】" + rpcStash + "\n\n" + prompt;
-                    rpcStash = null;
-                }
-                JSONObject line = new JSONObject().put("id", "rpc" + System.currentTimeMillis())
-                        .put("type", "prompt").put("message", finalPrompt);
-                try (java.io.FileOutputStream fo = new java.io.FileOutputStream(fifo, true)) {
-                    fo.write((line.toString() + "\n").getBytes("UTF-8"));
-                    fo.flush();
-                }
-                // 轮询 out 新增字节，找最后一个 agent_end 的 assistant 文本
-                long deadline = System.currentTimeMillis() + waitS * 1000L;
-                StringBuilder acc = new StringBuilder();
-                String answer = null; String usage = null;
-                while (System.currentTimeMillis() < deadline) {
-                    try { Thread.sleep(1200); } catch (Exception ignore) {}
-                    if (!out.canRead()) continue;
-                    byte[] all = java.nio.file.Files.readAllBytes(out.toPath());
-                    if (all.length <= start) continue;
-                    String fresh = new String(java.util.Arrays.copyOfRange(all, (int) start, all.length), "UTF-8");
-                    acc.setLength(0); acc.append(fresh);
-                    long lastInput = 0;
-                    for (String ln : fresh.split("\n")) {
-                        if (!ln.contains("agent_end")) continue;
-                        try {
-                            JSONObject ev = new JSONObject(ln);
-                            lastInput = ev.optJSONObject("usage") == null ? 0 : ev.optJSONObject("usage").optLong("input", 0);
-                            JSONArray msgs = ev.optJSONArray("messages");
-                            if (msgs == null) continue;
-                            for (int k = msgs.length() - 1; k >= 0; k--) {
-                                JSONObject mm = msgs.optJSONObject(k);
-                                if (mm == null || !"assistant".equals(mm.optString("role"))) continue;
-                                JSONArray cc = mm.optJSONArray("content");
-                                if (cc == null) continue;
-                                StringBuilder txt = new StringBuilder();
-                                for (int j = 0; j < cc.length(); j++) {
-                                    JSONObject part = cc.optJSONObject(j);
-                                    if (part != null && "text".equals(part.optString("type"))) txt.append(part.optString("text"));
-                                }
-                                if (txt.length() > 0) { answer = txt.toString(); usage = String.valueOf(ev.optJSONObject("usage")); }
-                            }
-                        } catch (Exception ignore) {}
-                    }
-                    if (answer != null && fresh.contains("agent_settled")) break;
-                }
-                if (answer == null) {
-                    String tail = acc.length() > 0 ? acc.substring(Math.max(0, acc.length() - 300)) : "无新增输出";
-                    return err("RPC_TIMEOUT", waitS + "秒内未完成。尾部输出: " + tail);
-                }
-                JSONObject o = new JSONObject();
-                try { o.put("answer", answer); if (usage != null) o.put("usage", new JSONObject(usage)); } catch (Exception ignore) {}
-                // 上下文自动轮换：input超40k → 摘要→new_session→摘要留给下次prompt
-                long usedInput = 0;
-                try { usedInput = o.getJSONObject("usage").optLong("input", 0); } catch (Exception ignore) {}
-                if (usedInput > 40000) {
-                    JSONObject sumReq = new JSONObject().put("id", "sum" + System.currentTimeMillis())
-                            .put("type", "prompt").put("message", "用150字总结当前对话的关键状态、已完成与未完成事项，只输出总结");
-                    try (java.io.FileOutputStream fo = new java.io.FileOutputStream(fifo, true)) {
-                        fo.write((sumReq + "\n").getBytes("UTF-8")); fo.flush();
-                    }
-                    String summary = null;
-                    long dl2 = System.currentTimeMillis() + 60000;
-                    long mark = out.length();
-                    while (System.currentTimeMillis() < dl2 && summary == null) {
-                        try { Thread.sleep(1200); } catch (Exception ignore) {}
-                        if (!out.canRead()) continue;
-                        byte[] all2 = java.nio.file.Files.readAllBytes(out.toPath());
-                        if (all2.length <= mark) continue;
-                        String fresh2 = new String(java.util.Arrays.copyOfRange(all2, (int) mark, all2.length), "UTF-8");
-                        mark = all2.length;
-                        for (String ln : fresh2.split("\n")) {
-                            if (!ln.contains("agent_end")) continue;
-                            try {
-                                JSONObject ev = new JSONObject(ln);
-                                JSONArray msgs = ev.optJSONArray("messages");
-                                if (msgs == null) continue;
-                                for (int k = msgs.length() - 1; k >= 0; k--) {
-                                    JSONObject mm = msgs.optJSONObject(k);
-                                    if (mm == null || !"assistant".equals(mm.optString("role"))) continue;
-                                    JSONArray cc = mm.optJSONArray("content");
-                                    if (cc == null) continue;
-                                    StringBuilder tx = new StringBuilder();
-                                    for (int j = 0; j < cc.length(); j++) {
-                                        JSONObject part = cc.optJSONObject(j);
-                                        if (part != null && "text".equals(part.optString("type"))) tx.append(part.optString("text"));
-                                    }
-                                    if (tx.length() > 0) summary = tx.toString();
-                                }
-                            } catch (Exception ignore) {}
-                        }
-                    }
-                    Tools.call("env_run", new JSONObject().put("timeout_sec", 15)
-                            .put("cmd", "printf '%s\\n' '{\"type\":\"new_session\"}' > $HOME/.pi-rpc-in"));
-                    rpcStash = summary == null ? "" : summary;
-                    o.put("session_rotated", true);
-                    if (summary != null) o.put("summary", summary);
-                }
-                return ok(o);
-            }});
-
-        // ═══ 持久记忆（脑的长期存储：用户偏好/App特性/坐标校准/任何学到的知识）═══
-        def("notify_reply", "直接回复通知消息（微信/QQ原生回复通道，无需打开App、无需看屏、锁屏可回）。key 来自 notify_read；也可 pkg+match 定位。这是回微信的正解",
-            schema(props("text", prop("string", "回复内容"), "key", prop("string", "通知key（notify_read返回）可空"),
-                    "pkg", prop("string", "按包名定位 可空"), "match", prop("string", "按标题定位 可空")), "text"),
-            new H() { public JSONObject run(JSONObject a) throws Exception {
-                String text = a.optString("text");
-                if (text.isEmpty()) return err("BAD", "text 不能为空");
-                String key = a.optString("key", "");
-                StatusBarNotification sbn = null;
-                if (!key.isEmpty()) sbn = NotifyListener.getSbn(key);
-                if (sbn == null) {
-                    String k = NotifyListener.findKey(a.optString("pkg", ""), a.optString("match", a.optString("key","")));
-                    if (k != null) sbn = NotifyListener.getSbn(k);
-                }
-                if (sbn == null) return err("NOT_FOUND", "未找到匹配通知（可用 notify_read 查看 key）");
-                android.app.Notification.Action[] acts = sbn.getNotification().actions;
-                if (acts == null) return err("NO_ACTION", "该通知无动作按钮");
-                for (android.app.Notification.Action act : acts) {
-                    android.app.RemoteInput[] ris = act.getRemoteInputs();
-                    if (ris == null || ris.length == 0) continue;
-                    android.os.Bundle b = new android.os.Bundle();
-                    b.putCharSequence(ris[0].getResultKey(), text);
-                    android.content.Intent intent = new android.content.Intent();
-                    android.app.RemoteInput.addResultsToIntent(ris, intent, b);
-                    try {
-                        act.actionIntent.send(ctx, 0, intent);
-                        return ok(new JSONObject().put("replied", true).put("pkg", sbn.getPackageName())
-                                .put("via", "RemoteInput原生通道"));
-                    } catch (Exception e) { return err("SEND_FAIL", e.toString()); }
-                }
-                return err("NO_REMOTE_INPUT", "该通知不支持直接回复（无RemoteInput）");
-            }});
-
-        def("memory_save", "持久保存知识（跨会话永存）：key 唯一标识，value 内容。用于：用户偏好、App界面特性（如'微信搜索按钮需偏移-30px'）、常用地址等",
-            schema(props("key", prop("string", "唯一标识 如 user.pref.address / app.wechat.search_offset"), "value", prop("string", "知识内容")), "key", "value"),
-            new H() { public JSONObject run(JSONObject a) throws Exception {
-                String key = a.optString("key").trim();
-                if (key.isEmpty()) return err("BAD", "key 不能为空");
-                File f = new File(ctx.getFilesDir(), "memory.json");
-                JSONObject mem = new JSONObject();
-                try { mem = new JSONObject(new String(java.nio.file.Files.readAllBytes(f.toPath()), "UTF-8")); } catch (Exception ignore) {}
-                mem.put(key, new JSONObject().put("v", a.optString("value")).put("t", System.currentTimeMillis()));
-                write(f, mem.toString());
-                return ok(new JSONObject().put("key", key).put("total", mem.length()));
-            }});
-        def("memory_read", "读取知识", schema(props("key", prop("string", "标识")), "key"), new H() { public JSONObject run(JSONObject a) throws Exception {
-            File f = new File(ctx.getFilesDir(), "memory.json");
-            try {
-                JSONObject mem = new JSONObject(new String(java.nio.file.Files.readAllBytes(f.toPath()), "UTF-8"));
-                JSONObject e = mem.optJSONObject(a.optString("key"));
-                if (e == null) return err("NOT_FOUND", "无此知识");
-                return ok(new JSONObject().put("value", e.optString("v")).put("saved", e.optLong("t")));
-            } catch (Exception e) { return err("EMPTY", "记忆库为空"); }
-        }});
-        def("memory_list", "列出全部记忆（key+摘要），pi 每次操作陌生App前先看一眼",
-            schema(props("kw", prop("string", "按key关键词过滤 可空"))), new H() { public JSONObject run(JSONObject a) throws Exception {
-            File f = new File(ctx.getFilesDir(), "memory.json");
-            JSONObject mem;
-            try { mem = new JSONObject(new String(java.nio.file.Files.readAllBytes(f.toPath()), "UTF-8")); }
-            catch (Exception e) { return ok(new JSONObject().put("count", 0).put("items", new JSONArray())); }
-            String kw = a.optString("kw", "");
-            JSONArray out = new JSONArray();
-            java.util.Iterator<String> it = mem.keys();
-            while (it.hasNext()) {
-                String k = it.next();
-                if (!kw.isEmpty() && !k.contains(kw)) continue;
-                JSONObject e = mem.optJSONObject(k);
-                if (e == null) continue;
-                String v = e.optString("v");
-                out.put(new JSONObject().put("key", k).put("v", v.length() > 80 ? v.substring(0, 80) + "…" : v).put("t", e.optLong("t")));
-            }
-            return ok(new JSONObject().put("count", out.length()).put("items", out));
-        }});
-        def("memory_del", "删除知识", schema(props("key", prop("string", "标识")), "key"), new H() { public JSONObject run(JSONObject a) throws Exception {
-            File f = new File(ctx.getFilesDir(), "memory.json");
-            try {
-                JSONObject mem = new JSONObject(new String(java.nio.file.Files.readAllBytes(f.toPath()), "UTF-8"));
-                mem.remove(a.optString("key"));
-                write(f, mem.toString());
-                return ok("已删除");
-            } catch (Exception e) { return err("EMPTY", "记忆库为空"); }
-        }});
-
-        // ═══ 变化检测（操作效果验证的通用武器：两张截图像素级对比）═══
-        def("shot_diff", "对比两张截图：返回变化区域占比+变化区域裁剪图路径。配合 vision_ask(裁剪图,'这里发生了什么变化') = 通用操作效果验证",
-            schema(props("before", prop("string", "前图路径"), "after", prop("string", "后图路径")), "before", "after"),
-            new H() { public JSONObject run(JSONObject a) throws Exception {
-                android.graphics.Bitmap b1 = android.graphics.BitmapFactory.decodeFile(a.optString("before"));
-                android.graphics.Bitmap b2 = android.graphics.BitmapFactory.decodeFile(a.optString("after"));
-                if (b1 == null || b2 == null) return err("BAD_IMG", "图片解码失败");
-                int w = Math.min(b1.getWidth(), b2.getWidth()), h = Math.min(b1.getHeight(), b2.getHeight());
-                int[] p1 = new int[w * h], p2 = new int[w * h];
-                b1.getPixels(p1, 0, w, 0, 0, w, h); b2.getPixels(p2, 0, w, 0, 0, w, h);
-                int minX = w, minY = h, maxX = 0, maxY = 0, changed = 0;
-                for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
-                    int i = y * w + x;
-                    int d = Math.abs(((p1[i] >> 16) & 255) - ((p2[i] >> 16) & 255))
-                          + Math.abs(((p1[i] >> 8) & 255) - ((p2[i] >> 8) & 255))
-                          + Math.abs((p1[i] & 255) - (p2[i] & 255));
-                    if (d > 60) { changed++; if (x<minX)minX=x; if (x>maxX)maxX=x; if (y<minY)minY=y; if (y>maxY)maxY=y; }
-                }
-                JSONObject o = new JSONObject();
-                double pct = 100.0 * changed / (w * h);
-                o.put("changedPercent", Math.round(pct * 10) / 10.0);
-                if (changed > 0) {
-                    int pad = 20;
-                    int cx = Math.max(0, minX - pad), cy = Math.max(0, minY - pad);
-                    int cw = Math.min(w - cx, maxX - minX + pad * 2), ch = Math.min(h - cy, maxY - minY + pad * 2);
-                    android.graphics.Bitmap crop = android.graphics.Bitmap.createBitmap(b2, cx, cy, cw, ch);
-                    File cf = new File("/storage/emulated/0/pibridge/shots/diff-crop.png");
-                    java.io.FileOutputStream fo = new java.io.FileOutputStream(cf);
-                    crop.compress(android.graphics.Bitmap.CompressFormat.PNG, 85, fo); fo.close();
-                    o.put("region", cx + "," + cy + " " + cw + "x" + ch);
-                    o.put("crop", cf.getAbsolutePath());
-                }
-                b1.recycle(); b2.recycle();
-                return ok(o);
-            }});
-
-        def("ui_wait_gone", "等待元素消失（加载圈/弹窗关闭/页面切走的反向验证）",
-            schema(props("text", prop("string", "等待消失的文本"), "display", prop("number", "屏幕ID 默认0主屏"),
-                    "timeout_sec", prop("number", "最长等待 默认15秒")), "text"), new H() { public JSONObject run(JSONObject a) throws Exception {
-            int disp = a.optInt("display", 0);
-            long deadline = System.currentTimeMillis() + a.optInt("timeout_sec", 15) * 1000L;
-            String target = a.optString("text");
-            while (System.currentTimeMillis() < deadline) {
-                JSONArray nodes = AdbService.readTree(disp);
-                boolean found = false;
-                if (nodes != null) for (int k = 0; k < nodes.length(); k++) {
-                    JSONObject n = nodes.optJSONObject(k);
-                    if (n != null && (n.optString("text","").contains(target) || n.optString("desc","").contains(target))) { found = true; break; }
-                }
-                if (!found) return ok(new JSONObject().put("gone", true));
-                try { Thread.sleep(900); } catch (Exception ignore) {}
-            }
-            return ok(new JSONObject().put("gone", false).put("hint", "超时仍在"));
-        }});
-
-        def("macro_save", "保存宏：name英文标识，desc中文说明，steps为步骤数组JSON文本，每步包含tool与args两个字段，args支持p1到p3占位符",
-            schema(props("name", prop("string", "宏名英文数字下划线"), "desc", prop("string", "中文说明"),
-                    "steps", prop("string", "步骤数组JSON文本")), "name", "desc", "steps"),
-            new H() { public JSONObject run(JSONObject a) throws Exception {
-                String name = a.optString("name").replaceAll("[^a-zA-Z0-9_]", "");
-                if (name.isEmpty()) return err("BAD_NAME", "宏名只能用英文数字下划线");
-                JSONArray steps = new JSONArray(a.optString("steps", "[]"));
-                if (steps.length() == 0) return err("EMPTY", "steps 为空");
-                for (int i = 0; i < steps.length(); i++) {
-                    JSONObject s = steps.optJSONObject(i);
-                    if (s == null || s.optString("tool").isEmpty()) return err("BAD_STEP", "第" + (i+1) + "步缺少tool");
-                }
-                File dir = new File(ctx.getFilesDir(), "macros");
-                if (!dir.isDirectory()) dir.mkdirs();
-                JSONObject m = new JSONObject().put("name", name).put("desc", a.optString("desc"))
-                        .put("steps", steps).put("saved", System.currentTimeMillis());
-                write(new File(dir, name + ".json"), m.toString());
-                return ok(new JSONObject().put("name", name).put("steps", steps.length()));
-            }});
-        def("macro_run", "运行宏：顺序执行全部步骤；支持参数p1-p3、动态副屏{{vd}}、上一步结果{{prev}}与{{prev.路径}}、skip_if_text条件跳步、speak语音播报结果；关键步骤失败自动中止",
-            schema(props("name", prop("string", "宏名"), "p1", prop("string", "参数1可空"),
-                    "p2", prop("string", "参数2可空"), "p3", prop("string", "参数3可空")), "name"),
-            new H() { public JSONObject run(JSONObject a) throws Exception {
-                String name = a.optString("name").replaceAll("[^a-zA-Z0-9_]", "");
-                File f = new File(new File(ctx.getFilesDir(), "macros"), name + ".json");
-                if (!f.canRead()) return err("NO_MACRO", "宏不存在，可先macro_list查询");
-                JSONObject m = new JSONObject(new String(java.nio.file.Files.readAllBytes(f.toPath()), "UTF-8"));
-                JSONArray steps = m.optJSONArray("steps");
-                JSONArray results = new JSONArray();
-                Object prevData = null;
-                String lastAnswer = null;
-                for (int i = 0; i < steps.length(); i++) {
-                    JSONObject s = steps.optJSONObject(i);
-                    String skipIf = s.optString("skip_if_text", "");
-                    if (!skipIf.isEmpty()) {
-                        int chkDisp = VdManager.alive() ? VdManager.displayId() : 0;
-                        JSONArray chkNodes = AdbService.readTree(chkDisp);
-                        boolean hitSkip = false;
-                        if (chkNodes != null) for (int k = 0; k < chkNodes.length(); k++) {
-                            JSONObject n = chkNodes.optJSONObject(k);
-                            if (n != null && (n.optString("text","").contains(skipIf) || n.optString("desc","").contains(skipIf))) { hitSkip = true; break; }
-                        }
-                        if (hitSkip) {
-                            results.put(new JSONObject().put("step", i + 1).put("tool", s.optString("tool")).put("skipped", true));
-                            continue;
-                        }
-                    }
-                    JSONObject args = new JSONObject(s.optString("args", "{}"));
-                    java.util.Iterator<String> ai = args.keys();
-                    while (ai.hasNext()) {
-                        String k2 = ai.next();
-                        Object v2 = args.opt(k2);
-                        if (!(v2 instanceof String)) continue;
-                        String sv = (String) v2;
-                        for (int p = 1; p <= 3; p++) sv = sv.replace("{{p" + p + "}}", a.optString("p" + p));
-                        sv = sv.replace("{{vd}}", String.valueOf(VdManager.displayId()));
-                        if (prevData != null) {
-                            sv = sv.replace("{{prev}}", String.valueOf(prevData));
-                            java.util.regex.Matcher pm2 = java.util.regex.Pattern.compile("\\{\\{prev\\.([a-zA-Z0-9_.]+)\\}\\}").matcher(sv);
-                            StringBuffer sbx = new StringBuffer();
-                            while (pm2.find()) {
-                                Object cur = prevData;
-                                for (String seg : pm2.group(1).split("\\.")) {
-                                    if (cur instanceof JSONObject) cur = ((JSONObject) cur).opt(seg);
-                                    else if (cur instanceof org.json.JSONArray) {
-                                        try { cur = ((org.json.JSONArray) cur).opt(Integer.parseInt(seg)); } catch (Exception ignore2) { cur = null; }
-                                    } else { cur = null; break; }
-                                }
-                                pm2.appendReplacement(sbx, java.util.regex.Matcher.quoteReplacement(cur == null ? "" : String.valueOf(cur)));
-                            }
-                            pm2.appendTail(sbx);
-                            sv = sbx.toString();
-                        }
-                        args.put(k2, sv);
-                    }
-                    JSONObject r = (JSONObject) Tools.call(s.optString("tool"), args);
-                    prevData = r.opt("data");
-                    JSONObject rec = new JSONObject().put("step", i + 1).put("tool", s.optString("tool"))
-                            .put("ok", r.optBoolean("ok", false));
-                    try {
-                        rec.put("data", r.opt("data"));
-                        JSONObject dd = r.optJSONObject("data");
-                        if (dd != null && dd.has("answer")) lastAnswer = dd.optString("answer");
-                    } catch (Exception ignore3) {}
-                    results.put(rec);
-                    if (!r.optBoolean("ok", false) && s.optBoolean("critical", true))
-                        return ok(new JSONObject().put("aborted", true).put("atStep", i + 1).put("results", results));
-                }
-                if (a.optBoolean("speak", false) && lastAnswer != null) {
-                    try {
-                        String say = lastAnswer.length() > 80 ? lastAnswer.substring(0, 80) : lastAnswer;
-                        Tools.call("tts_speak", new JSONObject().put("text", say));
-                    } catch (Exception ignore4) {}
-                }
-                JSONObject done = new JSONObject().put("done", true).put("steps", steps.length()).put("results", results);
-                if (lastAnswer != null) done.put("lastAnswer", lastAnswer);
-                return ok(done);
-            }});
-
-
-        def("macro_list", "列出全部已保存宏", schema(props()), new H() { public JSONObject run(JSONObject a) throws Exception {
-            File dir = new File(ctx.getFilesDir(), "macros");
-            JSONArray out = new JSONArray();
-            if (dir.isDirectory()) for (File f : dir.listFiles()) {
-                try {
-                    JSONObject m = new JSONObject(new String(java.nio.file.Files.readAllBytes(f.toPath()), "UTF-8"));
-                    out.put(new JSONObject().put("name", m.optString("name")).put("desc", m.optString("desc"))
-                            .put("steps", m.optJSONArray("steps") == null ? 0 : m.optJSONArray("steps").length()));
-                } catch (Exception ignore) {}
-            }
-            return ok(new JSONObject().put("macros", out).put("count", out.length()));
-        }});
-        def("macro_del", "删除指定宏", schema(props("name", prop("string", "宏名")), "name"), new H() { public JSONObject run(JSONObject a) throws Exception {
-            String name = a.optString("name").replaceAll("[^a-zA-Z0-9_]", "");
-            File f = new File(new File(ctx.getFilesDir(), "macros"), name + ".json");
-            return f.delete() ? ok("已删除") : err("NO_MACRO", "不存在");
-        }});
-
-
-        def("macro_export", "导出宏到公共目录（跨设备移植或备份）",
-            schema(props("name", prop("string", "宏名，all=全部导出")), "name"), new H() { public JSONObject run(JSONObject a) throws Exception {
-            String name = a.optString("name", "all");
-            File src = new File(ctx.getFilesDir(), "macros");
-            File dst = new File("/storage/emulated/0/pibridge/macros");
-            if (!dst.isDirectory()) dst.mkdirs();
-            int n = 0;
-            for (File f : src.listFiles()) {
-                String base = f.getName().replace(".json", "");
-                if (!name.equals("all") && !base.equals(name)) continue;
-                try { java.nio.file.Files.copy(f.toPath(), new File(dst, f.getName()).toPath(),
-                        java.nio.file.StandardCopyOption.REPLACE_EXISTING); n++; } catch (Exception ignore) {}
-            }
-            return n > 0 ? ok(new JSONObject().put("exported", n).put("dir", dst.getAbsolutePath()))
-                    : err("NONE", "没有可导出的宏");
-        }});
-        def("macro_import", "从公共目录导入宏（pibridge/macros 下的 json）",
-            schema(props("name", prop("string", "宏名，all=全部导入")), "name"), new H() { public JSONObject run(JSONObject a) throws Exception {
-            String name = a.optString("name", "all");
-            File src = new File("/storage/emulated/0/pibridge/macros");
-            File dst = new File(ctx.getFilesDir(), "macros");
-            if (!dst.isDirectory()) dst.mkdirs();
-            if (!src.isDirectory()) return err("NO_SRC", "无导入目录");
-            int n = 0;
-            for (File f : src.listFiles()) {
-                String base = f.getName().replace(".json", "");
-                if (!name.equals("all") && !base.equals(name)) continue;
-                try { java.nio.file.Files.copy(f.toPath(), new File(dst, f.getName()).toPath(),
-                        java.nio.file.StandardCopyOption.REPLACE_EXISTING); n++; } catch (Exception ignore) {}
-            }
-            return n > 0 ? ok(new JSONObject().put("imported", n)) : err("NONE", "没有可导入的宏");
-        }});
-
-        def("apps_list", "列出已装应用（可按关键词过滤）",
-            schema(props("filter", prop("string", "包名/应用名包含关键词"), "limit", prop("number", "上限默认 50"))), new H() { public JSONObject run(JSONObject a) throws Exception {
-                PackageManager pm = ctx.getPackageManager();
-                List<PackageInfo> all = pm.getInstalledPackages(0);
-                String f = a.optString("filter", "").toLowerCase();
-                int limit = a.optInt("limit", 50);
-                JSONArray arr = new JSONArray(); int n = 0;
-                for (PackageInfo pi : all) {
-                    String label = pm.getApplicationLabel(pi.applicationInfo).toString();
-                    if (!f.isEmpty() && !label.toLowerCase().contains(f) && !pi.packageName.contains(f)) continue;
-                    arr.put(label + " (" + pi.packageName + ")");
-                    if (++n >= limit) break;
-                }
-                return ok(new JSONObject().put("total", all.size()).put("shown", n).put("items", arr));
-            }});
-
-        def("brightness_get", "查屏幕亮度", schema(props()), new H() { public JSONObject run(JSONObject a) throws Exception {
-            return ok(Settings.System.getInt(ctx.getContentResolver(), Settings.System.SCREEN_BRIGHTNESS, -1));
-        }});
-
-        // ═══ 网络 ═══
-        def("brightness_set", "设屏幕亮度（0-255，需 WRITE_SETTINGS）",
-            schema(props("value", prop("number", "0-255")), "value"), new H() { public JSONObject run(JSONObject a) throws Exception {
-                int v = Math.max(1, Math.min(255, a.optInt("value")));
-                try {
-                    android.content.ContentResolver cr = ctx.getContentResolver();
-                    Settings.System.putInt(cr, Settings.System.SCREEN_BRIGHTNESS_MODE, Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL);
-                    Settings.System.putInt(cr, Settings.System.SCREEN_BRIGHTNESS, v);
-                    return ok("亮度 " + v);
-                } catch (SecurityException e) {
-                    return err("NO_PERM", "需要授权: adbc shell appops set com.binbin.pibridge WRITE_SETTINGS allow");
-                }
-            }});
-
-        def("calllog_list", "读最近通话（需通话记录权限）", schema(props("limit", prop("number", "条数默认 10"))), new H() { public JSONObject run(JSONObject a) throws Exception {
-            Cursor c = ctx.getContentResolver().query(CallLog.Calls.CONTENT_URI,
-                    new String[]{CallLog.Calls.NUMBER, CallLog.Calls.CACHED_NAME, CallLog.Calls.DATE, CallLog.Calls.TYPE},
-                    null, null, CallLog.Calls.DATE + " DESC");
-            JSONArray arr = new JSONArray(); int n = a.optInt("limit", 10); int i = 0;
-            if (c != null) {
-                while (c.moveToNext() && i < n) {
-                    String type = c.getInt(3) == CallLog.Calls.INCOMING_TYPE ? "入" : c.getInt(3) == CallLog.Calls.OUTGOING_TYPE ? "出" : "未接";
-                    arr.put(new JSONObject().put("number", c.getString(0)).put("name", c.getString(1))
-                            .put("type", type).put("time", new SimpleDateFormat("MM-dd HH:mm", Locale.CHINA).format(new Date(c.getLong(2)))));
-                    i++;
-                }
-                c.close();
-            }
-            return ok(arr);
-        }});
-
-        def("chat_fast", "快脑：闲聊秒答，任务则返回 task 交慢脑(pi)", schema(props("q", prop("string", "用户的话")), "q"),
-            new H() { public JSONObject run(JSONObject a) throws Exception {
-                String q = a.optString("q");
-                String key = fastKey();
-                if (key == null) return err("NO_KEY", "未配置 API Key");
-                String sysPrompt = "你是「小丘」的快脑。判断用户输入属于哪类，只输出一行JSON不要其他内容："
-                  + "闲聊/常识/计算/翻译/简单知识问答（不需要操作手机、不需要写代码、不需要多步骤）→ {\"type\":\"chat\",\"answer\":\"<口语一两句直接回答>\"}；"
-                  + "需要动手执行的任务（写代码/改文件/操作App/查实时信息/多步骤）→ {\"type\":\"task\",\"reply\":\"<一句话确认>\"}。answer/reply用中文口语，简短。";
-                JSONObject body = new JSONObject()
-                        .put("model", "glm-5.3-flash")
-                        .put("messages", new org.json.JSONArray()
-                                .put(new JSONObject().put("role", "system").put("content", sysPrompt))
-                                .put(new JSONObject().put("role", "user").put("content", q)))
-                        .put("max_tokens", 400).put("temperature", 0.3);
-                javax.net.ssl.HttpsURLConnection c = (javax.net.ssl.HttpsURLConnection)
-                        new java.net.URL("https://open.bigmodel.cn/api/coding/paas/v4/chat/completions").openConnection();
-                c.setRequestMethod("POST"); c.setConnectTimeout(5000); c.setReadTimeout(20000); c.setDoOutput(true);
-                c.setRequestProperty("Authorization", "Bearer " + key);
-                c.setRequestProperty("Content-Type", "application/json");
-                java.io.OutputStream os = c.getOutputStream();
-                os.write(body.toString().getBytes("UTF-8")); os.close();
-                int code = c.getResponseCode();
-                java.io.InputStream is = code < 400 ? c.getInputStream() : c.getErrorStream();
-                java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
-                byte[] buf = new byte[4096]; int n; while (is != null && (n = is.read(buf)) > 0) bo.write(buf, 0, n);
-                if (is != null) is.close();
-                String resp = bo.toString("UTF-8");
-                if (code >= 400) return err("API_ERR", code + ": " + resp.substring(0, Math.min(200, resp.length())));
-                String content = new JSONObject(resp).getJSONArray("choices").getJSONObject(0)
-                        .getJSONObject("message").optString("content", "").trim();
-                try {
-                    String j = content;
-                    if (j.contains("{")) j = j.substring(j.indexOf('{'), j.lastIndexOf('}') + 1);
-                    JSONObject r = new JSONObject(j);
-                    if ("task".equals(r.optString("type")))
-                        return ok(new JSONObject().put("type", "task").put("reply", r.optString("reply", "好的，交给我处理")));
-                    return ok(new JSONObject().put("type", "chat").put("answer", r.optString("answer", content)));
-                } catch (Exception e) {
-                    return ok(new JSONObject().put("type", "chat").put("answer", content));
-                }
-            }});
-
-        // ═══ 视觉问答（"看"的兜底王牌：GLM-4V 读图，无树App的界面理解）═══
-        def("vision_bench", "视觉坐标精度基准：GLM-4V元素坐标对比无障碍树真值，输出匹配数/平均偏差/最大偏差（量化视觉定位质量）",
+        def("vision_bench", "视觉千分比定位基准：GLM-4V千分比坐标 vs 树真值千分比，输出匹配数/平均偏差‰/最大偏差‰（跨设备通用度量）",
             schema(props("display", prop("number", "屏幕ID 默认0主屏"))), new H() { public JSONObject run(JSONObject a) throws Exception {
             int disp = a.optInt("display", 0);
             String shotPath;
@@ -1439,6 +920,7 @@ public class Tools {
             }
             JSONArray tree = AdbService.readTree(disp);
             if (tree == null || tree.length() == 0) return err("NO_TREE", "该屏无结构树真值");
+            int[] ds = AdbService.displaySize(disp);
             JSONObject els = (JSONObject) Tools.call("vision_elements", new JSONObject().put("file", shotPath));
             if (!els.optBoolean("ok", false)) return els;
             JSONArray ve = els.optJSONObject("data") == null ? new org.json.JSONArray()
@@ -1456,17 +938,19 @@ public class Tools {
                 String[] wh = parts[1].split("x");
                 int tcx = Integer.parseInt(lt[0]) + Integer.parseInt(wh[0]) / 2;
                 int tcy = Integer.parseInt(lt[1]) + Integer.parseInt(wh[1]) / 2;
+                int tnx = tcx * 1000 / ds[0], tny = tcy * 1000 / ds[1]; // 树像素→千分比
                 for (int j = 0; j < ve.length(); j++) {
                     JSONObject e = ve.optJSONObject(j);
                     if (e == null) continue;
                     String el = e.optString("label","").trim();
                     if (el.equals(txt)) {
-                        int x = e.optInt("x"), y = e.optInt("y");
-                        double dd = Math.sqrt(Math.pow(x - tcx, 2) + Math.pow(y - tcy, 2));
+                        int vx = e.optInt("x"), vy = e.optInt("y");
+                        double dd = Math.sqrt(Math.pow(vx - tnx, 2) + Math.pow(vy - tny, 2));
                         deltas.add(new double[]{dd});
-                        org.json.JSONObject det = new org.json.JSONObject();
-                        try { det.put("text", txt).put("tree", tcx + "," + tcy).put("vision", x + "," + y).put("deltaPx", Math.round(dd)); } catch (Exception ignore) {}
-                        details.put(det);
+                        org.json.JSONArray det = new org.json.JSONArray();
+                        org.json.JSONObject d2 = new org.json.JSONObject();
+                        try { d2.put("text", txt).put("treePermille", tnx + "," + tny).put("visionPermille", vx + "," + vy).put("deltaPermille", Math.round(dd)); } catch (Exception ignore) {}
+                        details.put(d2);
                         break;
                     }
                 }
@@ -1475,9 +959,10 @@ public class Tools {
             double sum = 0, max = 0;
             for (double[] d2 : deltas) { sum += d2[0]; max = Math.max(max, d2[0]); }
             org.json.JSONObject o = new org.json.JSONObject();
+            o.put("unit", "permille");
             o.put("matched", deltas.size());
-            o.put("avgDeltaPx", Math.round(sum / deltas.size()));
-            o.put("maxDeltaPx", Math.round(max));
+            o.put("avgDelta", Math.round(sum / deltas.size()));
+            o.put("maxDelta", Math.round(max));
             o.put("details", details);
             return ok(o);
             }});
