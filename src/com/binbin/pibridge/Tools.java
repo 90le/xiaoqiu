@@ -741,17 +741,30 @@ public class Tools {
                     return ok(sysctlReadAll(c.optString("data")));
                 }
                 boolean on = a.optBoolean("on");
-                String set, getNs, getKey, want;
+                String getNs, getKey, want;
                 switch (act) {
-                    case "wifi": set = "svc wifi " + (on ? "enable" : "disable"); getNs = "global"; getKey = "wifi_on"; want = on ? "1" : "0"; break;
-                    case "bluetooth": set = "svc bluetooth " + (on ? "enable" : "disable"); getNs = "global"; getKey = "bluetooth_on"; want = on ? "1" : "0"; break;
-                    case "rotate": set = "settings put system accelerometer_rotation " + (on ? "1" : "0"); getNs = "system"; getKey = "accelerometer_rotation"; want = on ? "1" : "0"; break;
-                    case "location": set = "settings put secure location_mode " + (on ? "3" : "0"); getNs = "secure"; getKey = "location_mode"; want = on ? "3" : "0"; break;
-                    case "dnd": set = "settings put global zen_mode " + (on ? "1" : "0"); getNs = "global"; getKey = "zen_mode"; want = on ? "1" : "0"; break;
-                    case "brightness_auto": set = "settings put system screen_brightness_mode " + (on ? "1" : "0"); getNs = "system"; getKey = "screen_brightness_mode"; want = on ? "1" : "0"; break;
+                    case "wifi": getNs = "global"; getKey = "wifi_on"; want = on ? "1" : "0"; break;
+                    case "bluetooth": getNs = "global"; getKey = "bluetooth_on"; want = on ? "1" : "0"; break;
+                    case "rotate": getNs = "system"; getKey = "accelerometer_rotation"; want = on ? "1" : "0"; break;
+                    case "location": getNs = "secure"; getKey = "location_mode"; want = on ? "3" : "0"; break;
+                    case "dnd": getNs = "global"; getKey = "zen_mode"; want = on ? "1" : "0"; break;
+                    case "brightness_auto": getNs = "system"; getKey = "screen_brightness_mode"; want = on ? "1" : "0"; break;
                     default: return err("BAD_ACTION", "未知开关: " + act);
                 }
-                Tools.call("l2_exec", new JSONObject().put("cmd", set + "; sleep 1; settings get " + getNs + " " + getKey));
+                // 原生优先（免L2）：Settings API 直写
+                boolean nativeDone = false;
+                try {
+                    if ("rotate".equals(act)) { Settings.System.putInt(ctx.getContentResolver(), Settings.System.ACCELEROMETER_ROTATION, on ? 1 : 0); nativeDone = true; }
+                    else if ("location".equals(act)) { Settings.Secure.putInt(ctx.getContentResolver(), Settings.Secure.LOCATION_MODE, on ? 3 : 0); nativeDone = true; }
+                    else if ("dnd".equals(act)) { Settings.Global.putInt(ctx.getContentResolver(), "zen_mode", on ? 1 : 0); nativeDone = true; }
+                    else if ("brightness_auto".equals(act)) { Settings.System.putInt(ctx.getContentResolver(), Settings.System.SCREEN_BRIGHTNESS_MODE, on ? 1 : 0); nativeDone = true; }
+                } catch (Exception ignore) {}
+                if (!nativeDone) { // wifi/bt 等必须 shell
+                    String svc = act.equals("wifi") ? "svc wifi " + (on ? "enable" : "disable")
+                            : act.equals("bluetooth") ? "svc bluetooth " + (on ? "enable" : "disable") : null;
+                    if (svc != null) Tools.call("l2_exec", new JSONObject().put("cmd", svc));
+                    else Tools.call("l2_exec", new JSONObject().put("cmd", "settings put " + getNs + " " + getKey + " " + want));
+                }
                 Thread.sleep(700);
                 JSONObject c2 = (JSONObject) Tools.call("l2_exec", new JSONObject().put("cmd", SYSCTL_DUMP));
                 JSONObject state = sysctlReadAll(c2.optString("data"));
@@ -1735,6 +1748,32 @@ public class Tools {
                 }
             }
             return err("NOT_FOUND", "重试" + retries + "次未见可点击的『" + target + "』");
+        }});
+
+        def("settings_write", "原生设置写入（WRITE_SECURE_SETTINGS，免L2免界面）：ns=global/secure/system",
+            schema(props("ns", prop("string", "global/secure/system"), "key", prop("string", "设置键"),
+                    "value", prop("string", "值")), "ns", "key", "value"), new H() { public JSONObject run(JSONObject a) throws Exception {
+            String ns = a.optString("ns", "global"), key = a.optString("key"), value = a.optString("value");
+            boolean w;
+            if ("secure".equals(ns)) w = Settings.Secure.putString(ctx.getContentResolver(), key, value);
+            else if ("system".equals(ns)) w = Settings.System.putString(ctx.getContentResolver(), key, value);
+            else w = Settings.Global.putString(ctx.getContentResolver(), key, value);
+            String back;
+            if ("secure".equals(ns)) back = Settings.Secure.getString(ctx.getContentResolver(), key);
+            else if ("system".equals(ns)) back = Settings.System.getString(ctx.getContentResolver(), key);
+            else back = Settings.Global.getString(ctx.getContentResolver(), key);
+            return w ? ok(new JSONObject().put("key", key).put("value", value).put("readback", back)) : err("WRITE_FAIL", key);
+        }});
+
+        def("ui_tap_text", "按文本原生点击（无障碍节点ACTION_CLICK，主屏副屏通用，免L2）。比坐标点击更可靠的首选方式",
+            schema(props("text", prop("string", "节点文本（含匹配）"), "display", prop("number", "屏幕ID 默认0主屏")), "text"), new H() { public JSONObject run(JSONObject a) {
+            String r = AdbService.clickByText(a.optInt("display", 0), a.optString("text"));
+            return r.startsWith("已点击") ? ok(r) : err("TAP_FAIL", r);
+        }});
+        def("ui_scroll_node", "原生节点滚动（找可滚动容器执行滚动动作，免坐标免L2）",
+            schema(props("display", prop("number", "屏幕ID 默认0主屏"), "forward", prop("boolean", "true=向下滚动 默认"))), new H() { public JSONObject run(JSONObject a) {
+            String r = AdbService.scrollNode(a.optInt("display", 0), a.optBoolean("forward", true));
+            return r.startsWith("已滚动") ? ok(r) : err("SCROLL_FAIL", r);
         }});
 
         def("ui_tap_node", "按结构树编号点击（先 ui_screen_read 得到编号 i，直接点击该节点中心，免算坐标；display=0 主屏，副屏传 displayId）",

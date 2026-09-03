@@ -268,6 +268,97 @@ public class AdbService extends AccessibilityService {
     // ========== 文本直设（对可编辑节点 ACTION_SET_TEXT，绕过粘贴菜单） ==========
 
     /** 副屏文字输入：在指定副屏找可编辑节点（优先焦点）ACTION_SET_TEXT */
+
+    // ========== 原生节点操作（副屏/主屏通用，无L2依赖）==========
+
+    /** 按文本找活节点并原生点击（含可点击父容器回溯） */
+    public static String clickByText(int displayId, String target) {
+        if (inst == null) return "辅助服务未开启";
+        AccessibilityNodeInfo n = findLiveNode(displayId, target);
+        if (n == null) return "未找到";
+        if (n.isClickable()) return n.performAction(AccessibilityNodeInfo.ACTION_CLICK) ? "已点击" : "节点拒绝";
+        AccessibilityNodeInfo p = n.getParent();
+        int hops = 0;
+        while (p != null && hops < 6) {
+            if (p.isClickable()) return p.performAction(AccessibilityNodeInfo.ACTION_CLICK) ? "已点击(父容器)" : "父节点拒绝";
+            p = p.getParent(); hops++;
+        }
+        return "节点不可点击";
+    }
+
+    /** 原生滚动：找可滚动节点执行滚动动作 */
+    public static String scrollNode(int displayId, boolean forward) {
+        if (inst == null) return "辅助服务未开启";
+        try {
+            java.util.List<AccessibilityWindowInfo> wins = null;
+            if (displayId > 0 && Build.VERSION.SDK_INT >= 33) {
+                Object arr = AccessibilityService.class.getMethod("getWindowsOnAllDisplays").invoke(inst);
+                if (arr instanceof android.util.SparseArray) {
+                    Object l = ((android.util.SparseArray<?>) arr).get(displayId);
+                    if (l instanceof java.util.List) wins = (java.util.List<AccessibilityWindowInfo>) l;
+                }
+            } else {
+                wins = inst.getWindows();
+            }
+            if (wins == null) return "无窗口";
+            int action = forward ? AccessibilityNodeInfo.ACTION_SCROLL_FORWARD : AccessibilityNodeInfo.ACTION_SCROLL_BACKWARD;
+            for (AccessibilityWindowInfo w : wins) {
+                AccessibilityNodeInfo r = w.getRoot();
+                if (r == null) continue;
+                String rs = scrollWalk(r, action, 0);
+                if (rs != null) return rs;
+            }
+            return "未找到可滚动节点";
+        } catch (Throwable e) { return "异常: " + e; }
+    }
+    private static String scrollWalk(AccessibilityNodeInfo n, int action, int d) {
+        if (n == null || d > 25) return null;
+        try {
+            if (n.isScrollable()) return n.performAction(action) ? "已滚动" : null;
+            for (int i = 0; i < n.getChildCount(); i++) {
+                String r = scrollWalk(n.getChild(i), action, d + 1);
+                if (r != null) return r;
+            }
+        } catch (Exception ignore) {}
+        return null;
+    }
+
+    private static AccessibilityNodeInfo findLiveNode(int displayId, String target) {
+        try {
+            if (displayId > 0 && Build.VERSION.SDK_INT >= 33) {
+                Object arr = AccessibilityService.class.getMethod("getWindowsOnAllDisplays").invoke(inst);
+                if (arr instanceof android.util.SparseArray) {
+                    Object l = ((android.util.SparseArray<?>) arr).get(displayId);
+                    if (l instanceof java.util.List) {
+                        for (AccessibilityWindowInfo w : (java.util.List<AccessibilityWindowInfo>) l) {
+                            AccessibilityNodeInfo r = w.getRoot();
+                            if (r != null) {
+                                AccessibilityNodeInfo f = liveWalk(r, target, 0);
+                                if (f != null) return f;
+                            }
+                        }
+                    }
+                }
+                return null;
+            }
+            AccessibilityNodeInfo root = inst.getRootInActiveWindow();
+            return root == null ? null : liveWalk(root, target, 0);
+        } catch (Throwable e) { return null; }
+    }
+    private static AccessibilityNodeInfo liveWalk(AccessibilityNodeInfo n, String target, int d) {
+        if (n == null || d > 25) return null;
+        try {
+            String t = n.getText() == null ? "" : n.getText().toString();
+            String ds = n.getContentDescription() == null ? "" : n.getContentDescription().toString();
+            if (target.length() > 0 && t.length() <= 40 && (t.contains(target) || ds.contains(target))) return n;
+            for (int i = 0; i < n.getChildCount(); i++) {
+                AccessibilityNodeInfo r = liveWalk(n.getChild(i), target, d + 1);
+                if (r != null) return r;
+            }
+        } catch (Exception ignore) {}
+        return null;
+    }
+
     public static String setTextOnDisplay(int displayId, String text) {
         if (inst == null) return "辅助服务未开启";
         try {

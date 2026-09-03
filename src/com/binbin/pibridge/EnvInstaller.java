@@ -111,7 +111,12 @@ public class EnvInstaller {
                 "sleep 3\n" +
                 "pm grant com.pihost android.permission.RECORD_AUDIO 2>/dev/null\n" +
                 "pm grant com.pihost android.permission.READ_EXTERNAL_STORAGE 2>/dev/null\n" +
-                "pm grant com.pihost android.permission.WRITE_EXTERNAL_STORAGE 2>/dev/null\n" +
+                "pm grant com.pihost android.permission.WRITE_EXTERNAL_STORAGE 2>/dev/null\n" +                "pm grant com.pihost android.permission.WRITE_SECURE_SETTINGS 2>/dev/null\n" +
+                "pm grant com.pihost android.permission.SEND_SMS 2>/dev/null\n" +
+                "pm grant com.pihost android.permission.READ_SMS 2>/dev/null\n" +
+                "pm grant com.pihost android.permission.RECEIVE_SMS 2>/dev/null\n" +
+                "pm grant com.pihost android.permission.READ_CALL_LOG 2>/dev/null\n" +
+                "pm grant com.pihost android.permission.ACCESS_BACKGROUND_LOCATION 2>/dev/null\n" +
                 "appops set com.pihost SYSTEM_ALERT_WINDOW allow 2>/dev/null\n" +
                 "appops set com.pihost MANAGE_EXTERNAL_STORAGE allow 2>/dev/null\n" +
                 "appops set --uid com.pihost RECORD_AUDIO allow 2>/dev/null\n" +
