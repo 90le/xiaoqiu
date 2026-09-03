@@ -780,6 +780,21 @@ public class Tools {
                 JSONArray results = new JSONArray();
                 for (int i = 0; i < steps.length(); i++) {
                     JSONObject s = steps.optJSONObject(i);
+                    // 条件分支：skip_if_text 命中则跳过该步（如：无广告弹窗就跳过关闭步骤）
+                    String skipIf = s.optString("skip_if_text", "");
+                    if (!skipIf.isEmpty()) {
+                        int chkDisp = VdManager.alive() ? VdManager.displayId() : 0;
+                        JSONArray chk = AdbService.readTree(chkDisp);
+                        boolean found = false;
+                        if (chk != null) for (int k = 0; k < chk.length(); k++) {
+                            JSONObject n = chk.optJSONObject(k);
+                            if (n != null && (n.optString("text","").contains(skipIf) || n.optString("desc","").contains(skipIf))) { found = true; break; }
+                        }
+                        if (found) {
+                            results.put(new JSONObject().put("step", i + 1).put("tool", s.optString("tool")).put("skipped", true));
+                            continue;
+                        }
+                    }
                     String argsStr = s.optString("args", "{}");
                     for (int p = 1; p <= 3; p++)
                         argsStr = argsStr.replace("{{p" + p + "}}", a.optString("p" + p));

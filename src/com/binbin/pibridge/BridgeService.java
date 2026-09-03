@@ -195,7 +195,8 @@ public class BridgeService extends Service {
                         new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
                             try {
                                 Tools.call("tts_speak", new org.json.JSONObject()
-                                        .put("text", say).put("engine", "xiaomi"));
+                                        .put("text", say).put("engine",
+                                                Tools.loadCfg().optString("notify_announce_engine", "xiaomi")));
                                 android.util.Log.i("PiBridge", "播报通知: " + say);
                             } catch (Exception ignore) {}
                         });
