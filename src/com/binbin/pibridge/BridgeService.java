@@ -1,5 +1,6 @@
 package com.binbin.pibridge;
 
+import android.content.Context;
 import org.json.JSONArray;
 import org.json.JSONObject;
 import android.app.Notification;
@@ -51,6 +52,13 @@ public class BridgeService extends Service {
             if ("true".equals(Tools.loadCfg().optString("wake_on", "false"))) WakeService.start(this);
         }, "wake-restore").start();
         startNotifyAnnouncer(); // 通知实时播报（cfg notify_announce 门控）
+
+        // 唤醒命中动画广播（:kws 进程 → 主进程悬浮球特效）
+        registerReceiver(new android.content.BroadcastReceiver() {
+            @Override public void onReceive(Context c, android.content.Intent i) {
+                FloatBall.pulse(c);
+            }
+        }, new android.content.IntentFilter("com.pihost.WAKE_ANIM"));
         // 环境引擎：首启自动装 pi 环境
         if (!EnvInstaller.isReady() && !EnvInstaller.isRunning()) {
             EnvInstaller.installAsync(new EnvInstaller.Cb() {

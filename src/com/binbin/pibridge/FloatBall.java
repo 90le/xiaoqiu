@@ -31,6 +31,17 @@ public class FloatBall {
     private static int floatX, floatY;
 
     private static final android.os.Handler MAIN = new android.os.Handler(android.os.Looper.getMainLooper());
+
+    /** 唤醒命中动画：悬浮球脉冲放大+发光（供 :kws 进程广播触发） */
+    public static void pulse(Context c) {
+        MAIN.post(() -> { try {
+            if (ball == null || ball.getParent() == null) return;
+            ball.animate().scaleX(1.6f).scaleY(1.6f).setDuration(180).start();
+            MAIN.postDelayed(() -> { try { ball.animate().scaleX(1f).scaleY(1f).setDuration(250).start(); } catch (Exception ignore) {} }, 200);
+            MAIN.postDelayed(() -> { try { ball.animate().scaleX(1.3f).scaleY(1.3f).setDuration(150).start(); } catch (Exception ignore) {} }, 480);
+            MAIN.postDelayed(() -> { try { ball.animate().scaleX(1f).scaleY(1f).setDuration(220).start(); } catch (Exception ignore) {} }, 650);
+        } catch (Exception ignore) {} });
+    }
     private static android.widget.LinearLayout stateBox;   // 球旁提示气泡
     private static WindowManager.LayoutParams bubbleLp;
     private static long lastTap = 0;

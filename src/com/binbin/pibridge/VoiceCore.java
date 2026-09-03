@@ -21,7 +21,9 @@ public class VoiceCore {
     /** 唤醒词（多样性：单喊/叠喊/问候式）；返回剥离唤醒词后的指令，null=未唤醒 */
     static String stripWake(String h) {
         String norm = h.replaceAll("[，。！？,.!?、\\s]+", "");
-        String[] wakes = {"小丘小丘", "你好小丘", "嘿小丘", "嗨小丘", "小丘"};
+        // 同音字归一化（qiū：秋/邱→丘），只影响唤醒匹配不影响指令内容
+        norm = norm.replace("秋", "丘").replace("邱", "丘");
+        String[] wakes = {"小丘小丘", "你好小丘", "嘿小丘", "嗨小丘", "小丘", "丘丘"};
         for (String w : wakes) if (norm.startsWith(w)) return norm.substring(w.length());
         return null;
     }
