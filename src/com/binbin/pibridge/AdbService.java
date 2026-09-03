@@ -284,9 +284,9 @@ public class AdbService extends AccessibilityService {
                 }
             }
             AccessibilityNodeInfo target = focusedEditable != null ? focusedEditable : anyEditable;
-            // 页面加载时序：最多重试4次找可编辑节点
-            for (int attempt = 0; attempt < 4 && target == null; attempt++) {
-                try { Thread.sleep(1000); } catch (Exception ignore) {}
+            // 页面加载时序：最多重试8次找可编辑节点
+            for (int attempt = 0; attempt < 8 && target == null; attempt++) {
+                try { Thread.sleep(1200); } catch (Exception ignore) {}
                 for (AccessibilityWindowInfo w : (java.util.List<AccessibilityWindowInfo>) l) {
                     AccessibilityNodeInfo r = w.getRoot();
                     if (r == null) continue;

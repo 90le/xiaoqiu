@@ -1156,7 +1156,7 @@ public class Tools {
                 write(new File(dir, name + ".json"), m.toString());
                 return ok(new JSONObject().put("name", name).put("steps", steps.length()));
             }});
-        def("macro_run", "运行宏：顺序执行全部步骤，p1到p3占位符由参数替换，返回每步结果；关键步骤失败即中止",
+        def("macro_run", "运行宏：顺序执行全部步骤；支持参数p1-p3、动态副屏{{vd}}、上一步结果{{prev}}与{{prev.路径}}、skip_if_text条件跳步、speak语音播报结果；关键步骤失败自动中止",
             schema(props("name", prop("string", "宏名"), "p1", prop("string", "参数1可空"),
                     "p2", prop("string", "参数2可空"), "p3", prop("string", "参数3可空")), "name"),
             new H() { public JSONObject run(JSONObject a) throws Exception {
@@ -1166,37 +1166,77 @@ public class Tools {
                 JSONObject m = new JSONObject(new String(java.nio.file.Files.readAllBytes(f.toPath()), "UTF-8"));
                 JSONArray steps = m.optJSONArray("steps");
                 JSONArray results = new JSONArray();
+                Object prevData = null;
+                String lastAnswer = null;
                 for (int i = 0; i < steps.length(); i++) {
                     JSONObject s = steps.optJSONObject(i);
-                    // 条件分支：skip_if_text 命中则跳过该步（如：无广告弹窗就跳过关闭步骤）
                     String skipIf = s.optString("skip_if_text", "");
                     if (!skipIf.isEmpty()) {
                         int chkDisp = VdManager.alive() ? VdManager.displayId() : 0;
-                        JSONArray chk = AdbService.readTree(chkDisp);
-                        boolean found = false;
-                        if (chk != null) for (int k = 0; k < chk.length(); k++) {
-                            JSONObject n = chk.optJSONObject(k);
-                            if (n != null && (n.optString("text","").contains(skipIf) || n.optString("desc","").contains(skipIf))) { found = true; break; }
+                        JSONArray chkNodes = AdbService.readTree(chkDisp);
+                        boolean hitSkip = false;
+                        if (chkNodes != null) for (int k = 0; k < chkNodes.length(); k++) {
+                            JSONObject n = chkNodes.optJSONObject(k);
+                            if (n != null && (n.optString("text","").contains(skipIf) || n.optString("desc","").contains(skipIf))) { hitSkip = true; break; }
                         }
-                        if (found) {
+                        if (hitSkip) {
                             results.put(new JSONObject().put("step", i + 1).put("tool", s.optString("tool")).put("skipped", true));
                             continue;
                         }
                     }
-                    String argsStr = s.optString("args", "{}");
-                    for (int p = 1; p <= 3; p++)
-                        argsStr = argsStr.replace("{{p" + p + "}}", a.optString("p" + p));
-                    argsStr = argsStr.replace("{{vd}}", String.valueOf(VdManager.displayId())); // 动态副屏ID
-                    JSONObject r = (JSONObject) Tools.call(s.optString("tool"), new JSONObject(argsStr));
+                    JSONObject args = new JSONObject(s.optString("args", "{}"));
+                    java.util.Iterator<String> ai = args.keys();
+                    while (ai.hasNext()) {
+                        String k2 = ai.next();
+                        Object v2 = args.opt(k2);
+                        if (!(v2 instanceof String)) continue;
+                        String sv = (String) v2;
+                        for (int p = 1; p <= 3; p++) sv = sv.replace("{{p" + p + "}}", a.optString("p" + p));
+                        sv = sv.replace("{{vd}}", String.valueOf(VdManager.displayId()));
+                        if (prevData != null) {
+                            sv = sv.replace("{{prev}}", String.valueOf(prevData));
+                            java.util.regex.Matcher pm2 = java.util.regex.Pattern.compile("\\{\\{prev\\.([a-zA-Z0-9_.]+)\\}\\}").matcher(sv);
+                            StringBuffer sbx = new StringBuffer();
+                            while (pm2.find()) {
+                                Object cur = prevData;
+                                for (String seg : pm2.group(1).split("\\.")) {
+                                    if (cur instanceof JSONObject) cur = ((JSONObject) cur).opt(seg);
+                                    else if (cur instanceof org.json.JSONArray) {
+                                        try { cur = ((org.json.JSONArray) cur).opt(Integer.parseInt(seg)); } catch (Exception ignore2) { cur = null; }
+                                    } else { cur = null; break; }
+                                }
+                                pm2.appendReplacement(sbx, java.util.regex.Matcher.quoteReplacement(cur == null ? "" : String.valueOf(cur)));
+                            }
+                            pm2.appendTail(sbx);
+                            sv = sbx.toString();
+                        }
+                        args.put(k2, sv);
+                    }
+                    JSONObject r = (JSONObject) Tools.call(s.optString("tool"), args);
+                    prevData = r.opt("data");
                     JSONObject rec = new JSONObject().put("step", i + 1).put("tool", s.optString("tool"))
                             .put("ok", r.optBoolean("ok", false));
-                    try { rec.put("data", r.opt("data")); } catch (Exception ignore) {}
+                    try {
+                        rec.put("data", r.opt("data"));
+                        JSONObject dd = r.optJSONObject("data");
+                        if (dd != null && dd.has("answer")) lastAnswer = dd.optString("answer");
+                    } catch (Exception ignore3) {}
                     results.put(rec);
                     if (!r.optBoolean("ok", false) && s.optBoolean("critical", true))
                         return ok(new JSONObject().put("aborted", true).put("atStep", i + 1).put("results", results));
                 }
-                return ok(new JSONObject().put("done", true).put("steps", steps.length()).put("results", results));
+                if (a.optBoolean("speak", false) && lastAnswer != null) {
+                    try {
+                        String say = lastAnswer.length() > 80 ? lastAnswer.substring(0, 80) : lastAnswer;
+                        Tools.call("tts_speak", new JSONObject().put("text", say));
+                    } catch (Exception ignore4) {}
+                }
+                JSONObject done = new JSONObject().put("done", true).put("steps", steps.length()).put("results", results);
+                if (lastAnswer != null) done.put("lastAnswer", lastAnswer);
+                return ok(done);
             }});
+
+
         def("macro_list", "列出全部已保存宏", schema(props()), new H() { public JSONObject run(JSONObject a) throws Exception {
             File dir = new File(ctx.getFilesDir(), "macros");
             JSONArray out = new JSONArray();
