@@ -106,6 +106,11 @@ public class WakeService extends Service {
                     }
                     writeState(this, true); // 心跳
                     if (!running || got < total) { Thread.sleep(200); continue; }
+                    // VAD 语音门：静音块跳过转写（省电核心，电池3-5倍）
+                    double sumSq = 0;
+                    for (int i = 0; i < got; i++) { double sv = buf[i]; sumSq += sv * sv; }
+                    double rms = Math.sqrt(sumSq / got);
+                    if (rms < 350) { Thread.sleep(120); continue; }
                     byte[] pcm = new byte[got * 2];
                     for (int i = 0; i < got; i++) { pcm[i*2] = (byte)(buf[i] & 255); pcm[i*2+1] = (byte)((buf[i] >> 8) & 255); }
                     File chunkWav = new File(getCacheDir(), "wake-chunk.wav");
