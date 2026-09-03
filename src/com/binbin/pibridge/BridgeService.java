@@ -182,6 +182,11 @@ public class BridgeService extends Service {
                         newest = Math.max(newest, t);
                         String allow = Tools.loadCfg().optString("notify_announce_pkgs", "com.tencent.mm");
                         if (!allow.contains(o.optString("pkg"))) continue;
+                        String body = o.optString("title") + o.optString("text");
+                        String[] excl = Tools.loadCfg().optString("notify_announce_exclude", "验证码,快递,取件").split(",");
+                        boolean skip = false;
+                        for (String k : excl) if (!k.trim().isEmpty() && body.contains(k.trim())) { skip = true; break; }
+                        if (skip) continue; // 免打扰关键词命中
                         if (pending == null) pending = "新消息：" + o.optString("title") + "，" + o.optString("text");
                     }
                     lastSeen[0] = newest;

@@ -812,6 +812,40 @@ public class Tools {
             return f.delete() ? ok("已删除") : err("NO_MACRO", "不存在");
         }});
 
+
+        def("macro_export", "导出宏到公共目录（跨设备移植或备份）",
+            schema(props("name", prop("string", "宏名，all=全部导出")), "name"), new H() { public JSONObject run(JSONObject a) throws Exception {
+            String name = a.optString("name", "all");
+            File src = new File(ctx.getFilesDir(), "macros");
+            File dst = new File("/storage/emulated/0/pibridge/macros");
+            if (!dst.isDirectory()) dst.mkdirs();
+            int n = 0;
+            for (File f : src.listFiles()) {
+                String base = f.getName().replace(".json", "");
+                if (!name.equals("all") && !base.equals(name)) continue;
+                try { java.nio.file.Files.copy(f.toPath(), new File(dst, f.getName()).toPath(),
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING); n++; } catch (Exception ignore) {}
+            }
+            return n > 0 ? ok(new JSONObject().put("exported", n).put("dir", dst.getAbsolutePath()))
+                    : err("NONE", "没有可导出的宏");
+        }});
+        def("macro_import", "从公共目录导入宏（pibridge/macros 下的 json）",
+            schema(props("name", prop("string", "宏名，all=全部导入")), "name"), new H() { public JSONObject run(JSONObject a) throws Exception {
+            String name = a.optString("name", "all");
+            File src = new File("/storage/emulated/0/pibridge/macros");
+            File dst = new File(ctx.getFilesDir(), "macros");
+            if (!dst.isDirectory()) dst.mkdirs();
+            if (!src.isDirectory()) return err("NO_SRC", "无导入目录");
+            int n = 0;
+            for (File f : src.listFiles()) {
+                String base = f.getName().replace(".json", "");
+                if (!name.equals("all") && !base.equals(name)) continue;
+                try { java.nio.file.Files.copy(f.toPath(), new File(dst, f.getName()).toPath(),
+                        java.nio.file.StandardCopyOption.REPLACE_EXISTING); n++; } catch (Exception ignore) {}
+            }
+            return n > 0 ? ok(new JSONObject().put("imported", n)) : err("NONE", "没有可导入的宏");
+        }});
+
         def("apps_list", "列出已装应用（可按关键词过滤）",
             schema(props("filter", prop("string", "包名/应用名包含关键词"), "limit", prop("number", "上限默认 50"))), new H() { public JSONObject run(JSONObject a) throws Exception {
                 PackageManager pm = ctx.getPackageManager();
