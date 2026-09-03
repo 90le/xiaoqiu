@@ -1484,19 +1484,19 @@ public class Tools {
                     return ok(new JSONObject().put("count", veCache.length()).put("elements", veCache).put("cached", true).put("unit", "permille-0-1000"));
                 String q = "分析这张手机截图。用千分比坐标系描述元素位置：横向从左到右0-1000，纵向从上到下0-1000（例如屏幕正中=(500,500)，右下角=(1000,1000)）。"
                         + "找出最醒目的至多15个可交互元素（按钮/输入框/图标/页签/列表项/聊天行），label精简不超过10个字。"
-                        + "只输出严格JSON数组不要任何其他文字：[{\"label\":\"元素名称\",\"x\":千分比x整数,\"y\":千分比y整数,\"type\":\"button/input/item\"}]。"
+                        + "只输出严格JSON数组不要任何其他文字（不要思考过程）：[{\"label\":\"元素名称\",\"x\":千分比x整数,\"y\":千分比y整数,\"type\":\"button/input/item\"}]。"
                         + (kind.isEmpty() ? "" : "只保留type为" + kind + "的元素。");
                 JSONObject body = new JSONObject()
-                        .put("model", "glm-4v-flash")
+                        .put("model", "glm-5.3-flash")
                         .put("messages", new org.json.JSONArray()
                                 .put(new JSONObject().put("role", "user").put("content", new org.json.JSONArray()
                                         .put(new JSONObject().put("type", "image_url")
                                                 .put("image_url", new JSONObject().put("url", "data:" + mime + ";base64," + b64)))
                                         .put(new JSONObject().put("type", "text").put("text", q)))))
-                        .put("max_tokens", 1024);
+                        .put("max_tokens", 4096);
                 javax.net.ssl.HttpsURLConnection c = (javax.net.ssl.HttpsURLConnection)
-                        new java.net.URL("https://open.bigmodel.cn/api/paas/v4/chat/completions").openConnection();
-                c.setRequestMethod("POST"); c.setConnectTimeout(8000); c.setReadTimeout(60000); c.setDoOutput(true);
+                        new java.net.URL("https://open.bigmodel.cn/api/coding/paas/v4/chat/completions").openConnection();
+                c.setRequestMethod("POST"); c.setConnectTimeout(8000); c.setReadTimeout(90000); c.setDoOutput(true);
                 c.setRequestProperty("Authorization", "Bearer " + key);
                 c.setRequestProperty("Content-Type", "application/json");
                 java.io.OutputStream os = c.getOutputStream();
@@ -1649,16 +1649,16 @@ public class Tools {
                 String key = fastKey();
                 if (key == null) return err("NO_KEY", "未配置 API Key");
                 JSONObject body = new JSONObject()
-                        .put("model", "glm-4v-flash")
+                        .put("model", "glm-5.3-flash")
                         .put("messages", new org.json.JSONArray()
                                 .put(new JSONObject().put("role", "user").put("content", new org.json.JSONArray()
                                         .put(new JSONObject().put("type", "image_url")
                                                 .put("image_url", new JSONObject().put("url", "data:" + mime + ";base64," + b64)))
                                         .put(new JSONObject().put("type", "text").put("text", q)))))
-                        .put("max_tokens", 600);
+                        .put("max_tokens", 4096);
                 javax.net.ssl.HttpsURLConnection c = (javax.net.ssl.HttpsURLConnection)
-                        new java.net.URL("https://open.bigmodel.cn/api/paas/v4/chat/completions").openConnection();
-                c.setRequestMethod("POST"); c.setConnectTimeout(8000); c.setReadTimeout(60000); c.setDoOutput(true);
+                        new java.net.URL("https://open.bigmodel.cn/api/coding/paas/v4/chat/completions").openConnection();
+                c.setRequestMethod("POST"); c.setConnectTimeout(8000); c.setReadTimeout(90000); c.setDoOutput(true);
                 c.setRequestProperty("Authorization", "Bearer " + key);
                 c.setRequestProperty("Content-Type", "application/json");
                 java.io.OutputStream os = c.getOutputStream();
