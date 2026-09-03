@@ -180,6 +180,7 @@ public class BridgeService extends Service {
                         long t = o.optLong("time");
                         if (t <= lastSeen[0]) break;
                         newest = Math.max(newest, t);
+                        if (getPackageName().equals(o.optString("pkg"))) continue; // 不播报自己的通知（防反馈链）
                         String allow = Tools.loadCfg().optString("notify_announce_pkgs", "com.tencent.mm");
                         if (!allow.contains(o.optString("pkg"))) continue;
                         String body = o.optString("title") + o.optString("text");

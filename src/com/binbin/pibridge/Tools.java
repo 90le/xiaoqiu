@@ -83,9 +83,11 @@ public class Tools {
         new Handler(Looper.getMainLooper()).post(new Runnable() { public void run() {
             if (miReady) {
                 miTts.setPitch(1.1f); miTts.setSpeechRate(1.05f);
+                ttsSpeaking = true;
                 miTts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "pi");
             } else if (ttsInit()) {
                 tts.setPitch(1.12f); tts.setSpeechRate(1.05f);
+                ttsSpeaking = true;
                 tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "pi");
             }
         }});
@@ -95,6 +97,7 @@ public class Tools {
     /** 朗读完成回调（连续对话推进用），主线程投递 */
     public static volatile Runnable onSpeakDone;
     static void fireSpeakDone() {
+        ttsSpeaking = false;
         Runnable cb = onSpeakDone;
         if (cb != null) new Handler(Looper.getMainLooper()).post(cb);
     }
@@ -128,6 +131,7 @@ public class Tools {
     }
     // ═══ 全局唤醒词（sherpa KWS）═══
     public static volatile boolean micBusy = false; // 按住说话等场景让出麦克风
+    public static volatile boolean ttsSpeaking = false; // TTS 播报中（唤醒监听让位）
     private static KeywordSpotter kws;
     private static OnlineStream kwsStream;
 
@@ -576,7 +580,8 @@ public class Tools {
                 if (ttsInit()) {
                     new Handler(Looper.getMainLooper()).post(new Runnable() { public void run() {
                         tts.setPitch(1.12f); tts.setSpeechRate(1.05f);
-                        tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "pi");
+                        ttsSpeaking = true;
+                tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "pi");
                     }});
                     return ok("开始朗读（系统引擎）");
                 }

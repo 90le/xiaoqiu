@@ -99,13 +99,14 @@ public class WakeService extends Service {
                     int total = (int) (16000 * 1.6);
                     short[] buf = new short[total];
                     int got = 0;
-                    while (got < total && running && !VoiceCore.running && !Tools.micBusy) {
+                    while (got < total && running && !VoiceCore.running && !Tools.micBusy && !Tools.ttsSpeaking) {
                         int n = ar.read(buf, got, total - got);
                         if (n <= 0) break;
                         got += n;
                     }
                     writeState(this, true); // 心跳
                     if (!running || got < total) { Thread.sleep(200); continue; }
+                    if (Tools.ttsSpeaking) { Thread.sleep(300); continue; } // 播报中丢弃此块（防自唤醒）
                     // VAD 语音门：静音块跳过转写（省电核心，电池3-5倍）
                     double sumSq = 0;
                     for (int i = 0; i < got; i++) { double sv = buf[i]; sumSq += sv * sv; }
