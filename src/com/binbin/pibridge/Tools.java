@@ -822,8 +822,19 @@ public class Tools {
                             JSONObject e = l3.optJSONObject(k);
                             if (e != null) sigB3.append(e.optString("label","")).append("|");
                         }
-                        if (!sigB3.toString().equals(sig1)) return ok(new JSONObject().put("tapped", true).put("verified", true)
-                                .put("pageChanged", true).put("at", (tx+off[0]) + "," + (ty+off[1])).put("retried", true).put("matched", matched));
+                        if (!sigB3.toString().equals(sig1)) {
+                            // 校准自动入库：偏移修正值存记忆，下次直接精准
+                            String pkg = VdManager.lastLaunchedPkg();
+                            if (!pkg.isEmpty()) {
+                                String mk = "app." + pkg + ".vision_offset." + label;
+                                try {
+                                    Tools.call("memory_save", new JSONObject().put("key", mk)
+                                            .put("value", "GLM-4V原坐标(" + tx + "," + ty + ") 实际命中(" + (tx+off[0]) + "," + (ty+off[1]) + ") 偏移" + off[0] + "," + off[1]));
+                                } catch (Exception ignore) {}
+                            }
+                            return ok(new JSONObject().put("tapped", true).put("verified", true)
+                                    .put("pageChanged", true).put("at", (tx+off[0]) + "," + (ty+off[1])).put("retried", true).put("matched", matched));
+                        }
                     }
                 }
                 return ok(new JSONObject().put("tapped", true).put("verified", false).put("pageChanged", false)
@@ -1719,6 +1730,21 @@ public class Tools {
                 if (n != null && n.has("text")) texts.put(n.optString("text"));
             }
             o.put("texts", texts);
+            // 自动附带该App的相关记忆（历史校准/特性）
+            try {
+                String pkg = AdbService.pkgOf(disp);
+                if (!pkg.equals("?")) {
+                    File mf = new File(ctx.getFilesDir(), "memory.json");
+                    if (mf.canRead()) {
+                        JSONObject mem = new JSONObject(new String(java.nio.file.Files.readAllBytes(mf.toPath()), "UTF-8"));
+                        String sn = pkg.substring(pkg.lastIndexOf('.') + 1);
+                        JSONArray rel = new JSONArray();
+                        java.util.Iterator<String> it = mem.keys();
+                        while (it.hasNext()) { String k = it.next(); if (k.contains(sn) || k.contains(pkg)) rel.put(k); }
+                        if (rel.length() > 0) o.put("memories", rel);
+                    }
+                }
+            } catch (Exception ignore) {}
             return ok(o);
         }});
 
