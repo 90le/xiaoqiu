@@ -1011,6 +1011,72 @@ public class Tools {
             }});
 
 
+        def("macro_from_session", "复利飞轮：从最近的pi会话自动提取操作流程保存为宏（跑通即固化的自动化版）。自动过滤出自动化工具调用并按序保存",
+            schema(props("name", prop("string", "宏名"), "desc", prop("string", "中文说明 可空"),
+                    "max_steps", prop("number", "最多提取步数 默认30"), "session", prop("string", "会话文件路径 可空=最新")), "name"),
+            new H() { public JSONObject run(JSONObject a) throws Exception {
+                String name = a.optString("name").replaceAll("[^a-zA-Z0-9_]", "");
+                if (name.isEmpty()) return err("BAD_NAME", "宏名只能用英文数字下划线");
+                java.util.Set<String> auto = new java.util.HashSet<>(java.util.Arrays.asList(
+                        "vd","ui_tap_text","ui_tap_node","ui_set_text","ui_scroll_node","ui_find_tap","ui_find",
+                        "wait_node","ui_wait_gone","l2_exec","screenshot","vision_ask","vision_elements","vision_tap",
+                        "apps_launch","settings_write","ime_switch","notify_read","notify_reply","sysctl","shot_diff","memory_save"));
+                // 找最新会话
+                File sfile;
+                String sp = a.optString("session", "");
+                if (!sp.isEmpty()) sfile = new File(sp);
+                else {
+                    File sdir = new File(ctx.getFilesDir(), "home/.pi/agent/sessions");
+                    sfile = null; long best = 0;
+                    java.util.Deque<File> dq = new java.util.ArrayDeque<>();
+                    dq.add(sdir);
+                    while (!dq.isEmpty()) {
+                        File d = dq.poll();
+                        File[] fs = d.listFiles();
+                        if (fs == null) continue;
+                        for (File x : fs) {
+                            if (x.isDirectory()) dq.add(x);
+                            else if (x.getName().endsWith(".jsonl") && x.lastModified() > best) { best = x.lastModified(); sfile = x; }
+                        }
+                    }
+                    if (sfile == null) return err("NO_SESSION", "未找到会话文件");
+                }
+                // 解析提取
+                int maxS = Math.min(a.optInt("max_steps", 30), 60);
+                JSONArray steps = new JSONArray();
+                java.io.BufferedReader br = new java.io.BufferedReader(new java.io.InputStreamReader(new java.io.FileInputStream(sfile), "UTF-8"));
+                String ln;
+                while ((ln = br.readLine()) != null && steps.length() < maxS) {
+                    if (!ln.contains("toolCall")) continue;
+                    try {
+                        JSONObject e = new JSONObject(ln);
+                        JSONObject msg = e.optJSONObject("message");
+                        if (msg == null || !"assistant".equals(msg.optString("role"))) continue;
+                        JSONArray cc = msg.optJSONArray("content");
+                        if (cc == null) continue;
+                        for (int j = 0; j < cc.length() && steps.length() < maxS; j++) {
+                            JSONObject item = cc.optJSONObject(j);
+                            if (item == null || !"toolCall".equals(item.optString("type"))) continue;
+                            String tn = item.optString("name");
+                            if (!auto.contains(tn)) continue;
+                            JSONObject st = new JSONObject().put("tool", tn).put("args", item.optJSONObject("arguments") == null ? new JSONObject() : item.optJSONObject("arguments"));
+                            steps.put(st);
+                        }
+                    } catch (Exception ignore) {}
+                }
+                br.close();
+                if (steps.length() == 0) return err("EMPTY", "会话中未提取到自动化步骤");
+                File dir = new File(ctx.getFilesDir(), "macros");
+                if (!dir.isDirectory()) dir.mkdirs();
+                JSONObject mm = new JSONObject().put("name", name).put("desc", a.optString("desc", "从会话自动提取"))
+                        .put("steps", steps).put("saved", System.currentTimeMillis());
+                write(new File(dir, name + ".json"), mm.toString());
+                StringBuilder preview = new StringBuilder();
+                for (int k = 0; k < steps.length() && k < 8; k++) preview.append(steps.optJSONObject(k).optString("tool")).append(" ");
+                return ok(new JSONObject().put("name", name).put("steps", steps.length())
+                        .put("preview", preview.toString().trim()));
+            }});
+
         def("macro_save", "保存宏：name英文标识，desc中文说明，steps为步骤数组JSON文本，每步包含tool与args两个字段，args支持p1到p3占位符",
             schema(props("name", prop("string", "宏名英文数字下划线"), "desc", prop("string", "中文说明"),
                     "steps", prop("string", "步骤数组JSON文本")), "name", "desc", "steps"),
