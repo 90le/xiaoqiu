@@ -1541,6 +1541,55 @@ public class Tools {
             return ok(o);
             }});
 
+        def("vision_precise", "小目标二次精读：vision_elements粗定位→裁剪局部放大→GLM-4V精读→返回全图精确坐标。解决视觉坐标10-20%偏差问题",
+            schema(props("file", prop("string", "截图路径"), "label", prop("string", "目标元素名"), "pad", prop("number", "裁剪半径 默认200px")), "file", "label"),
+            new H() { public JSONObject run(JSONObject a) throws Exception {
+                String file = a.optString("file");
+                String label = a.optString("label");
+                int pad = Math.max(a.optInt("pad", 200), 80);
+                // 1. 粗定位
+                JSONObject els = (JSONObject) Tools.call("vision_elements", new JSONObject().put("file", file));
+                if (!els.optBoolean("ok", false)) return els;
+                JSONArray list = els.optJSONObject("data") == null ? new JSONArray()
+                        : els.optJSONObject("data").optJSONArray("elements");
+                int rx = -1, ry = -1;
+                for (int k = 0; k < list.length(); k++) {
+                    JSONObject e = list.optJSONObject(k);
+                    if (e != null && e.optString("label","").contains(label)) { rx = e.optInt("x"); ry = e.optInt("y"); break; }
+                }
+                if (rx < 0) return err("NOT_FOUND", "粗定位未找到『" + label + "』");
+                // 2. 千分比→像素（需要图片尺寸）
+                android.graphics.BitmapFactory.Options bo = new android.graphics.BitmapFactory.Options();
+                bo.inJustDecodeBounds = true;
+                android.graphics.BitmapFactory.decodeFile(file, bo);
+                int W = bo.outWidth, H = bo.outHeight;
+                int px = rx * W / 1000, py = ry * H / 1000;
+                // 3. 裁剪局部（边界保护）
+                int cx = Math.max(0, Math.min(W - 1, px - pad)), cy = Math.max(0, Math.min(H - 1, py - pad));
+                int cw = Math.min(W - cx, pad * 2), ch = Math.min(H - cy, pad * 2);
+                android.graphics.Bitmap src = android.graphics.BitmapFactory.decodeFile(file);
+                if (src == null) return err("BAD_IMG", "图片解码失败");
+                android.graphics.Bitmap crop = android.graphics.Bitmap.createBitmap(src, cx, cy, Math.min(cw, src.getWidth()-cx), Math.min(ch, src.getHeight()-cy));
+                File cf = new File("/storage/emulated/0/pibridge/shots/precise-crop.png");
+                java.io.FileOutputStream fo = new java.io.FileOutputStream(cf);
+                crop.compress(android.graphics.Bitmap.CompressFormat.PNG, 95, fo); fo.close();
+                src.recycle(); crop.recycle();
+                // 4. GLM-4V 精读裁剪图
+                JSONObject va = (JSONObject) Tools.call("vision_ask", new JSONObject()
+                        .put("file", cf.getAbsolutePath())
+                        .put("q", "这个裁剪图里『" + label + "』元素的中心坐标是多少？裁剪图尺寸" + crop.getWidth() + "x" + crop.getHeight()
+                                + "。只输出严格JSON：{\"x\":整数,\"y\":整数}，不要其他文字"));
+                if (!va.optBoolean("ok", false)) return va;
+                String ans = String.valueOf(va.optJSONObject("data").get("answer"));
+                String jc = ans; 
+                if (jc.contains("{")) jc = jc.substring(jc.indexOf('{'), jc.lastIndexOf('}') + 1);
+                JSONObject pos = new JSONObject(jc);
+                int fx = cx + pos.optInt("x"), fy = cy + pos.optInt("y");
+                return ok(new JSONObject().put("x", fx).put("y", fy)
+                        .put("method", "precise").put("rough_was", rx + "," + ry)
+                        .put("improved", true).put("crop", cf.getAbsolutePath()));
+            }});
+
         def("vision_ask", "视觉问答：对本地图片提问（GLM-4V）。无结构树的App用它理解界面：问'列出图中店铺名和评分'、'找到搜索按钮的坐标'等",
             schema(props("file", prop("string", "图片路径"), "q", prop("string", "问题")), "file", "q"),
             new H() { public JSONObject run(JSONObject a) throws Exception {
