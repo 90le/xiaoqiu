@@ -1649,7 +1649,7 @@ public class Tools {
                 String key = fastKey();
                 if (key == null) return err("NO_KEY", "未配置 API Key");
                 JSONObject body = new JSONObject()
-                        .put("model", "glm-5v-turbo")
+                        .put("model", "glm-5.3-flash")
                         .put("messages", new org.json.JSONArray()
                                 .put(new JSONObject().put("role", "user").put("content", new org.json.JSONArray()
                                         .put(new JSONObject().put("type", "image_url")
