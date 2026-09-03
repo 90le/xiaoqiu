@@ -695,6 +695,9 @@ public class Tools {
                 else if ("longpress".equals(act)) cmd = "input -d " + VdManager.displayId() + " swipe "
                         + a.optInt("x") + " " + a.optInt("y") + " " + (a.optInt("x") + 2) + " " + (a.optInt("y") + 1) + " "
                         + Math.max(a.optInt("ms", 600), 400); // +2px偏移：MIUI忽略零距离滑动
+                else if ("doubletap".equals(act)) cmd = "input -d " + VdManager.displayId() + " tap "
+                        + a.optInt("x") + " " + a.optInt("y") + "; input -d " + VdManager.displayId() + " tap "
+                        + a.optInt("x") + " " + a.optInt("y");
                 else if ("key".equals(act)) {
                     String k = a.optString("text", "back");
                     int code = k.equals("back") ? 4 : k.equals("home") ? 3 : k.equals("enter") ? 66 : k.equals("esc") ? 111 : 4;
@@ -749,6 +752,55 @@ public class Tools {
         }});
 
         // ═══ 宏系统（操作录像回放）：把跑通的流程存成可复用技能 ═══
+        // ═══ 结构化视觉（无树App的"树"：GLM-4V 输出带坐标的元素清单）═══
+        def("vision_elements", "结构化视觉：截图→GLM-4V 返回可交互元素JSON清单（label/坐标）。微信等无树App用它替代 ui_screen_read。配套：vd shot 后调用",
+            schema(props("file", prop("string", "图片路径"), "kind", prop("string", "筛选 可空：button/input/item 全部")), "file"),
+            new H() { public JSONObject run(JSONObject a) throws Exception {
+                String file = a.optString("file");
+                String kind = a.optString("kind", "");
+                byte[] img = java.nio.file.Files.readAllBytes(new File(file).toPath());
+                String b64 = android.util.Base64.encodeToString(img, android.util.Base64.NO_WRAP);
+                String mime = file.toLowerCase().endsWith(".jpg") || file.toLowerCase().endsWith(".jpeg") ? "image/jpeg" : "image/png";
+                String key = fastKey();
+                if (key == null) return err("NO_KEY", "未配置 API Key");
+                String q = "分析这张手机截图。找出所有可交互元素（按钮/输入框/图标/标签/列表项/聊天行）。"
+                        + "只输出严格JSON数组不要任何其他文字：[{\"label\":\"元素名称\",\"x\":中心x整数,\"y\":中心y整数,\"type\":\"button/input/item\"}]。"
+                        + (kind.isEmpty() ? "" : "只保留type为" + kind + "的元素。") + "坐标用元素中心的像素值。";
+                JSONObject body = new JSONObject()
+                        .put("model", "glm-4v-flash")
+                        .put("messages", new org.json.JSONArray()
+                                .put(new JSONObject().put("role", "user").put("content", new org.json.JSONArray()
+                                        .put(new JSONObject().put("type", "image_url")
+                                                .put("image_url", new JSONObject().put("url", "data:" + mime + ";base64," + b64)))
+                                        .put(new JSONObject().put("type", "text").put("text", q)))))
+                        .put("max_tokens", 1000);
+                javax.net.ssl.HttpsURLConnection c = (javax.net.ssl.HttpsURLConnection)
+                        new java.net.URL("https://open.bigmodel.cn/api/paas/v4/chat/completions").openConnection();
+                c.setRequestMethod("POST"); c.setConnectTimeout(8000); c.setReadTimeout(60000); c.setDoOutput(true);
+                c.setRequestProperty("Authorization", "Bearer " + key);
+                c.setRequestProperty("Content-Type", "application/json");
+                java.io.OutputStream os = c.getOutputStream();
+                os.write(body.toString().getBytes("UTF-8")); os.close();
+                int code = c.getResponseCode();
+                java.io.InputStream is = code < 400 ? c.getInputStream() : c.getErrorStream();
+                java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+                byte[] buf = new byte[4096]; int n; while (is != null && (n = is.read(buf)) > 0) bo.write(buf, 0, n);
+                if (is != null) is.close();
+                String resp = bo.toString("UTF-8");
+                if (code >= 400) return err("API_ERR", code + ": " + resp.substring(0, Math.min(300, resp.length())));
+                String content = new JSONObject(resp).getJSONArray("choices").getJSONObject(0)
+                        .getJSONObject("message").optString("content", "").trim();
+                String jc = content;
+                if (jc.contains("[")) jc = jc.substring(jc.indexOf('['), jc.lastIndexOf(']') + 1);
+                try {
+                    JSONArray els = new JSONArray(jc);
+                    return ok(new JSONObject().put("count", els.length()).put("elements", els)
+                            .put("raw", content.length() > 500 ? content.substring(0, 500) : content));
+                } catch (Exception e) {
+                    return err("PARSE_FAIL", "模型未返回合法JSON: " + content.substring(0, Math.min(300, content.length())));
+                }
+            }});
+
         def("macro_save", "保存宏：name英文标识，desc中文说明，steps为步骤数组JSON文本，每步包含tool与args两个字段，args支持p1到p3占位符",
             schema(props("name", prop("string", "宏名英文数字下划线"), "desc", prop("string", "中文说明"),
                     "steps", prop("string", "步骤数组JSON文本")), "name", "desc", "steps"),
