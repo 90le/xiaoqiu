@@ -1020,6 +1020,112 @@ public class Tools {
                 return ok(o);
             }});
 
+        // ═══ 持久记忆（脑的长期存储：用户偏好/App特性/坐标校准/任何学到的知识）═══
+        def("memory_save", "持久保存知识（跨会话永存）：key 唯一标识，value 内容。用于：用户偏好、App界面特性（如'微信搜索按钮需偏移-30px'）、常用地址等",
+            schema(props("key", prop("string", "唯一标识 如 user.pref.address / app.wechat.search_offset"), "value", prop("string", "知识内容")), "key", "value"),
+            new H() { public JSONObject run(JSONObject a) throws Exception {
+                String key = a.optString("key").trim();
+                if (key.isEmpty()) return err("BAD", "key 不能为空");
+                File f = new File(ctx.getFilesDir(), "memory.json");
+                JSONObject mem = new JSONObject();
+                try { mem = new JSONObject(new String(java.nio.file.Files.readAllBytes(f.toPath()), "UTF-8")); } catch (Exception ignore) {}
+                mem.put(key, new JSONObject().put("v", a.optString("value")).put("t", System.currentTimeMillis()));
+                write(f, mem.toString());
+                return ok(new JSONObject().put("key", key).put("total", mem.length()));
+            }});
+        def("memory_read", "读取知识", schema(props("key", prop("string", "标识")), "key"), new H() { public JSONObject run(JSONObject a) throws Exception {
+            File f = new File(ctx.getFilesDir(), "memory.json");
+            try {
+                JSONObject mem = new JSONObject(new String(java.nio.file.Files.readAllBytes(f.toPath()), "UTF-8"));
+                JSONObject e = mem.optJSONObject(a.optString("key"));
+                if (e == null) return err("NOT_FOUND", "无此知识");
+                return ok(new JSONObject().put("value", e.optString("v")).put("saved", e.optLong("t")));
+            } catch (Exception e) { return err("EMPTY", "记忆库为空"); }
+        }});
+        def("memory_list", "列出全部记忆（key+摘要），pi 每次操作陌生App前先看一眼",
+            schema(props("kw", prop("string", "按key关键词过滤 可空"))), new H() { public JSONObject run(JSONObject a) throws Exception {
+            File f = new File(ctx.getFilesDir(), "memory.json");
+            JSONObject mem;
+            try { mem = new JSONObject(new String(java.nio.file.Files.readAllBytes(f.toPath()), "UTF-8")); }
+            catch (Exception e) { return ok(new JSONObject().put("count", 0).put("items", new JSONArray())); }
+            String kw = a.optString("kw", "");
+            JSONArray out = new JSONArray();
+            java.util.Iterator<String> it = mem.keys();
+            while (it.hasNext()) {
+                String k = it.next();
+                if (!kw.isEmpty() && !k.contains(kw)) continue;
+                JSONObject e = mem.optJSONObject(k);
+                if (e == null) continue;
+                String v = e.optString("v");
+                out.put(new JSONObject().put("key", k).put("v", v.length() > 80 ? v.substring(0, 80) + "…" : v).put("t", e.optLong("t")));
+            }
+            return ok(new JSONObject().put("count", out.length()).put("items", out));
+        }});
+        def("memory_del", "删除知识", schema(props("key", prop("string", "标识")), "key"), new H() { public JSONObject run(JSONObject a) throws Exception {
+            File f = new File(ctx.getFilesDir(), "memory.json");
+            try {
+                JSONObject mem = new JSONObject(new String(java.nio.file.Files.readAllBytes(f.toPath()), "UTF-8"));
+                mem.remove(a.optString("key"));
+                write(f, mem.toString());
+                return ok("已删除");
+            } catch (Exception e) { return err("EMPTY", "记忆库为空"); }
+        }});
+
+        // ═══ 变化检测（操作效果验证的通用武器：两张截图像素级对比）═══
+        def("shot_diff", "对比两张截图：返回变化区域占比+变化区域裁剪图路径。配合 vision_ask(裁剪图,'这里发生了什么变化') = 通用操作效果验证",
+            schema(props("before", prop("string", "前图路径"), "after", prop("string", "后图路径")), "before", "after"),
+            new H() { public JSONObject run(JSONObject a) throws Exception {
+                android.graphics.Bitmap b1 = android.graphics.BitmapFactory.decodeFile(a.optString("before"));
+                android.graphics.Bitmap b2 = android.graphics.BitmapFactory.decodeFile(a.optString("after"));
+                if (b1 == null || b2 == null) return err("BAD_IMG", "图片解码失败");
+                int w = Math.min(b1.getWidth(), b2.getWidth()), h = Math.min(b1.getHeight(), b2.getHeight());
+                int[] p1 = new int[w * h], p2 = new int[w * h];
+                b1.getPixels(p1, 0, w, 0, 0, w, h); b2.getPixels(p2, 0, w, 0, 0, w, h);
+                int minX = w, minY = h, maxX = 0, maxY = 0, changed = 0;
+                for (int y = 0; y < h; y++) for (int x = 0; x < w; x++) {
+                    int i = y * w + x;
+                    int d = Math.abs(((p1[i] >> 16) & 255) - ((p2[i] >> 16) & 255))
+                          + Math.abs(((p1[i] >> 8) & 255) - ((p2[i] >> 8) & 255))
+                          + Math.abs((p1[i] & 255) - (p2[i] & 255));
+                    if (d > 60) { changed++; if (x<minX)minX=x; if (x>maxX)maxX=x; if (y<minY)minY=y; if (y>maxY)maxY=y; }
+                }
+                JSONObject o = new JSONObject();
+                double pct = 100.0 * changed / (w * h);
+                o.put("changedPercent", Math.round(pct * 10) / 10.0);
+                if (changed > 0) {
+                    int pad = 20;
+                    int cx = Math.max(0, minX - pad), cy = Math.max(0, minY - pad);
+                    int cw = Math.min(w - cx, maxX - minX + pad * 2), ch = Math.min(h - cy, maxY - minY + pad * 2);
+                    android.graphics.Bitmap crop = android.graphics.Bitmap.createBitmap(b2, cx, cy, cw, ch);
+                    File cf = new File("/storage/emulated/0/pibridge/shots/diff-crop.png");
+                    java.io.FileOutputStream fo = new java.io.FileOutputStream(cf);
+                    crop.compress(android.graphics.Bitmap.CompressFormat.PNG, 85, fo); fo.close();
+                    o.put("region", cx + "," + cy + " " + cw + "x" + ch);
+                    o.put("crop", cf.getAbsolutePath());
+                }
+                b1.recycle(); b2.recycle();
+                return ok(o);
+            }});
+
+        def("ui_wait_gone", "等待元素消失（加载圈/弹窗关闭/页面切走的反向验证）",
+            schema(props("text", prop("string", "等待消失的文本"), "display", prop("number", "屏幕ID 默认0主屏"),
+                    "timeout_sec", prop("number", "最长等待 默认15秒")), "text"), new H() { public JSONObject run(JSONObject a) throws Exception {
+            int disp = a.optInt("display", 0);
+            long deadline = System.currentTimeMillis() + a.optInt("timeout_sec", 15) * 1000L;
+            String target = a.optString("text");
+            while (System.currentTimeMillis() < deadline) {
+                JSONArray nodes = AdbService.readTree(disp);
+                boolean found = false;
+                if (nodes != null) for (int k = 0; k < nodes.length(); k++) {
+                    JSONObject n = nodes.optJSONObject(k);
+                    if (n != null && (n.optString("text","").contains(target) || n.optString("desc","").contains(target))) { found = true; break; }
+                }
+                if (!found) return ok(new JSONObject().put("gone", true));
+                try { Thread.sleep(900); } catch (Exception ignore) {}
+            }
+            return ok(new JSONObject().put("gone", false).put("hint", "超时仍在"));
+        }});
+
         def("macro_save", "保存宏：name英文标识，desc中文说明，steps为步骤数组JSON文本，每步包含tool与args两个字段，args支持p1到p3占位符",
             schema(props("name", prop("string", "宏名英文数字下划线"), "desc", prop("string", "中文说明"),
                     "steps", prop("string", "步骤数组JSON文本")), "name", "desc", "steps"),
