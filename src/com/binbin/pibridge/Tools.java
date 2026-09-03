@@ -807,6 +807,86 @@ public class Tools {
                 }
             }});
 
+        // ═══ pi 长驻会话（RPC 桥）：免冷启动 + 上下文记忆 ═══
+        def("pi_rpc", "与长驻pi会话对话（免冷启动，保留上下文记忆）。new=true 开新会话。返回pi的文字回复",
+            schema(props("prompt", prop("string", "给pi的指令"), "wait_sec", prop("number", "最长等待 默认120秒"),
+                    "new", prop("boolean", "true=先开新会话")), "prompt"),
+            new H() { public JSONObject run(JSONObject a) throws Exception {
+                String prompt = a.optString("prompt");
+                int waitS = a.optInt("wait_sec", 120);
+                String home = "/data/data/com.pihost/files/home";
+                File fifo = new File(home, ".pi-rpc-in");
+                File out = new File(home, ".pi-rpc-out.jsonl");
+                // 守护自愈（检查与启动分离，避免 pgrep 自匹配误判）
+                JSONObject chk = (JSONObject) Tools.call("env_run", new JSONObject().put("timeout_sec", 15)
+                        .put("cmd", "pgrep -f 'mode rp[c]' | head -1"));
+                boolean alive = String.valueOf(chk).matches("(?s).*\\d{2,}.*");
+                if (!alive) {
+                    Tools.call("env_run", new JSONObject().put("timeout_sec", 20)
+                            .put("cmd", "cd $HOME && [ -p .pi-rpc-in ] || mkfifo .pi-rpc-in; "
+                                    + "setsid sh -c 'tail -f .pi-rpc-in | pi --mode rpc >> .pi-rpc-out.jsonl 2>&1' >/dev/null 2>&1 < /dev/null & "
+                                    + "sleep 4; echo started"));
+                    try { Thread.sleep(1500); } catch (Exception ignore) {}
+                    chk = (JSONObject) Tools.call("env_run", new JSONObject().put("timeout_sec", 15)
+                            .put("cmd", "pgrep -f 'mode rp[c]' | head -1"));
+                    alive = String.valueOf(chk).matches("(?s).*\\d{2,}.*");
+                }
+                if (!alive) return err("DAEMON_FAIL", "RPC守护启动失败: " + chk);
+                if (a.optBoolean("new", false)) {
+                    Tools.call("env_run", new JSONObject().put("timeout_sec", 15)
+                            .put("cmd", "printf '%s\\n' '{\"type\":\"new_session\"}' > $HOME/.pi-rpc-in"));
+                    try { Thread.sleep(1500); } catch (Exception ignore) {}
+                }
+                long start = out.canRead() ? out.length() : 0;
+                // 写prompt到FIFO（tail -f 持有读端，写入不阻塞）
+                JSONObject line = new JSONObject().put("id", "rpc" + System.currentTimeMillis())
+                        .put("type", "prompt").put("message", prompt);
+                try (java.io.FileOutputStream fo = new java.io.FileOutputStream(fifo, true)) {
+                    fo.write((line.toString() + "\n").getBytes("UTF-8"));
+                    fo.flush();
+                }
+                // 轮询 out 新增字节，找最后一个 agent_end 的 assistant 文本
+                long deadline = System.currentTimeMillis() + waitS * 1000L;
+                StringBuilder acc = new StringBuilder();
+                String answer = null; String usage = null;
+                while (System.currentTimeMillis() < deadline) {
+                    try { Thread.sleep(1200); } catch (Exception ignore) {}
+                    if (!out.canRead()) continue;
+                    byte[] all = java.nio.file.Files.readAllBytes(out.toPath());
+                    if (all.length <= start) continue;
+                    String fresh = new String(java.util.Arrays.copyOfRange(all, (int) start, all.length), "UTF-8");
+                    acc.setLength(0); acc.append(fresh);
+                    for (String ln : fresh.split("\n")) {
+                        if (!ln.contains("agent_end")) continue;
+                        try {
+                            JSONObject ev = new JSONObject(ln);
+                            JSONArray msgs = ev.optJSONArray("messages");
+                            if (msgs == null) continue;
+                            for (int k = msgs.length() - 1; k >= 0; k--) {
+                                JSONObject mm = msgs.optJSONObject(k);
+                                if (mm == null || !"assistant".equals(mm.optString("role"))) continue;
+                                JSONArray cc = mm.optJSONArray("content");
+                                if (cc == null) continue;
+                                StringBuilder txt = new StringBuilder();
+                                for (int j = 0; j < cc.length(); j++) {
+                                    JSONObject part = cc.optJSONObject(j);
+                                    if (part != null && "text".equals(part.optString("type"))) txt.append(part.optString("text"));
+                                }
+                                if (txt.length() > 0) { answer = txt.toString(); usage = String.valueOf(ev.optJSONObject("usage")); }
+                            }
+                        } catch (Exception ignore) {}
+                    }
+                    if (answer != null && fresh.contains("agent_settled")) break;
+                }
+                if (answer == null) {
+                    String tail = acc.length() > 0 ? acc.substring(Math.max(0, acc.length() - 300)) : "无新增输出";
+                    return err("RPC_TIMEOUT", waitS + "秒内未完成。尾部输出: " + tail);
+                }
+                JSONObject o = new JSONObject();
+                try { o.put("answer", answer); if (usage != null) o.put("usage", new JSONObject(usage)); } catch (Exception ignore) {}
+                return ok(o);
+            }});
+
         def("macro_save", "保存宏：name英文标识，desc中文说明，steps为步骤数组JSON文本，每步包含tool与args两个字段，args支持p1到p3占位符",
             schema(props("name", prop("string", "宏名英文数字下划线"), "desc", prop("string", "中文说明"),
                     "steps", prop("string", "步骤数组JSON文本")), "name", "desc", "steps"),
