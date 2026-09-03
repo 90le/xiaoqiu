@@ -532,9 +532,10 @@ public class Tools {
             try {
                 ClipboardManager cm = (ClipboardManager) ctx.getSystemService(Context.CLIPBOARD_SERVICE);
                 if (cm.hasPrimaryClip() && cm.getPrimaryClip().getItemCount() > 0) {
-                    return ok(cm.getPrimaryClip().getItemAt(0).coerceToText(ctx).toString());
+                    String txt = cm.getPrimaryClip().getItemAt(0).coerceToText(ctx).toString();
+                    return ok(txt);
                 }
-                return err("EMPTY", "剪贴板为空或被系统限制");
+                return ok(""); // 空剪贴板属正常状态，不算错误
             } catch (Exception e) { return err("RESTRICTED", "Android 10+ 限制后台读取剪贴板: " + e); }
         }});
 
