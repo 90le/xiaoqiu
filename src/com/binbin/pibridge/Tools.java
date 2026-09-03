@@ -638,7 +638,7 @@ public class Tools {
                 VdManager.touch(); // 任何 vd 操作都刷新空闲计时
                 String act = a.optString("action");
                 if ("create".equals(act)) {
-                    JSONObject r = VdManager.create(ctx, a.optInt("w", 900), a.optInt("h", 2000));
+                    JSONObject r = VdManager.create(ctx, a.optInt("w", 0), a.optInt("h", 0));
                     return r.has("error") ? err(r.getString("error"), r.optString("msg")) : ok(r);
                 }
                 if ("stop".equals(act)) {
@@ -1487,15 +1487,15 @@ public class Tools {
                         + "只输出严格JSON数组不要任何其他文字（不要思考过程）：[{\"label\":\"元素名称\",\"x\":千分比x整数,\"y\":千分比y整数,\"type\":\"button/input/item\"}]。"
                         + (kind.isEmpty() ? "" : "只保留type为" + kind + "的元素。");
                 JSONObject body = new JSONObject()
-                        .put("model", "glm-5.3-flash")
+                        .put("model", "glm-5v-turbo")
                         .put("messages", new org.json.JSONArray()
                                 .put(new JSONObject().put("role", "user").put("content", new org.json.JSONArray()
                                         .put(new JSONObject().put("type", "image_url")
                                                 .put("image_url", new JSONObject().put("url", "data:" + mime + ";base64," + b64)))
                                         .put(new JSONObject().put("type", "text").put("text", q)))))
-                        .put("max_tokens", 4096);
+                        .put("max_tokens", 2048);
                 javax.net.ssl.HttpsURLConnection c = (javax.net.ssl.HttpsURLConnection)
-                        new java.net.URL("https://open.bigmodel.cn/api/coding/paas/v4/chat/completions").openConnection();
+                        new java.net.URL("https://open.bigmodel.cn/api/paas/v4/chat/completions").openConnection();
                 c.setRequestMethod("POST"); c.setConnectTimeout(8000); c.setReadTimeout(90000); c.setDoOutput(true);
                 c.setRequestProperty("Authorization", "Bearer " + key);
                 c.setRequestProperty("Content-Type", "application/json");
@@ -1649,15 +1649,15 @@ public class Tools {
                 String key = fastKey();
                 if (key == null) return err("NO_KEY", "未配置 API Key");
                 JSONObject body = new JSONObject()
-                        .put("model", "glm-5.3-flash")
+                        .put("model", "glm-5v-turbo")
                         .put("messages", new org.json.JSONArray()
                                 .put(new JSONObject().put("role", "user").put("content", new org.json.JSONArray()
                                         .put(new JSONObject().put("type", "image_url")
                                                 .put("image_url", new JSONObject().put("url", "data:" + mime + ";base64," + b64)))
                                         .put(new JSONObject().put("type", "text").put("text", q)))))
-                        .put("max_tokens", 4096);
+                        .put("max_tokens", 2048);
                 javax.net.ssl.HttpsURLConnection c = (javax.net.ssl.HttpsURLConnection)
-                        new java.net.URL("https://open.bigmodel.cn/api/coding/paas/v4/chat/completions").openConnection();
+                        new java.net.URL("https://open.bigmodel.cn/api/paas/v4/chat/completions").openConnection();
                 c.setRequestMethod("POST"); c.setConnectTimeout(8000); c.setReadTimeout(90000); c.setDoOutput(true);
                 c.setRequestProperty("Authorization", "Bearer " + key);
                 c.setRequestProperty("Content-Type", "application/json");

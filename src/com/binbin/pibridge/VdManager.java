@@ -37,6 +37,7 @@ public class VdManager {
     private static final java.util.Set<String> launched = new java.util.HashSet<>();
     private static String lastPkg = "";
     private static long lastUse = System.currentTimeMillis();
+    private static int dpi = 160;
     public static void touch() { lastUse = System.currentTimeMillis(); }
     static { // 空闲自动回收：3分钟无操作自动销毁副屏（防渲染/电池泄漏）
         Thread idleT = new Thread(() -> {
@@ -64,6 +65,16 @@ public class VdManager {
     /** 创建隐形副屏（默认 900x2000@160dpi，够看清单又省内存） */
     public static synchronized JSONObject create(Context c, int width, int height) {
         touch();
+        // 默认对齐主屏真实分辨率+密度（App渲染与主屏一致）
+        int dpi = 160;
+        try {
+            android.util.DisplayMetrics dm = new android.util.DisplayMetrics();
+            android.hardware.display.DisplayManager dmgr = (android.hardware.display.DisplayManager) c.getSystemService(Context.DISPLAY_SERVICE);
+            dmgr.getDisplay(android.view.Display.DEFAULT_DISPLAY).getRealMetrics(dm);
+            if (width <= 0) width = dm.widthPixels;
+            if (height <= 0) height = dm.heightPixels;
+            dpi = dm.densityDpi;
+        } catch (Exception ignore) {}
         w = width <= 0 ? 900 : width;
         h = height <= 0 ? 2000 : height;
         reader = ImageReader.newInstance(w, h, PixelFormat.RGBA_8888, 3);
@@ -87,7 +98,7 @@ public class VdManager {
         int flags = DisplayManager.VIRTUAL_DISPLAY_FLAG_PUBLIC
                 | DisplayManager.VIRTUAL_DISPLAY_FLAG_OWN_CONTENT_ONLY;
         vd = ((DisplayManager) c.getSystemService(Context.DISPLAY_SERVICE))
-                .createVirtualDisplay("xiaoqiu-vd", w, h, 160, reader.getSurface(), flags);
+                .createVirtualDisplay("xiaoqiu-vd", w, h, dpi, reader.getSurface(), flags);
         if (vd == null) return err("CREATE_FAIL", "createVirtualDisplay 返回 null");
         id = vd.getDisplay().getDisplayId();
         JSONObject o = new JSONObject();
