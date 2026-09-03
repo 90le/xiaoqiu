@@ -1034,8 +1034,8 @@ public class Tools {
             }});
 
 
-        def("macro_from_session", "复利飞轮：从最近的pi会话自动提取操作流程保存为宏（跑通即固化的自动化版）。自动过滤出自动化工具调用并按序保存",
-            schema(props("name", prop("string", "宏名"), "desc", prop("string", "中文说明 可空"),
+        def("macro_from_session", "复利飞轮：从最近的pi会话自动提取操作流程保存为宏。lean=true剔除验证性shot/等待（精简宏）",
+            schema(props("name", prop("string", "宏名"), "desc", prop("string", "中文说明 可空"), "lean", prop("boolean", "精简模式 默认true"),
                     "max_steps", prop("number", "最多提取步数 默认30"), "session", prop("string", "会话文件路径 可空=最新")), "name"),
             new H() { public JSONObject run(JSONObject a) throws Exception {
                 String name = a.optString("name").replaceAll("[^a-zA-Z0-9_]", "");
@@ -1077,12 +1077,15 @@ public class Tools {
                         if (msg == null || !"assistant".equals(msg.optString("role"))) continue;
                         JSONArray cc = msg.optJSONArray("content");
                         if (cc == null) continue;
+                        boolean lean = a.optBoolean("lean", true);
                         for (int j = 0; j < cc.length() && steps.length() < maxS; j++) {
                             JSONObject item = cc.optJSONObject(j);
                             if (item == null || !"toolCall".equals(item.optString("type"))) continue;
                             String tn = item.optString("name");
                             if (!auto.contains(tn)) continue;
-                            JSONObject st = new JSONObject().put("tool", tn).put("args", item.optJSONObject("arguments") == null ? new JSONObject() : item.optJSONObject("arguments"));
+                            JSONObject sargs = item.optJSONObject("arguments") == null ? new JSONObject() : item.optJSONObject("arguments");
+                            if (lean && "vd".equals(tn) && "shot".equals(sargs.optString("action"))) continue; // 验证性截图剔除
+                            JSONObject st = new JSONObject().put("tool", tn).put("args", sargs);
                             steps.put(st);
                         }
                     } catch (Exception ignore) {}
@@ -1384,6 +1387,24 @@ public class Tools {
                 if (nx < 0) return err("NOT_FOUND", "截图中未找到含『" + label + "』的元素，共" + list.length() + "个元素");
                 // 千分比→像素（按当前副屏尺寸）
                 int[] ds = AdbService.displaySize(VdManager.displayId());
+                // 记忆优先：历史校准偏移直接应用（第二次点击第一次就准）
+                String appliedCal = "";
+                try {
+                    String wpkg0 = VdManager.lastLaunchedPkg();
+                    if (!wpkg0.isEmpty()) {
+                        JSONObject mr = (JSONObject) Tools.call("memory_read", new JSONObject()
+                                .put("key", "app." + wpkg0 + ".vision_offset." + label));
+                        if (mr.optBoolean("ok", false)) {
+                            String v = mr.optJSONObject("data") == null ? "" : mr.getJSONObject("data").optString("value", "");
+                            java.util.regex.Matcher cm = java.util.regex.Pattern.compile("偏移(-?\\d+),(-?\\d+)").matcher(v);
+                            if (cm.find()) {
+                                nx += Integer.parseInt(cm.group(1));
+                                ny += Integer.parseInt(cm.group(2));
+                                appliedCal = "已应用历史校准" + cm.group(1) + "," + cm.group(2);
+                            }
+                        }
+                    }
+                } catch (Exception ignore) {}
                 int px = nx * ds[0] / 1000, py = ny * ds[1] / 1000;
                 JSONObject c = (JSONObject) Tools.call("l2_exec", new JSONObject().put("cmd",
                         "input -d " + VdManager.displayId() + " tap " + px + " " + py));
@@ -1403,8 +1424,12 @@ public class Tools {
                         if (e != null) sigB2.append(e.optString("label","")).append("|");
                     }
                     pageChanged = !sigB2.toString().equals(sig1);
-                    if (pageChanged) return ok(new JSONObject().put("tapped", true).put("verified", true)
-                            .put("pageChanged", true).put("at", nx + "," + ny + "‰").put("matched", matched));
+                    if (pageChanged) {
+                        JSONObject rok = new JSONObject().put("tapped", true).put("verified", true)
+                                .put("pageChanged", true).put("at", nx + "," + ny + "‰").put("matched", matched);
+                        if (!appliedCal.isEmpty()) rok.put("applied_calibration", appliedCal);
+                        return ok(rok);
+                    }
                 }
                 // 千分比十字偏移重试（±40‰）
                 int[][] offs = {{40,0},{-40,0},{0,40},{0,-40}};
