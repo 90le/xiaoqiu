@@ -633,7 +633,20 @@ public class Tools {
                 if ("shot".equals(act)) {
                     JSONObject r = VdManager.shot(ctx);
                     if (r.has("error")) return err(r.getString("error"), r.optString("msg"));
-                    if (r.optLong("size", 999999) < 30000) r.put("warning", "画面疑似黑屏/空，建议重新 vd launch 目标App后再shot");
+                    // 黑屏自愈：重发射最近App → 等渲染 → 重截
+                    if (r.optLong("size", 999999) < 30000 && !VdManager.lastLaunchedPkg().isEmpty()) {
+                        String pkg = VdManager.lastLaunchedPkg();
+                        Tools.call("l2_exec", new JSONObject().put("timeout_sec", 40).put("cmd",
+                                "am start --display " + VdManager.displayId()
+                                + " -n $(cmd package resolve-activity --brief " + pkg + " | tail -1) >/dev/null 2>&1"));
+                        try { Thread.sleep(4500); } catch (Exception ignore) {}
+                        JSONObject r2 = VdManager.shot(ctx);
+                        if (!r2.has("error") && r2.optLong("size", 0) >= 30000) {
+                            r2.put("recovered", true).put("recovered_pkg", pkg);
+                            return ok(r2);
+                        }
+                        r.put("warning", "黑屏且自动恢复失败，建议销毁副屏重来");
+                    }
                     return ok(r);
                 }
                 if ("shot_grid".equals(act)) {
