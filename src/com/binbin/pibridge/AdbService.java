@@ -284,6 +284,17 @@ public class AdbService extends AccessibilityService {
                 }
             }
             AccessibilityNodeInfo target = focusedEditable != null ? focusedEditable : anyEditable;
+            // 页面加载时序：最多重试4次找可编辑节点
+            for (int attempt = 0; attempt < 4 && target == null; attempt++) {
+                try { Thread.sleep(1000); } catch (Exception ignore) {}
+                for (AccessibilityWindowInfo w : (java.util.List<AccessibilityWindowInfo>) l) {
+                    AccessibilityNodeInfo r = w.getRoot();
+                    if (r == null) continue;
+                    target = findEditable(r, 0, true);
+                    if (target == null) target = findEditable(r, 0, false);
+                    if (target != null) break;
+                }
+            }
             if (target == null) return "未找到可编辑节点";
             android.os.Bundle args = new android.os.Bundle();
             args.putCharSequence(AccessibilityNodeInfo.ACTION_ARGUMENT_SET_TEXT_CHARSEQUENCE, text);

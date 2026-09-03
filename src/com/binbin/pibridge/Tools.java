@@ -735,6 +735,70 @@ public class Tools {
             return c.optBoolean("ok", false) ? ok("已切换到 " + target) : err("IME_FAIL", String.valueOf(c));
         }});
 
+        // ═══ 宏系统（操作录像回放）：把跑通的流程存成可复用技能 ═══
+        def("macro_save", "保存宏：name英文标识，desc中文说明，steps为步骤数组JSON文本，每步包含tool与args两个字段，args支持p1到p3占位符",
+            schema(props("name", prop("string", "宏名英文数字下划线"), "desc", prop("string", "中文说明"),
+                    "steps", prop("string", "步骤数组JSON文本")), "name", "desc", "steps"),
+            new H() { public JSONObject run(JSONObject a) throws Exception {
+                String name = a.optString("name").replaceAll("[^a-zA-Z0-9_]", "");
+                if (name.isEmpty()) return err("BAD_NAME", "宏名只能用英文数字下划线");
+                JSONArray steps = new JSONArray(a.optString("steps", "[]"));
+                if (steps.length() == 0) return err("EMPTY", "steps 为空");
+                for (int i = 0; i < steps.length(); i++) {
+                    JSONObject s = steps.optJSONObject(i);
+                    if (s == null || s.optString("tool").isEmpty()) return err("BAD_STEP", "第" + (i+1) + "步缺少tool");
+                }
+                File dir = new File(ctx.getFilesDir(), "macros");
+                if (!dir.isDirectory()) dir.mkdirs();
+                JSONObject m = new JSONObject().put("name", name).put("desc", a.optString("desc"))
+                        .put("steps", steps).put("saved", System.currentTimeMillis());
+                write(new File(dir, name + ".json"), m.toString());
+                return ok(new JSONObject().put("name", name).put("steps", steps.length()));
+            }});
+        def("macro_run", "运行宏：顺序执行全部步骤，p1到p3占位符由参数替换，返回每步结果；关键步骤失败即中止",
+            schema(props("name", prop("string", "宏名"), "p1", prop("string", "参数1可空"),
+                    "p2", prop("string", "参数2可空"), "p3", prop("string", "参数3可空")), "name"),
+            new H() { public JSONObject run(JSONObject a) throws Exception {
+                String name = a.optString("name").replaceAll("[^a-zA-Z0-9_]", "");
+                File f = new File(new File(ctx.getFilesDir(), "macros"), name + ".json");
+                if (!f.canRead()) return err("NO_MACRO", "宏不存在，可先macro_list查询");
+                JSONObject m = new JSONObject(new String(java.nio.file.Files.readAllBytes(f.toPath()), "UTF-8"));
+                JSONArray steps = m.optJSONArray("steps");
+                JSONArray results = new JSONArray();
+                for (int i = 0; i < steps.length(); i++) {
+                    JSONObject s = steps.optJSONObject(i);
+                    String argsStr = s.optString("args", "{}");
+                    for (int p = 1; p <= 3; p++)
+                        argsStr = argsStr.replace("{{p" + p + "}}", a.optString("p" + p));
+                    argsStr = argsStr.replace("{{vd}}", String.valueOf(VdManager.displayId())); // 动态副屏ID
+                    JSONObject r = (JSONObject) Tools.call(s.optString("tool"), new JSONObject(argsStr));
+                    JSONObject rec = new JSONObject().put("step", i + 1).put("tool", s.optString("tool"))
+                            .put("ok", r.optBoolean("ok", false));
+                    try { rec.put("data", r.opt("data")); } catch (Exception ignore) {}
+                    results.put(rec);
+                    if (!r.optBoolean("ok", false) && s.optBoolean("critical", true))
+                        return ok(new JSONObject().put("aborted", true).put("atStep", i + 1).put("results", results));
+                }
+                return ok(new JSONObject().put("done", true).put("steps", steps.length()).put("results", results));
+            }});
+        def("macro_list", "列出全部已保存宏", schema(props()), new H() { public JSONObject run(JSONObject a) throws Exception {
+            File dir = new File(ctx.getFilesDir(), "macros");
+            JSONArray out = new JSONArray();
+            if (dir.isDirectory()) for (File f : dir.listFiles()) {
+                try {
+                    JSONObject m = new JSONObject(new String(java.nio.file.Files.readAllBytes(f.toPath()), "UTF-8"));
+                    out.put(new JSONObject().put("name", m.optString("name")).put("desc", m.optString("desc"))
+                            .put("steps", m.optJSONArray("steps") == null ? 0 : m.optJSONArray("steps").length()));
+                } catch (Exception ignore) {}
+            }
+            return ok(new JSONObject().put("macros", out).put("count", out.length()));
+        }});
+        def("macro_del", "删除指定宏", schema(props("name", prop("string", "宏名")), "name"), new H() { public JSONObject run(JSONObject a) throws Exception {
+            String name = a.optString("name").replaceAll("[^a-zA-Z0-9_]", "");
+            File f = new File(new File(ctx.getFilesDir(), "macros"), name + ".json");
+            return f.delete() ? ok("已删除") : err("NO_MACRO", "不存在");
+        }});
+
         def("apps_list", "列出已装应用（可按关键词过滤）",
             schema(props("filter", prop("string", "包名/应用名包含关键词"), "limit", prop("number", "上限默认 50"))), new H() { public JSONObject run(JSONObject a) throws Exception {
                 PackageManager pm = ctx.getPackageManager();
@@ -1070,6 +1134,40 @@ public class Tools {
             }
             return ok(new JSONObject().put("got", false).put("hint", "等待期内无新通知"));
         }});
+        def("ui_find_tap", "查找并点击含指定文本的节点（自动重试等页面，宏的最佳搭档；display=0 主屏）",
+            schema(props("text", prop("string", "要点击的节点文本"), "display", prop("number", "屏幕ID 默认0主屏"),
+                    "retries", prop("number", "重试次数 默认4")), "text"), new H() { public JSONObject run(JSONObject a) throws Exception {
+            int disp = a.optInt("display", 0);
+            int retries = Math.max(a.optInt("retries", 4), 1);
+            String target = a.optString("text");
+            for (int attempt = 0; attempt < retries; attempt++) {
+                if (attempt > 0) { try { Thread.sleep(1200); } catch (Exception ignore) {} }
+                JSONArray nodes = AdbService.readTree(disp);
+                if (nodes == null) continue;
+                for (int k = 0; k < nodes.length(); k++) {
+                    JSONObject n = nodes.optJSONObject(k);
+                    if (n == null) continue;
+                    if (n.optString("text","").contains(target) || n.optString("desc","").contains(target)) {
+                        String[] parts = n.optString("xy").split(" ");
+                        String[] lt = parts[0].split(",");
+                        String[] wh = parts[1].split("x");
+                        int x = Integer.parseInt(lt[0]) + Integer.parseInt(wh[0]) / 2;
+                        int y = Integer.parseInt(lt[1]) + Integer.parseInt(wh[1]) / 2;
+                        boolean okTap;
+                        if (disp == 0) okTap = AdbService.tap(x, y);
+                        else {
+                            JSONObject c = (JSONObject) Tools.call("l2_exec", new JSONObject().put("cmd",
+                                    "input -d " + disp + " tap " + x + " " + y));
+                            okTap = c.optBoolean("ok", false);
+                        }
+                        if (okTap) return ok(new JSONObject().put("tapped", true).put("node", n.optString("text"))
+                                .put("xy", x + "," + y).put("attempt", attempt + 1));
+                    }
+                }
+            }
+            return err("NOT_FOUND", "重试" + retries + "次未见可点击的『" + target + "』");
+        }});
+
         def("ui_tap_node", "按结构树编号点击（先 ui_screen_read 得到编号 i，直接点击该节点中心，免算坐标；display=0 主屏，副屏传 displayId）",
             schema(props("i", prop("number", "节点编号"), "display", prop("number", "屏幕ID 默认0主屏")), "i"), new H() { public JSONObject run(JSONObject a) throws Exception {
             int disp = a.optInt("display", 0);
