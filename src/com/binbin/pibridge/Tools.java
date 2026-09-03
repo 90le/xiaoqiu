@@ -862,7 +862,7 @@ public class Tools {
                 dbo.inJustDecodeBounds = true;
                 android.graphics.BitmapFactory.decodeFile(file, dbo);
                 String q = "分析这张手机截图（实际尺寸" + dbo.outWidth + "x" + dbo.outHeight + "像素，坐标必须在此范围内）。"
-                        + "找出所有可交互元素（按钮/输入框/图标/标签/列表项/聊天行）。"
+                        + "找出最醒目的至多15个可交互元素（按钮/输入框/图标/页签/列表项/聊天行），label精简不超过10个字。"
                         + "只输出严格JSON数组不要任何其他文字：[{\"label\":\"元素名称\",\"x\":中心x整数,\"y\":中心y整数,\"type\":\"button/input/item\"}]。"
                         + (kind.isEmpty() ? "" : "只保留type为" + kind + "的元素。") + "坐标用元素中心的像素值。";
                 JSONObject body = new JSONObject()
@@ -872,7 +872,7 @@ public class Tools {
                                         .put(new JSONObject().put("type", "image_url")
                                                 .put("image_url", new JSONObject().put("url", "data:" + mime + ";base64," + b64)))
                                         .put(new JSONObject().put("type", "text").put("text", q)))))
-                        .put("max_tokens", 1000);
+                        .put("max_tokens", 1024);
                 javax.net.ssl.HttpsURLConnection c = (javax.net.ssl.HttpsURLConnection)
                         new java.net.URL("https://open.bigmodel.cn/api/paas/v4/chat/completions").openConnection();
                 c.setRequestMethod("POST"); c.setConnectTimeout(8000); c.setReadTimeout(60000); c.setDoOutput(true);
@@ -889,8 +889,14 @@ public class Tools {
                 if (code >= 400) return err("API_ERR", code + ": " + resp.substring(0, Math.min(300, resp.length())));
                 String content = new JSONObject(resp).getJSONArray("choices").getJSONObject(0)
                         .getJSONObject("message").optString("content", "").trim();
-                String jc = content;
-                if (jc.contains("[")) jc = jc.substring(jc.indexOf('['), jc.lastIndexOf(']') + 1);
+                String jc = content.replace("```json", "").replace("```", "").trim();
+                int lb = jc.indexOf('['), rb = jc.lastIndexOf(']');
+                if (lb >= 0 && rb > lb) jc = jc.substring(lb, rb + 1);
+                else if (lb >= 0) { // 截断容错：补齐右括号
+                    jc = jc.substring(lb);
+                    int lastBrace = jc.lastIndexOf('}');
+                    jc = lastBrace >= 0 ? jc.substring(0, lastBrace + 1) + "]" : "[]";
+                }
                 try {
                     JSONArray els = new JSONArray(jc);
                     veCache = els; veCacheKey = md5; veCacheTime = System.currentTimeMillis();
@@ -1418,6 +1424,64 @@ public class Tools {
             }});
 
         // ═══ 视觉问答（"看"的兜底王牌：GLM-4V 读图，无树App的界面理解）═══
+        def("vision_bench", "视觉坐标精度基准：GLM-4V元素坐标对比无障碍树真值，输出匹配数/平均偏差/最大偏差（量化视觉定位质量）",
+            schema(props("display", prop("number", "屏幕ID 默认0主屏"))), new H() { public JSONObject run(JSONObject a) throws Exception {
+            int disp = a.optInt("display", 0);
+            String shotPath;
+            if (disp > 0) {
+                JSONObject s = VdManager.shot(ctx);
+                if (s.has("error")) return err(s.getString("error"), s.optString("msg"));
+                shotPath = s.optString("file");
+            } else {
+                JSONObject s = (JSONObject) Tools.call("screenshot", new JSONObject());
+                if (!s.optBoolean("ok", false)) return err("SHOT_FAIL", String.valueOf(s));
+                shotPath = String.valueOf(s.get("data")).split(" ")[0];
+            }
+            JSONArray tree = AdbService.readTree(disp);
+            if (tree == null || tree.length() == 0) return err("NO_TREE", "该屏无结构树真值");
+            JSONObject els = (JSONObject) Tools.call("vision_elements", new JSONObject().put("file", shotPath));
+            if (!els.optBoolean("ok", false)) return els;
+            JSONArray ve = els.optJSONObject("data") == null ? new org.json.JSONArray()
+                    : els.optJSONObject("data").optJSONArray("elements");
+            java.util.List<double[]> deltas = new java.util.ArrayList<>();
+            org.json.JSONArray details = new org.json.JSONArray();
+            for (int k = 0; k < tree.length(); k++) {
+                JSONObject n = tree.optJSONObject(k);
+                if (n == null) continue;
+                String txt = n.optString("text","").trim();
+                if (txt.length() < 2 || txt.length() > 12) continue;
+                String[] parts = n.optString("xy").split(" ");
+                if (parts.length < 2) continue;
+                String[] lt = parts[0].split(",");
+                String[] wh = parts[1].split("x");
+                int tcx = Integer.parseInt(lt[0]) + Integer.parseInt(wh[0]) / 2;
+                int tcy = Integer.parseInt(lt[1]) + Integer.parseInt(wh[1]) / 2;
+                for (int j = 0; j < ve.length(); j++) {
+                    JSONObject e = ve.optJSONObject(j);
+                    if (e == null) continue;
+                    String el = e.optString("label","").trim();
+                    if (el.equals(txt)) {
+                        int x = e.optInt("x"), y = e.optInt("y");
+                        double dd = Math.sqrt(Math.pow(x - tcx, 2) + Math.pow(y - tcy, 2));
+                        deltas.add(new double[]{dd});
+                        org.json.JSONObject det = new org.json.JSONObject();
+                        try { det.put("text", txt).put("tree", tcx + "," + tcy).put("vision", x + "," + y).put("deltaPx", Math.round(dd)); } catch (Exception ignore) {}
+                        details.put(det);
+                        break;
+                    }
+                }
+            }
+            if (deltas.isEmpty()) return ok(new org.json.JSONObject().put("matched", 0).put("hint", "无可匹配元素"));
+            double sum = 0, max = 0;
+            for (double[] d2 : deltas) { sum += d2[0]; max = Math.max(max, d2[0]); }
+            org.json.JSONObject o = new org.json.JSONObject();
+            o.put("matched", deltas.size());
+            o.put("avgDeltaPx", Math.round(sum / deltas.size()));
+            o.put("maxDeltaPx", Math.round(max));
+            o.put("details", details);
+            return ok(o);
+            }});
+
         def("vision_ask", "视觉问答：对本地图片提问（GLM-4V）。无结构树的App用它理解界面：问'列出图中店铺名和评分'、'找到搜索按钮的坐标'等",
             schema(props("file", prop("string", "图片路径"), "q", prop("string", "问题")), "file", "q"),
             new H() { public JSONObject run(JSONObject a) throws Exception {
@@ -2059,6 +2123,11 @@ public class Tools {
             schema(props("cmd", prop("string", "特权命令"), "timeout_sec", prop("number", "超时秒默认30")), "cmd"), new H() { public JSONObject run(JSONObject a) throws Exception {
             String cmd = a.optString("cmd", "");
             if (cmd.contains("\n") || cmd.isEmpty()) return err("BAD", "命令需单行且非空");
+            // 危险命令护栏（防误操作毁机；命中即拒）
+            String slash = String.valueOf('/');
+            String[] danger = {"rm -rf " + slash, "reboot", "shutdown", "mkfs", "dd if=", "burn"};
+            for (String d : danger) if (cmd.contains(d)) return err("DANGEROUS", "已拦截危险命令片段");
+            if (cmd.contains("pm uninstall com.pihost")) return err("DANGEROUS", "不允许卸载小丘自己");
             int timeout = a.optInt("timeout_sec", 30);
             if (timeout < 5) timeout = 5; if (timeout > 300) timeout = 300;
             File qdir = new File("/storage/emulated/0/Download/pibridge-queue");
