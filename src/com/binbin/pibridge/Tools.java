@@ -376,6 +376,7 @@ public class Tools {
         }
         return "?";
     }
+    static JSONArray veCache; static String veCacheKey; static long veCacheTime; // vision_elements 同图缓存
     static final String SYSCTL_DUMP =
         "echo \"wifi=$(settings get global wifi_on);bt=$(settings get global bluetooth_on);"
         + "airplane=$(settings get global airplane_mode_on);rotate=$(settings get system accelerometer_rotation);"
@@ -763,6 +764,10 @@ public class Tools {
                 String mime = file.toLowerCase().endsWith(".jpg") || file.toLowerCase().endsWith(".jpeg") ? "image/jpeg" : "image/png";
                 String key = fastKey();
                 if (key == null) return err("NO_KEY", "未配置 API Key");
+                // 同图缓存：5分钟内相同图片直接返回（省时省钱）
+                String md5 = android.util.Base64.encodeToString(java.security.MessageDigest.getInstance("MD5").digest(img), android.util.Base64.NO_WRAP);
+                if (veCache != null && veCacheTime > System.currentTimeMillis() - 300000 && veCacheKey.equals(md5))
+                    return ok(new JSONObject().put("count", veCache.length()).put("elements", veCache).put("cached", true));
                 String q = "分析这张手机截图。找出所有可交互元素（按钮/输入框/图标/标签/列表项/聊天行）。"
                         + "只输出严格JSON数组不要任何其他文字：[{\"label\":\"元素名称\",\"x\":中心x整数,\"y\":中心y整数,\"type\":\"button/input/item\"}]。"
                         + (kind.isEmpty() ? "" : "只保留type为" + kind + "的元素。") + "坐标用元素中心的像素值。";
@@ -794,6 +799,7 @@ public class Tools {
                 if (jc.contains("[")) jc = jc.substring(jc.indexOf('['), jc.lastIndexOf(']') + 1);
                 try {
                     JSONArray els = new JSONArray(jc);
+                    veCache = els; veCacheKey = md5; veCacheTime = System.currentTimeMillis();
                     return ok(new JSONObject().put("count", els.length()).put("elements", els)
                             .put("raw", content.length() > 500 ? content.substring(0, 500) : content));
                 } catch (Exception e) {
