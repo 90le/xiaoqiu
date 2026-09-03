@@ -377,6 +377,7 @@ public class Tools {
         return "?";
     }
     static JSONArray veCache; static String veCacheKey; static long veCacheTime; // vision_elements 同图缓存
+    static String rpcStash; // pi_rpc 会话轮换时的状态摘要
     static final String SYSCTL_DUMP =
         "echo \"wifi=$(settings get global wifi_on);bt=$(settings get global bluetooth_on);"
         + "airplane=$(settings get global airplane_mode_on);rotate=$(settings get system accelerometer_rotation);"
@@ -754,6 +755,81 @@ public class Tools {
 
         // ═══ 宏系统（操作录像回放）：把跑通的流程存成可复用技能 ═══
         // ═══ 结构化视觉（无树App的"树"：GLM-4V 输出带坐标的元素清单）═══
+        def("vision_tap", "视觉定位点击（自验证闭环）：截图→vision_elements找label→点击→复查是否生效；未生效自动偏移重试一次。小目标精准点击用（约40秒）",
+            schema(props("label", prop("string", "要点击的元素名称（含匹配即可）"), "display", prop("number", "副屏ID 当前活着的"),
+                    "kind", prop("string", "元素类型筛选 可空")), "label"),
+            new H() { public JSONObject run(JSONObject a) throws Exception {
+                String label = a.optString("label");
+                String kind = a.optString("kind", "");
+                // 1. 截图
+                JSONObject s1 = VdManager.shot(ctx);
+                if (s1.has("error")) return err(s1.getString("error"), s1.optString("msg"));
+                String f1 = s1.optString("file");
+                // 2. 找元素
+                JSONObject els = (JSONObject) Tools.call("vision_elements", new JSONObject().put("file", f1).put("kind", kind));
+                if (!els.optBoolean("ok", false)) return els;
+                JSONArray list = els.optJSONObject("data") == null ? new JSONArray()
+                        : els.optJSONObject("data").optJSONArray("elements");
+                int tx = -1, ty = -1; String matched = "";
+                StringBuilder sigB1 = new StringBuilder();
+                for (int k = 0; k < list.length(); k++) {
+                    JSONObject e = list.optJSONObject(k);
+                    if (e == null) continue;
+                    sigB1.append(e.optString("label","")).append("|");
+                    if (e.optString("label","").contains(label) && tx < 0) {
+                        tx = e.optInt("x"); ty = e.optInt("y"); matched = e.optString("label");
+                    }
+                }
+                String sig1 = sigB1.toString();
+                if (tx < 0) return err("NOT_FOUND", "截图中未找到含『" + label + "』的元素，共" + list.length() + "个元素");
+                // 3. 点击
+                JSONObject c = (JSONObject) Tools.call("l2_exec", new JSONObject().put("cmd",
+                        "input -d " + VdManager.displayId() + " tap " + tx + " " + ty));
+                if (!c.optBoolean("ok", false)) return err("TAP_FAIL", String.valueOf(c));
+                try { Thread.sleep(2500); } catch (Exception ignore) {}
+                // 4. 复查
+                JSONObject s2 = VdManager.shot(ctx);
+                if (s2.has("error")) return ok(new JSONObject().put("tapped", true).put("verified", false)
+                        .put("at", tx + "," + ty).put("hint", "复查截图失败，请人工确认"));
+                JSONObject els2 = (JSONObject) Tools.call("vision_elements", new JSONObject().put("file", s2.optString("file")).put("kind", kind));
+                boolean pageChanged = false;
+                if (els2.optBoolean("ok", false)) {
+                    JSONArray l2 = els2.optJSONObject("data") == null ? new JSONArray()
+                            : els2.optJSONObject("data").optJSONArray("elements");
+                    StringBuilder sigB2 = new StringBuilder();
+                    for (int k = 0; k < l2.length(); k++) {
+                        JSONObject e = l2.optJSONObject(k);
+                        if (e != null) sigB2.append(e.optString("label","")).append("|");
+                    }
+                    pageChanged = !sigB2.toString().equals(sig1); // 页面指纹变化=点击生效
+                    if (pageChanged) return ok(new JSONObject().put("tapped", true).put("verified", true)
+                            .put("pageChanged", true).put("at", tx + "," + ty).put("matched", matched));
+                }
+                // 5. 偏移重试一次（±40px 十字）
+                int[][] offs = {{40,0},{-40,0},{0,40},{0,-40}};
+                for (int[] off : offs) {
+                    Tools.call("l2_exec", new JSONObject().put("cmd",
+                            "input -d " + VdManager.displayId() + " tap " + (tx+off[0]) + " " + (ty+off[1])));
+                    try { Thread.sleep(2000); } catch (Exception ignore) {}
+                    JSONObject s3 = VdManager.shot(ctx);
+                    if (s3.has("error")) continue;
+                    JSONObject els3 = (JSONObject) Tools.call("vision_elements", new JSONObject().put("file", s3.optString("file")).put("kind", kind));
+                    if (els3.optBoolean("ok", false)) {
+                        JSONArray l3 = els3.optJSONObject("data") == null ? new JSONArray()
+                                : els3.optJSONObject("data").optJSONArray("elements");
+                        StringBuilder sigB3 = new StringBuilder();
+                        for (int k = 0; k < l3.length(); k++) {
+                            JSONObject e = l3.optJSONObject(k);
+                            if (e != null) sigB3.append(e.optString("label","")).append("|");
+                        }
+                        if (!sigB3.toString().equals(sig1)) return ok(new JSONObject().put("tapped", true).put("verified", true)
+                                .put("pageChanged", true).put("at", (tx+off[0]) + "," + (ty+off[1])).put("retried", true).put("matched", matched));
+                    }
+                }
+                return ok(new JSONObject().put("tapped", true).put("verified", false).put("pageChanged", false)
+                        .put("hint", "页面签名未变化：点击可能无效果、或目标页与原页元素相同"));
+            }});
+
         def("vision_elements", "结构化视觉：截图→GLM-4V 返回可交互元素JSON清单（label/坐标）。微信等无树App用它替代 ui_screen_read。配套：vd shot 后调用",
             schema(props("file", prop("string", "图片路径"), "kind", prop("string", "筛选 可空：button/input/item 全部")), "file"),
             new H() { public JSONObject run(JSONObject a) throws Exception {
@@ -768,7 +844,11 @@ public class Tools {
                 String md5 = android.util.Base64.encodeToString(java.security.MessageDigest.getInstance("MD5").digest(img), android.util.Base64.NO_WRAP);
                 if (veCache != null && veCacheTime > System.currentTimeMillis() - 300000 && veCacheKey.equals(md5))
                     return ok(new JSONObject().put("count", veCache.length()).put("elements", veCache).put("cached", true));
-                String q = "分析这张手机截图。找出所有可交互元素（按钮/输入框/图标/标签/列表项/聊天行）。"
+                android.graphics.BitmapFactory.Options dbo = new android.graphics.BitmapFactory.Options();
+                dbo.inJustDecodeBounds = true;
+                android.graphics.BitmapFactory.decodeFile(file, dbo);
+                String q = "分析这张手机截图（实际尺寸" + dbo.outWidth + "x" + dbo.outHeight + "像素，坐标必须在此范围内）。"
+                        + "找出所有可交互元素（按钮/输入框/图标/标签/列表项/聊天行）。"
                         + "只输出严格JSON数组不要任何其他文字：[{\"label\":\"元素名称\",\"x\":中心x整数,\"y\":中心y整数,\"type\":\"button/input/item\"}]。"
                         + (kind.isEmpty() ? "" : "只保留type为" + kind + "的元素。") + "坐标用元素中心的像素值。";
                 JSONObject body = new JSONObject()
@@ -838,9 +918,14 @@ public class Tools {
                     try { Thread.sleep(1500); } catch (Exception ignore) {}
                 }
                 long start = out.canRead() ? out.length() : 0;
-                // 写prompt到FIFO（tail -f 持有读端，写入不阻塞）
+                // 写prompt到FIFO（tail -f 持有读端，写入不阻塞）；带上轮换摘要
+                String finalPrompt = prompt;
+                if (rpcStash != null) {
+                    finalPrompt = "【此前任务状态摘要】" + rpcStash + "\n\n" + prompt;
+                    rpcStash = null;
+                }
                 JSONObject line = new JSONObject().put("id", "rpc" + System.currentTimeMillis())
-                        .put("type", "prompt").put("message", prompt);
+                        .put("type", "prompt").put("message", finalPrompt);
                 try (java.io.FileOutputStream fo = new java.io.FileOutputStream(fifo, true)) {
                     fo.write((line.toString() + "\n").getBytes("UTF-8"));
                     fo.flush();
@@ -856,10 +941,12 @@ public class Tools {
                     if (all.length <= start) continue;
                     String fresh = new String(java.util.Arrays.copyOfRange(all, (int) start, all.length), "UTF-8");
                     acc.setLength(0); acc.append(fresh);
+                    long lastInput = 0;
                     for (String ln : fresh.split("\n")) {
                         if (!ln.contains("agent_end")) continue;
                         try {
                             JSONObject ev = new JSONObject(ln);
+                            lastInput = ev.optJSONObject("usage") == null ? 0 : ev.optJSONObject("usage").optLong("input", 0);
                             JSONArray msgs = ev.optJSONArray("messages");
                             if (msgs == null) continue;
                             for (int k = msgs.length() - 1; k >= 0; k--) {
@@ -884,6 +971,52 @@ public class Tools {
                 }
                 JSONObject o = new JSONObject();
                 try { o.put("answer", answer); if (usage != null) o.put("usage", new JSONObject(usage)); } catch (Exception ignore) {}
+                // 上下文自动轮换：input超40k → 摘要→new_session→摘要留给下次prompt
+                long usedInput = 0;
+                try { usedInput = o.getJSONObject("usage").optLong("input", 0); } catch (Exception ignore) {}
+                if (usedInput > 40000) {
+                    JSONObject sumReq = new JSONObject().put("id", "sum" + System.currentTimeMillis())
+                            .put("type", "prompt").put("message", "用150字总结当前对话的关键状态、已完成与未完成事项，只输出总结");
+                    try (java.io.FileOutputStream fo = new java.io.FileOutputStream(fifo, true)) {
+                        fo.write((sumReq + "\n").getBytes("UTF-8")); fo.flush();
+                    }
+                    String summary = null;
+                    long dl2 = System.currentTimeMillis() + 60000;
+                    long mark = out.length();
+                    while (System.currentTimeMillis() < dl2 && summary == null) {
+                        try { Thread.sleep(1200); } catch (Exception ignore) {}
+                        if (!out.canRead()) continue;
+                        byte[] all2 = java.nio.file.Files.readAllBytes(out.toPath());
+                        if (all2.length <= mark) continue;
+                        String fresh2 = new String(java.util.Arrays.copyOfRange(all2, (int) mark, all2.length), "UTF-8");
+                        mark = all2.length;
+                        for (String ln : fresh2.split("\n")) {
+                            if (!ln.contains("agent_end")) continue;
+                            try {
+                                JSONObject ev = new JSONObject(ln);
+                                JSONArray msgs = ev.optJSONArray("messages");
+                                if (msgs == null) continue;
+                                for (int k = msgs.length() - 1; k >= 0; k--) {
+                                    JSONObject mm = msgs.optJSONObject(k);
+                                    if (mm == null || !"assistant".equals(mm.optString("role"))) continue;
+                                    JSONArray cc = mm.optJSONArray("content");
+                                    if (cc == null) continue;
+                                    StringBuilder tx = new StringBuilder();
+                                    for (int j = 0; j < cc.length(); j++) {
+                                        JSONObject part = cc.optJSONObject(j);
+                                        if (part != null && "text".equals(part.optString("type"))) tx.append(part.optString("text"));
+                                    }
+                                    if (tx.length() > 0) summary = tx.toString();
+                                }
+                            } catch (Exception ignore) {}
+                        }
+                    }
+                    Tools.call("env_run", new JSONObject().put("timeout_sec", 15)
+                            .put("cmd", "printf '%s\\n' '{\"type\":\"new_session\"}' > $HOME/.pi-rpc-in"));
+                    rpcStash = summary == null ? "" : summary;
+                    o.put("session_rotated", true);
+                    if (summary != null) o.put("summary", summary);
+                }
                 return ok(o);
             }});
 
