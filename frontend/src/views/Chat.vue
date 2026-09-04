@@ -216,6 +216,16 @@ function doAbort() {
   }
   api.abort()
 }
+const toasts = ref([])
+watch(() => chat.notices.length, () => {
+  const list = chat.notices.splice(0) // 消费掉
+  for (const n of list) {
+    const t = { id: n.id || Date.now() + Math.random(), level: n.level, text: n.text || n.textEn || '' }
+    toasts.value.push(t)
+    if (toasts.value.length > 3) toasts.value.shift()
+    setTimeout(() => { toasts.value = toasts.value.filter(x => x.id !== t.id) }, 4600)
+  }
+})
 const errN = ref('')
 let errT = null
 function warn(msg) { errN.value = msg; if (errT) clearTimeout(errT); errT = setTimeout(() => errN.value = '', 4500) }
@@ -348,6 +358,15 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
       <div v-for="l in levels" :key="l" class="di tap" :class="{ sel: l === st?.thinkingLevel }" @click="api.setThinking(l); menu = ''">
         <b>{{ l }}</b>
       </div>
+    </div>
+
+    <!-- 服务端通知吐司 -->
+    <div class="toasts">
+      <transition-group name="tst">
+        <div v-for="t in toasts" :key="t.id" class="toast" :class="t.level" @click="toasts = toasts.filter(x => x.id !== t.id)">
+          {{ t.level === 'error' ? '⛔' : t.level === 'warning' ? '⚠' : 'ℹ' }} {{ t.text }}
+        </div>
+      </transition-group>
     </div>
 
     <!-- 消息流 -->
@@ -701,6 +720,15 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
 .working { display: inline-flex; align-items: center; gap: 5px; color: #a78bfa; }
 .wspin { width: 10px; height: 10px; border: 2px solid #3d3560; border-top-color: #a78bfa; border-radius: 50%; animation: rot 1s linear infinite; }
 @keyframes rot { to { transform: rotate(360deg) } }
+/* 服务端通知吐司 */
+.toasts { position: absolute; top: 52px; left: 0; right: 0; z-index: 55; display: flex; flex-direction: column; align-items: center; gap: 6px; pointer-events: none; }
+.toast { pointer-events: auto; max-width: 86%; background: rgba(26,29,38,.97); border: 1px solid #2c303b; color: #dcddde;
+  font-size: 12.5px; border-radius: 12px; padding: 9px 14px; box-shadow: 0 8px 24px rgba(0,0,0,.5); line-height: 1.45; }
+.toast.error { border-color: #4a2626; color: #e08585; }
+.toast.warning { border-color: #4a3c26; color: #e8b268; }
+.toast.info { border-color: #3d3560; color: #a78bfa; }
+.tst-enter-active, .tst-leave-active { transition: all .25s ease; }
+.tst-enter-from, .tst-leave-to { opacity: 0; transform: translateY(-10px); }
 /* 快脑悬浮气泡 */
 .vbub { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(100% + 10px); z-index: 40;
   max-width: 86%; background: rgba(26,29,38,.97); border: 1px solid #3d3560; border-radius: 16px;
