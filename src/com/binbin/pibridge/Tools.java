@@ -1698,6 +1698,45 @@ public class Tools {
             return ok(o);
             }});
 
+        def("ocr_read", "文字精读（OCR）：提取截图中的全部文字内容（保持阅读顺序与段落），支持长文/聊天记录/文章/设置页。GLM-4.6V 128K上下文",
+            schema(props("file", prop("string", "截图路径"), "q", prop("string", "附加问题 可空（如'只要聊天内容'）")), "file"),
+            new H() { public JSONObject run(JSONObject a) throws Exception {
+                String file = a.optString("file");
+                String q2 = a.optString("q", "");
+                byte[] img = java.nio.file.Files.readAllBytes(new File(file).toPath());
+                String b64 = android.util.Base64.encodeToString(img, android.util.Base64.NO_WRAP);
+                String mime = file.toLowerCase().endsWith(".jpg") || file.toLowerCase().endsWith(".jpeg") ? "image/jpeg" : "image/png";
+                String key = fastKey();
+                if (key == null) return err("NO_KEY", "未配置 API Key");
+                String q = "提取这张手机截图中全部文字内容，按阅读顺序排列，保持段落结构。"
+                        + (q2.isEmpty() ? "" : "附加要求：" + q2);
+                JSONObject body = new JSONObject()
+                        .put("model", "glm-4.6v")
+                        .put("messages", new org.json.JSONArray()
+                                .put(new JSONObject().put("role", "user").put("content", new org.json.JSONArray()
+                                        .put(new JSONObject().put("type", "image_url")
+                                                .put("image_url", new JSONObject().put("url", "data:" + mime + ";base64," + b64)))
+                                        .put(new JSONObject().put("type", "text").put("text", q)))))
+                        .put("max_tokens", 4096);
+                javax.net.ssl.HttpsURLConnection c = (javax.net.ssl.HttpsURLConnection)
+                        new java.net.URL("https://open.bigmodel.cn/api/paas/v4/chat/completions").openConnection();
+                c.setRequestMethod("POST"); c.setConnectTimeout(8000); c.setReadTimeout(90000); c.setDoOutput(true);
+                c.setRequestProperty("Authorization", "Bearer " + key);
+                c.setRequestProperty("Content-Type", "application/json");
+                java.io.OutputStream os = c.getOutputStream();
+                os.write(body.toString().getBytes("UTF-8")); os.close();
+                int code = c.getResponseCode();
+                java.io.InputStream is = code < 400 ? c.getInputStream() : c.getErrorStream();
+                java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+                byte[] buf = new byte[4096]; int n; while (is != null && (n = is.read(buf)) > 0) bo.write(buf, 0, n);
+                if (is != null) is.close();
+                String resp = bo.toString("UTF-8");
+                if (code >= 400) return err("API_ERR", code + ": " + resp.substring(0, Math.min(300, resp.length())));
+                String content = new JSONObject(resp).getJSONArray("choices").getJSONObject(0)
+                        .getJSONObject("message").optString("content", "").trim();
+                return ok(new JSONObject().put("text", content));
+            }});
+
         def("vision_precise", "小目标二次精读：vision_elements粗定位→裁剪局部放大→GLM-4V精读→返回全图精确坐标。解决视觉坐标10-20%偏差问题",
             schema(props("file", prop("string", "截图路径"), "label", prop("string", "目标元素名"), "pad", prop("number", "裁剪半径 默认200px")), "file", "label"),
             new H() { public JSONObject run(JSONObject a) throws Exception {
