@@ -384,6 +384,7 @@ public class Tools {
     }
     static JSONArray veCache; static String veCacheKey; static long veCacheTime; // vision_elements 同图缓存
     static String rpcStash; // pi_rpc 会话轮换时的状态摘要
+    static final Object piRpcLock = new Object(); // pi_rpc 串行锁
     static org.json.JSONArray relatedMemories(String pkg) {
         org.json.JSONArray rel = new org.json.JSONArray();
         if (pkg == null || pkg.isEmpty() || pkg.equals("?")) return rel;
@@ -1286,6 +1287,7 @@ public class Tools {
             new H() { public JSONObject run(JSONObject a) throws Exception {
                 String prompt = a.optString("prompt");
                 int waitS = a.optInt("wait_sec", 120);
+
                 String home = "/data/data/com.pihost/files/home";
                 File fifo = new File(home, ".pi-rpc-in");
                 File out = new File(home, ".pi-rpc-out.jsonl");
