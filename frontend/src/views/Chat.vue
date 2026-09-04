@@ -41,19 +41,56 @@ function md(txt) {
   const html = marked.parse(txt || '')
   return html.replace(/<script[\s\S]*?<\/script>/gi, '')
 }
+// 代码块复制钮：每次消息渲染后注入（事件委托，轻量）
+function injectCopyBtns() {
+  nextTick(() => {
+    document.querySelectorAll('.md pre').forEach(pre => {
+      if (pre.querySelector('.ccopy')) return
+      pre.style.position = 'relative'
+      const b = document.createElement('button')
+      b.className = 'ccopy'
+      b.textContent = '复制'
+      b.onclick = () => {
+        navigator.clipboard?.writeText(pre.innerText.replace(/^复制\n?/, ''))
+        b.textContent = '✓'
+        setTimeout(() => b.textContent = '复制', 1200)
+      }
+      pre.appendChild(b)
+    })
+  })
+}
 function fmtTs(t) { return t ? new Date(t).toLocaleTimeString('zh', { hour: '2-digit', minute: '2-digit' }) : '' }
 function scroll() { nextTick(() => { if (listEl.value) listEl.value.scrollTop = listEl.value.scrollHeight }) }
-watch(() => [msgs.value.length, st.value?.streamingMessage?.content?.length], () => scroll())
+watch(() => [msgs.value.length, st.value?.streamingMessage?.content?.length], () => { scroll(); injectCopyBtns() })
+let copyTimer = null
+watch(() => st.value?.streamingMessage?.content?.map(b => b.text || b.thinking || '').join('').length, () => {
+  if (copyTimer) clearTimeout(copyTimer)
+  copyTimer = setTimeout(injectCopyBtns, 600) // 流式中节流注入
+})
 watch(() => st.value?.isStreaming, (b, old) => { if (b === false && old === true && ttsOn.value) speakLast() })
 
-function send() {
+const editTarget = ref('') // 编辑中的消息id（发送改走 edit_message）
+function startEdit(m) {
+  editTarget.value = m.id
+  input.value = (m.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n')
+}
+function send(mode) { // mode: undefined=普通/steer插队, 'queue'=排队
   const text = input.value.trim()
   if (!text) return
-  api.prompt(text, attachments.value.length ? attachments.value.map(a => a.path
+  const atts = attachments.value.length ? attachments.value.map(a => a.path
     ? { path: a.path, mode: 'inline' }
-    : { data: a.base64, mimeType: a.mime }) : undefined)
-  input.value = ''; attachments.value = []
+    : { data: a.base64, mimeType: a.mime }) : undefined
+  if (editTarget.value) {
+    wsSend({ type: 'edit_message', messageId: editTarget.value, text, attachments: atts })
+    editTarget.value = ''
+  } else {
+    api.prompt(text, atts)
+  }
+  input.value = ''; attachments.value = ''
+  attachments.value = []
 }
+function sendQueued() { api.prompt(input.value.trim(), undefined, true); input.value = '' }
+function rmQueued(kind, text) { wsSend({ type: 'queue_remove', kind, text }) }
 function pickFile() { fileEl.value?.click() }
 function onFile(e) {
   const f = e.target.files?.[0]
@@ -66,6 +103,19 @@ function onFile(e) {
   e.target.value = ''
 }
 function rmAtt(i) { attachments.value.splice(i, 1) }
+function onPaste(e) {
+  const items = e.clipboardData?.items || []
+  for (const it of items) {
+    if (it.type.startsWith('image/')) {
+      e.preventDefault()
+      const f = it.getAsFile()
+      if (!f) continue
+      const r = new FileReader()
+      r.onload = () => attachments.value.push({ name: '粘贴图片', dataUrl: r.result, mime: f.type, base64: String(r.result).split(',')[1] })
+      r.readAsDataURL(f)
+    }
+  }
+}
 
 async function speakLast() {
   const last = [...msgs.value].reverse().find(m => m.role === 'assistant')
@@ -150,6 +200,7 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
           <div class="ub">
             <img v-for="(b, bi) in (m.content||[]).filter(b => b.type === 'image' && b.dataUrl)" :key="bi" :src="b.dataUrl" class="uimg" />
             <div class="ut">{{ (m.content||[]).filter(b => b.type === 'text').map(b => b.text).join('\n') }}</div>
+            <button v-if="!busy" class="uedit tap" title="编辑重发" @click="startEdit(m)">✎</button>
           </div>
         </div>
 
@@ -188,6 +239,16 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
           </div>
         </div>
       </template>
+
+      <!-- 排队/插队气泡 -->
+      <div v-if="st?.queue">
+        <div v-for="(q, i) in (st.queue.steering || [])" :key="'s' + i" class="mrow urow">
+          <div class="ub queued"><span class="qtag steer">插队</span>{{ q }}<span class="qrm tap" @click="rmQueued('steering', q)">✕</span></div>
+        </div>
+        <div v-for="(q, i) in (st.queue.followUp || [])" :key="'f' + i" class="mrow urow">
+          <div class="ub queued"><span class="qtag follow">排队</span>{{ q }}<span class="qrm tap" @click="rmQueued('followUp', q)">✕</span></div>
+        </div>
+      </div>
 
       <!-- 流式 -->
       <div v-if="streaming" class="mrow arow">
@@ -237,13 +298,15 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
           <b>/{{ sc.name }}</b><span class="muted" style="font-size:10px;margin-left:6px">{{ (sc.description || '').slice(0, 22) }}</span>
         </div>
       </div>
-      <div class="crow">
+      <div v-if="editTarget" class="editbar">✎ 编辑重发中（修改后发送将从这里重新生成）<span class="tap" @click="editTarget = ''; input.value = ''">取消</span></div>
+    <div class="crow">
         <button class="cb tap" @click="pickFile">📎</button>
         <input ref="fileEl" type="file" hidden @change="onFile" />
-        <textarea v-model="input" rows="1" placeholder="发消息…" @keydown.enter.exact.prevent="send"></textarea>
+        <textarea v-model="input" rows="1" placeholder="发消息…" @keydown.enter.exact.prevent="send" @paste="onPaste"></textarea>
         <button class="cb mic tap" :class="{ rec: recording }"
           @touchstart.prevent="micDown" @touchend.prevent="micUp" @mousedown="micDown" @mouseup="micUp">🎙</button>
-        <button class="cb send tap" :disabled="!input.trim()" @click="send">➤</button>
+        <button v-if="busy && input.trim()" class="cb q tap" title="排队：本轮全部结束后再发" @click="sendQueued">⏳</button>
+        <button class="cb send tap" :disabled="!input.trim()" @click="send">{{ busy ? '⤴' : '➤' }}</button>
       </div>
     </div>
 
@@ -263,7 +326,24 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
   </div>
 </template>
 
+<style>
+.ccopy { position: absolute; top: 6px; right: 6px; background: #23262e; color: #a78bfa; border: 1px solid #3d3560;
+  border-radius: 6px; padding: 3px 9px; font-size: 11px; }
+</style>
+
 <style scoped>
+/* 队列气泡/编辑/排队钮 */
+.queued { display: flex; align-items: center; gap: 6px; font-size: 13px; opacity: .85; }
+.qtag { font-size: 10px; padding: 2px 6px; border-radius: 8px; flex-shrink: 0; }
+.qtag.steer { background: #3b2f18; color: #e8b268; }
+.qtag.follow { background: #1e2a3a; color: #7db3e8; }
+.qrm { color: #8b8f98; padding: 0 2px; }
+.uedit { position: absolute; right: -30px; top: 4px; background: none; border: 0; color: #666b76; font-size: 13px; opacity: 0; }
+.ub { position: relative; }
+.msg:hover .uedit, .urow:active .uedit { opacity: 1; }
+.editbar { display: flex; align-items: center; justify-content: space-between; background: #2a2418; color: #e8b268;
+  font-size: 12px; border-radius: 9px; padding: 7px 12px; margin-bottom: 7px; }
+.cb.q { background: #1e2a3a; border-color: #243a4a; color: #7db3e8; }
 /* 斜杠候选 */
 .slash { position: absolute; bottom: 100%; left: 10px; right: 10px; background: #1a1d26; border: 1px solid #2c303b;
   border-radius: 12px; box-shadow: 0 -8px 28px rgba(0,0,0,.5); overflow: hidden; margin-bottom: 4px; z-index: 5; }

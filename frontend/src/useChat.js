@@ -123,7 +123,7 @@ export function connect() {
 
 // ── 高层操作 ──
 export const api = {
-  prompt(text, attachments) { wsSend({ type: 'prompt', text, attachments: attachments || undefined }) },
+  prompt(text, attachments, queue) { wsSend({ type: 'prompt', text, attachments: attachments || undefined, queue: queue || undefined }) },
   abort() { wsSend({ type: 'abort' }) },
   newChat() { wsSend({ type: 'new_chat' }) },
   setModel(modelId) { wsSend({ type: 'set_model', modelId }) },
