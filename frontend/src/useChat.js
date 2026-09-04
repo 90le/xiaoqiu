@@ -70,6 +70,12 @@ export function connect() {
     lastBeat = Date.now() // 任何服务端消息（含心跳）都证明连接活着
     let m
     try { m = JSON.parse(ev.data) } catch { return }
+    // 消息级探针：右上第二行显示最近收到的 WS 消息类型
+    try {
+      const el = document.getElementById('tapdbg')
+      if (el) el.textContent = 'WS◀ ' + m.type + (m.conversationId ? ' conv=' + String(m.conversationId).slice(-6) : '') + (m.state ? ' msgs=' + (m.state.messages || m.appended || []).length + ' rev=' + (m.state.rev ?? '?') : '')
+    } catch {}
+    if (m.type === 'snapshot' && window.__dbg) window.__dbg('WS◀snapshot msgs=' + (m.state?.messages || []).length + ' sid=' + String(m.state?.sessionId || '').slice(-8))
     switch (m.type) {
       case 'ready':
         chat.ready = true
