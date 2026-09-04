@@ -46,7 +46,6 @@ function send() {
     : { data: a.base64, mimeType: a.mime }) : undefined)
   input.value = ''; attachments.value = []
 }
-function onEnter(e) { if (!e.shiftKey && !e.isComposing) { e.preventDefault(); send() } }
 function pickFile() { fileEl.value?.click() }
 function onFile(e) {
   const f = e.target.files?.[0]
@@ -104,6 +103,7 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
         🧠 {{ st?.thinkingLevel || '—' }} <span class="car">▾</span>
       </button>
       <span class="sp"></span>
+      <button v-if="chat.status !== 'open'" class="tb warn tap" @click="connect()">↻ {{ chat.status === 'connecting' ? '连接中…' : '重连(' + (chat.retryIn || 1) + 's)' }}</button>
       <button v-if="st?.isStreaming" class="tb stop tap" @click="api.abort()">⏹ 停止</button>
       <button class="tb tap" title="新对话" @click="api.newChat()">✚</button>
     </header>
@@ -227,7 +227,7 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
       <div class="crow">
         <button class="cb tap" @click="pickFile">📎</button>
         <input ref="fileEl" type="file" hidden @change="onFile" />
-        <textarea v-model="input" rows="1" placeholder="打字或按住 🎙 说话 · Enter 发送" @keydown="onEnter"></textarea>
+        <textarea v-model="input" rows="1" placeholder="打字或按住 🎙 说话 · Enter 发送" @keydown.enter.exact.prevent="send"></textarea>
         <button class="cb mic tap" :class="{ rec: recording }"
           @touchstart.prevent="micDown" @touchend.prevent="micUp" @mousedown="micDown" @mouseup="micUp">🎙</button>
         <button class="cb send tap" :disabled="!input.trim()" @click="send">➤</button>

@@ -7,7 +7,7 @@ let clientId = localStorage.getItem('xq_cid') || ('xq-' + Math.random().toString
 localStorage.setItem('xq_cid', clientId)
 
 export const chat = reactive({
-  status: 'connecting', ready: false,
+  status: 'connecting', ready: false, retries: 0, retryIn: 0,
   state: null,            // UiState: messages/streamingMessage/model/thinkingLevel/stats...
   models: [],             // ModelInfo[]
   sessions: [],           // SessionSummary[]
@@ -48,14 +48,20 @@ export function connect() {
     let m
     try { m = JSON.parse(ev.data) } catch { return }
     switch (m.type) {
-      case 'ready': chat.ready = true; break
+      case 'ready':
+        chat.ready = true
+        chat.retries = 0
+        // 对齐 webui：ready 后主动拉全量状态 + 模型清单
+        wsSend({ type: 'get_state' })
+        wsSend({ type: 'list_models' })
+        break
       case 'snapshot':
         chat.state = m.state
         if (m.state) m.state.messages?.forEach(() => {})
         break
       case 'snapshot_delta':
         if (!chat.state || !m.state) break
-        if (chat.state.rev !== m.baseRev) { wsSend({ type: 'get_state' }); break }
+        if (chat.state.conversationId !== m.conversationId || chat.state.rev !== m.baseRev) { wsSend({ type: 'get_state' }); break }
         chat.state = { ...m.state, messages: [...(chat.state.messages || []), ...(m.appended || [])] }
         break
       case 'message_delta':
@@ -83,7 +89,10 @@ export function connect() {
   }
   ws.onclose = () => {
     chat.status = 'closed'; chat.ready = false
-    setTimeout(connect, 2500)
+    chat.retries = (chat.retries || 0) + 1
+    const delay = Math.min(1000 * Math.pow(2, Math.min(chat.retries, 4)), 12000) + Math.random() * 500
+    chat.retryIn = Math.round(delay / 1000)
+    setTimeout(connect, delay)
   }
   ws.onerror = () => { try { ws.close() } catch {} }
 }
