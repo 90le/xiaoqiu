@@ -168,58 +168,108 @@ public class BridgeService extends Service {
         return Build.VERSION.SDK_INT >= 16 ? b.build() : b.getNotification();
     }
 
-    /** 通知实时语音播报（"听"的实时化）：cfg notify_announce=true 生效；notify_announce_pkgs 白名单 */
+    // ═══ 聚合播报状态：待播队列 / 每发送人语境记忆 / 到达时间戳 ═══
+    private static final org.json.JSONArray pendMsgs = new org.json.JSONArray();
+    private static final org.json.JSONObject senderCtx = new org.json.JSONObject();
+    private static volatile long lastNewMs = 0, firstPendMs = 0;
+
+    /** 通知实时聚合播报：等消息流平稳→按发送人合并→带语境拟人化→不打断上一条播报 */
     private void startNotifyAnnouncer() {
         new Thread(() -> {
             long[] lastSeen = {System.currentTimeMillis()};
             while (true) {
                 try {
-                    Thread.sleep(5000);
+                    Thread.sleep(2000);
                     if (!"true".equals(Tools.loadCfg().optString("notify_announce", "false"))) continue;
                     if (Tools.micBusy) continue;
                     java.io.File f = new java.io.File(getFilesDir(), "notify-log.json");
                     if (!f.canRead()) continue;
                     JSONArray arr = new JSONArray(new String(java.nio.file.Files.readAllBytes(f.toPath()), "UTF-8"));
                     long newest = lastSeen[0];
-                    String pending = null;
-                    String[] lastN = new String[3];
-                    for (int i = arr.length() - 1; i >= 0; i--) {
+                    for (int i = 0; i < arr.length(); i++) { // 正序收集全部新条目进队列
                         JSONObject o = arr.optJSONObject(i);
                         if (o == null) continue;
-                        long t = o.optLong("time");
-                        if (t <= lastSeen[0]) break;
-                        newest = Math.max(newest, t);
-                        if (getPackageName().equals(o.optString("pkg"))) continue; // 不播报自己的通知（防反馈链）
+                        long tt = o.optLong("time");
+                        if (tt <= lastSeen[0]) continue;
+                        newest = Math.max(newest, tt);
+                        if (getPackageName().equals(o.optString("pkg"))) continue; // 防反馈链
                         String allow = Tools.loadCfg().optString("notify_announce_pkgs", "com.tencent.mm");
                         if (!allow.contains(o.optString("pkg"))) continue;
                         String body = o.optString("title") + o.optString("text");
                         String[] excl = Tools.loadCfg().optString("notify_announce_exclude", "验证码,快递,取件").split(",");
                         boolean skip = false;
                         for (String k : excl) if (!k.trim().isEmpty() && body.contains(k.trim())) { skip = true; break; }
-                        if (skip) continue; // 免打扰关键词命中
-                        if (pending == null) {
-                            pending = "新消息：" + o.optString("title") + "，" + o.optString("text");
-                            lastN[0] = o.optString("pkg"); lastN[1] = o.optString("title"); lastN[2] = o.optString("text");
-                        }
+                        if (skip) continue; // 免打扰关键词
+                        JSONObject m = new JSONObject();
+                        m.put("pkg", o.optString("pkg")); m.put("title", o.optString("title"));
+                        m.put("text", o.optString("text")); m.put("time", tt);
+                        synchronized (pendMsgs) { pendMsgs.put(m); }
+                        lastNewMs = System.currentTimeMillis();
+                        if (firstPendMs == 0) firstPendMs = lastNewMs;
                     }
                     lastSeen[0] = newest;
-                    if (pending != null) {
-                        // AI 拟人化改写（cfg notify_announce_ai 可关；失败自动回退原文）
-                        String say0 = pending;
-                        if ("true".equals(Tools.loadCfg().optString("notify_announce_ai", "true"))) {
-                            String h = Tools.aiHumanize(lastN[0], lastN[1], lastN[2]);
-                            if (h != null && !h.trim().isEmpty() && !h.startsWith("ERR:")) say0 = h.trim();
-                        }
-                        final String say = say0;
-                        new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
-                            try {
-                                Tools.call("tts_speak", new org.json.JSONObject()
-                                        .put("text", say).put("engine",
-                                                Tools.loadCfg().optString("notify_announce_engine", "xiaomi")));
-                                android.util.Log.i("PiBridge", "播报通知: " + say);
-                            } catch (Exception ignore) {}
-                        });
+
+                    int pn = pendMsgs.length();
+                    if (pn == 0) { firstPendMs = 0; continue; }
+                    long now = System.currentTimeMillis();
+                    long waitMs = Tools.loadCfg().optLong("notify_announce_wait", 10000L);
+                    boolean settled = (now - lastNewMs >= waitMs) || (now - firstPendMs >= 30000); // 平稳10s或总等待30s封顶
+                    if (!settled) continue;
+
+                    // 取最早发送人的一组
+                    String key = null;
+                    for (int i = 0; i < pendMsgs.length() && key == null; i++) {
+                        JSONObject m = pendMsgs.optJSONObject(i);
+                        if (m != null) key = m.optString("pkg") + "|" + m.optString("title");
                     }
+                    if (key == null) continue;
+                    org.json.JSONArray texts = new org.json.JSONArray();
+                    String gPkg = null, gTitle = null;
+                    synchronized (pendMsgs) {
+                        for (int i = 0; i < pendMsgs.length(); ) {
+                            JSONObject m = pendMsgs.optJSONObject(i);
+                            if (m != null && key.equals(m.optString("pkg") + "|" + m.optString("title"))) {
+                                gPkg = m.optString("pkg"); gTitle = m.optString("title");
+                                texts.put(m.optString("text"));
+                                pendMsgs.remove(i);
+                            } else i++;
+                        }
+                    }
+                    if (texts.length() == 0) { if (pendMsgs.length() == 0) firstPendMs = 0; continue; }
+
+                    String prev = senderCtx.optString(key, "");
+                    String say0;
+                    if ("true".equals(Tools.loadCfg().optString("notify_announce_ai", "true"))) {
+                        String h = Tools.aiHumanizeBurst(gPkg, gTitle, prev, texts);
+                        if (h != null && !h.trim().isEmpty() && !h.startsWith("ERR:")) say0 = h.trim();
+                        else say0 = gTitle + "连发" + texts.length() + "条消息，" + texts.optString(texts.length() - 1);
+                    } else {
+                        say0 = gTitle + "连发" + texts.length() + "条消息，" + texts.optString(texts.length() - 1);
+                    }
+                    final String say = say0;
+                    // 语境记忆：每人保留最近4轮播报
+                    org.json.JSONArray cl = senderCtx.optJSONArray(key);
+                    if (cl == null) { cl = new org.json.JSONArray(); }
+                    cl.put(say);
+                    while (cl.length() > 4) cl.remove(0);
+                    senderCtx.put(key, cl);
+
+                    // 不打断：等上一条播报完（最多30s）
+                    long deadline = System.currentTimeMillis() + 30000;
+                    while (Tools.ttsSpeaking && System.currentTimeMillis() < deadline) {
+                        try { Thread.sleep(500); } catch (Exception ignore) {}
+                    }
+                    if (pendMsgs.length() == 0) firstPendMs = 0;
+                    final String fsay = say;
+                    final String fkey = key;
+                    new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
+                        try {
+                            Tools.call("tts_speak", new org.json.JSONObject()
+                                    .put("text", say).put("engine",
+                                            Tools.loadCfg().optString("notify_announce_engine", "xiaomi")));
+                            android.util.Log.i("PiBridge", "聚合播报(" + fkey + "): " + fsay);
+                        } catch (Exception ignore) {}
+                    });
                 } catch (Exception ignore) {}
             }
         }, "notify-announcer").start();

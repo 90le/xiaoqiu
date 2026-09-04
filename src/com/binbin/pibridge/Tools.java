@@ -360,38 +360,36 @@ public class Tools {
 
     /** 读 pi 的 API Key（快脑与慢脑共用同一智谱账号） */
     /** 通知播报拟人化：快脑把通知改写成一句自然口语；失败返回null（调用方回退原文） */
-    public static String aiHumanize(String app, String title, String text) {
+    static String appCn(String app) {
+        if ("com.tencent.mm".equals(app)) return "微信";
+        if ("com.xingin.xhs".equals(app)) return "小红书";
+        if ("com.sankuai.meituan".equals(app)) return "美团";
+        if ("com.tencent.mobileqq".equals(app)) return "QQ";
+        if ("com.eg.android.AlipayGphone".equals(app)) return "支付宝";
+        if ("com.taobao.taobao".equals(app)) return "淘宝";
+        if ("com.ss.android.ugc.aweme".equals(app)) return "抖音";
+        return app == null ? "" : app;
+    }
+
+    /** 快脑短文本生成核心：thinking禁用（改写不需推理）+失败重试1次；失败返回ERR:串 */
+    public static String llmShort(String sys, String userMsg, int maxTok) {
         try {
             String key = fastKey();
             if (key == null) return null;
-            String appCn = app;
-            if ("com.tencent.mm".equals(app)) appCn = "微信";
-            else if ("com.xingin.xhs".equals(app)) appCn = "小红书";
-            else if ("com.sankuai.meituan".equals(app)) appCn = "美团";
-            else if ("com.tencent.mobileqq".equals(app)) appCn = "QQ";
-            else if ("com.eg.android.AlipayGphone".equals(app)) appCn = "支付宝";
-            else if ("com.taobao.taobao".equals(app)) appCn = "淘宝";
-            else if ("com.ss.android.ugc.aweme".equals(app)) appCn = "抖音";
-            String sys = "你是智能语音助手「小丘」的播报改写器。把一条通知改写成一句自然中文口语（10~35字），像朋友随口提醒，禁止复读机式照念标题。规则："
-                + "1)验证码/订单号/金额/地址等数字信息必须一字不差保留；"
-                + "2)个人聊天消息：说谁找你、大意是什么，如'妈妈问你晚上回不回家吃饭'；"
-                + "3)广告推广：一句带过即可，如'美团发来一条推广'；"
-                + "4)系统类通知：极简一句，如'微信更新包下好了'；"
-                + "5)不要出现'通知/标题/正文'这些词，不要引号，不要emoji；"
-                + "6)只输出要念的一句话，不要任何解释。";
-            String userMsg = "来自App：" + appCn + "\n标题：" + (title == null ? "" : title)
-                + "\n正文：" + (text == null ? "" : text.substring(0, Math.min(200, text.length())));
             JSONObject body = new JSONObject()
                 .put("model", "glm-5.3-flash")
                 .put("messages", new org.json.JSONArray()
                     .put(new JSONObject().put("role", "system").put("content", sys))
                     .put(new JSONObject().put("role", "user").put("content", userMsg)))
-                .put("max_tokens", 512).put("temperature", 0.4)
-                .put("thinking", new JSONObject().put("type", "disabled")); // 改写不需要推理，防冷启动推理吃光token
+                .put("max_tokens", maxTok).put("temperature", 0.4)
+                .put("thinking", new JSONObject().put("type", "disabled"));
             String content = null;
             for (int attempt = 0; attempt < 2 && (content == null || content.isEmpty()); attempt++) {
-                if (attempt > 0) { try { Thread.sleep(1200); } catch (Exception ignore) {} }
-                if (attempt > 0) { String bs = body.toString().replaceAll(",?\"thinking\":\\{\"type\":\"disabled\"\\}", ""); body = new JSONObject(bs); } // 去thinking重试
+                if (attempt > 0) {
+                    try { Thread.sleep(1200); } catch (Exception ignore) {}
+                    String bs = body.toString().replaceAll(",?\"thinking\":\\{\"type\":\"disabled\"\\}", "");
+                    body = new JSONObject(bs); // 400时去掉thinking重试
+                }
                 javax.net.ssl.HttpsURLConnection c = (javax.net.ssl.HttpsURLConnection)
                     new java.net.URL("https://open.bigmodel.cn/api/coding/paas/v4/chat/completions").openConnection();
                 c.setRequestMethod("POST"); c.setConnectTimeout(5000); c.setReadTimeout(10000); c.setDoOutput(true);
@@ -407,12 +405,48 @@ public class Tools {
                 if (code >= 400) continue;
                 content = new JSONObject(bo.toString("UTF-8")).getJSONArray("choices").getJSONObject(0)
                     .getJSONObject("message").optString("content", "").trim();
-                content = content.replace("「", "").replace("」", "").replace("【", "").replace("】", "")
+                content = content.replace("\u300c", "").replace("\u300d", "").replace("\u3010", "").replace("\u3011", "")
                     .replace("\"", "").replace("'", "").trim();
             }
-            if (content == null || content.isEmpty() || content.length() > 80) return "ERR:EMPTY_OR_LONG";
+            if (content == null || content.isEmpty() || content.length() > 120) return "ERR:EMPTY_OR_LONG";
             return content;
         } catch (Throwable e) { return "ERR:" + e.getClass().getSimpleName() + ":" + e.getMessage(); }
+    }
+
+    /** 单条通知拟人化 */
+    public static String aiHumanize(String app, String title, String text) {
+        String appCn = appCn(app);
+        String sys = "你是智能语音助手「小丘」的播报改写器。把一条通知改写成一句自然中文口语（10~35字），像朋友随口提醒，禁止复读机式照念标题。规则："
+            + "1)验证码/订单号/金额/地址等数字信息必须一字不差保留；"
+            + "2)个人聊天消息：说谁找你、大意是什么，如'妈妈问你晚上回不回家吃饭'；"
+            + "3)广告推广：一句带过即可，如'美团发来一条推广'；"
+            + "4)系统类通知：极简一句，如'微信更新包下好了'；"
+            + "5)不要出现'通知/标题/正文'这些词，不要引号，不要emoji；"
+            + "6)只输出要念的一句话，不要任何解释。";
+        String userMsg = "来自App：" + appCn + "\n标题：" + (title == null ? "" : title)
+            + "\n正文：" + (text == null ? "" : text.substring(0, Math.min(200, text.length())));
+        return llmShort(sys, userMsg, 512);
+    }
+
+    /** 连发消息聚合播报：同一发送人的多条消息+历史语境 → 一句有连续感的转述；失败返回ERR:串 */
+    public static String aiHumanizeBurst(String app, String sender, String prevCtx, org.json.JSONArray texts) {
+        int n = Math.min(texts.length(), 12);
+        StringBuilder sb = new StringBuilder();
+        for (int i = 0; i < n; i++) {
+            String s = texts.optString(i);
+            sb.append(i + 1).append(") ").append(s, 0, Math.min(120, s.length())).append("\n");
+        }
+        String sys = "你是智能语音助手「小丘」的播报改写器。" + sender + " 连续发来多条消息，把它们合并转述成一句自然中文口语（15~45字），像朋友随口转述，要有连续感和人情味。规则："
+            + "1)验证码/金额/地址/取件码等数字信息一字不差保留；"
+            + "2)连发多条是一个意思流，合并成一句转述大意，禁止一条条罗列；"
+            + (prevCtx == null || prevCtx.isEmpty() ? "" : "3)结合上一轮播报语境自然衔接（可以用'又''还是'这类词），但不要重复旧内容；")
+            + "4)语气像朋友聊天，可以带点语气词；"
+            + "5)不要'消息/通知/标题/文本'这些字眼，不要引号，不要emoji；"
+            + "6)只输出要念的一句话。";
+        String userMsg = "App：" + appCn(app) + "\n发送人：" + sender + "\n"
+            + (prevCtx == null || prevCtx.isEmpty() ? "" : "上一轮你播报过：" + prevCtx + "\n")
+            + "这次连发" + n + "条：\n" + sb;
+        return llmShort(sys, userMsg, 512);
     }
 
     static String fastKey() {
