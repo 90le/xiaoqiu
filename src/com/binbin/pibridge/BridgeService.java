@@ -182,6 +182,7 @@ public class BridgeService extends Service {
                     JSONArray arr = new JSONArray(new String(java.nio.file.Files.readAllBytes(f.toPath()), "UTF-8"));
                     long newest = lastSeen[0];
                     String pending = null;
+                    String[] lastN = new String[3];
                     for (int i = arr.length() - 1; i >= 0; i--) {
                         JSONObject o = arr.optJSONObject(i);
                         if (o == null) continue;
@@ -196,11 +197,20 @@ public class BridgeService extends Service {
                         boolean skip = false;
                         for (String k : excl) if (!k.trim().isEmpty() && body.contains(k.trim())) { skip = true; break; }
                         if (skip) continue; // 免打扰关键词命中
-                        if (pending == null) pending = "新消息：" + o.optString("title") + "，" + o.optString("text");
+                        if (pending == null) {
+                            pending = "新消息：" + o.optString("title") + "，" + o.optString("text");
+                            lastN[0] = o.optString("pkg"); lastN[1] = o.optString("title"); lastN[2] = o.optString("text");
+                        }
                     }
                     lastSeen[0] = newest;
                     if (pending != null) {
-                        final String say = pending;
+                        // AI 拟人化改写（cfg notify_announce_ai 可关；失败自动回退原文）
+                        String say0 = pending;
+                        if ("true".equals(Tools.loadCfg().optString("notify_announce_ai", "true"))) {
+                            String h = Tools.aiHumanize(lastN[0], lastN[1], lastN[2]);
+                            if (h != null && !h.trim().isEmpty() && !h.startsWith("ERR:")) say0 = h.trim();
+                        }
+                        final String say = say0;
                         new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
                             try {
                                 Tools.call("tts_speak", new org.json.JSONObject()

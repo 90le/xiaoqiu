@@ -359,6 +359,62 @@ public class Tools {
     }
 
     /** 读 pi 的 API Key（快脑与慢脑共用同一智谱账号） */
+    /** 通知播报拟人化：快脑把通知改写成一句自然口语；失败返回null（调用方回退原文） */
+    public static String aiHumanize(String app, String title, String text) {
+        try {
+            String key = fastKey();
+            if (key == null) return null;
+            String appCn = app;
+            if ("com.tencent.mm".equals(app)) appCn = "微信";
+            else if ("com.xingin.xhs".equals(app)) appCn = "小红书";
+            else if ("com.sankuai.meituan".equals(app)) appCn = "美团";
+            else if ("com.tencent.mobileqq".equals(app)) appCn = "QQ";
+            else if ("com.eg.android.AlipayGphone".equals(app)) appCn = "支付宝";
+            else if ("com.taobao.taobao".equals(app)) appCn = "淘宝";
+            else if ("com.ss.android.ugc.aweme".equals(app)) appCn = "抖音";
+            String sys = "你是智能语音助手「小丘」的播报改写器。把一条通知改写成一句自然中文口语（10~35字），像朋友随口提醒，禁止复读机式照念标题。规则："
+                + "1)验证码/订单号/金额/地址等数字信息必须一字不差保留；"
+                + "2)个人聊天消息：说谁找你、大意是什么，如'妈妈问你晚上回不回家吃饭'；"
+                + "3)广告推广：一句带过即可，如'美团发来一条推广'；"
+                + "4)系统类通知：极简一句，如'微信更新包下好了'；"
+                + "5)不要出现'通知/标题/正文'这些词，不要引号，不要emoji；"
+                + "6)只输出要念的一句话，不要任何解释。";
+            String userMsg = "来自App：" + appCn + "\n标题：" + (title == null ? "" : title)
+                + "\n正文：" + (text == null ? "" : text.substring(0, Math.min(200, text.length())));
+            JSONObject body = new JSONObject()
+                .put("model", "glm-5.3-flash")
+                .put("messages", new org.json.JSONArray()
+                    .put(new JSONObject().put("role", "system").put("content", sys))
+                    .put(new JSONObject().put("role", "user").put("content", userMsg)))
+                .put("max_tokens", 512).put("temperature", 0.4)
+                .put("thinking", new JSONObject().put("type", "disabled")); // 改写不需要推理，防冷启动推理吃光token
+            String content = null;
+            for (int attempt = 0; attempt < 2 && (content == null || content.isEmpty()); attempt++) {
+                if (attempt > 0) { try { Thread.sleep(1200); } catch (Exception ignore) {} }
+                if (attempt > 0) { String bs = body.toString().replaceAll(",?\"thinking\":\\{\"type\":\"disabled\"\\}", ""); body = new JSONObject(bs); } // 去thinking重试
+                javax.net.ssl.HttpsURLConnection c = (javax.net.ssl.HttpsURLConnection)
+                    new java.net.URL("https://open.bigmodel.cn/api/coding/paas/v4/chat/completions").openConnection();
+                c.setRequestMethod("POST"); c.setConnectTimeout(5000); c.setReadTimeout(10000); c.setDoOutput(true);
+                c.setRequestProperty("Authorization", "Bearer " + key);
+                c.setRequestProperty("Content-Type", "application/json");
+                java.io.OutputStream os = c.getOutputStream();
+                os.write(body.toString().getBytes("UTF-8")); os.close();
+                int code = c.getResponseCode();
+                java.io.InputStream is = code < 400 ? c.getInputStream() : c.getErrorStream();
+                java.io.ByteArrayOutputStream bo = new java.io.ByteArrayOutputStream();
+                byte[] buf = new byte[4096]; int n; while (is != null && (n = is.read(buf)) > 0) bo.write(buf, 0, n);
+                if (is != null) is.close();
+                if (code >= 400) continue;
+                content = new JSONObject(bo.toString("UTF-8")).getJSONArray("choices").getJSONObject(0)
+                    .getJSONObject("message").optString("content", "").trim();
+                content = content.replace("「", "").replace("」", "").replace("【", "").replace("】", "")
+                    .replace("\"", "").replace("'", "").trim();
+            }
+            if (content == null || content.isEmpty() || content.length() > 80) return "ERR:EMPTY_OR_LONG";
+            return content;
+        } catch (Throwable e) { return "ERR:" + e.getClass().getSimpleName() + ":" + e.getMessage(); }
+    }
+
     static String fastKey() {
         try {
             java.io.File f = new java.io.File(ctx.getFilesDir(), "home/.pi/agent/auth.json");
@@ -1229,6 +1285,12 @@ public class Tools {
             }
             });
 
+        def("ai_humanize", "通知播报拟人化（调试/演示）：把通知改写成一句自然口语播报文本",
+            schema(props("app", prop("string", "包名如com.tencent.mm"), "title", prop("string", "标题"),
+                    "text", prop("string", "正文"))), new H() { public JSONObject run(JSONObject a) throws Exception {
+            String h = Tools.aiHumanize(a.optString("app"), a.optString("title"), a.optString("text"));
+            return h == null ? err("HUMANIZE_FAIL", "改写失败（回退原文播报）") : ok(new JSONObject().put("say", h));
+        }});
         def("xhs_search_direct", "小红书深链直达搜索结果页（绕开输入框自动化；内置全套防护：主屏占用检测→清场→副屏发射→落点校验→误落救援）",
             schema(props("keyword", prop("string", "搜索关键词（自动URL编码）")), "keyword"), new H() { public JSONObject run(JSONObject a) throws Exception {
             String kw = a.optString("keyword", "");
