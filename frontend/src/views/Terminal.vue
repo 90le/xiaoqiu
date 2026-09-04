@@ -15,31 +15,6 @@ const sessions = computed(() => tstore.order.map(id => tstore.sessions[id]).filt
 
 function openShellDrawer() { window.dispatchEvent(new Event('xq-open-drawer')) }
 function showKb() { try { window.XiaoqiuBridge && window.XiaoqiuBridge.showKeyboard() } catch {} }
-// 命令输入栏：真实input（原生键盘100%弹出），整行+回车送pty
-const cmd = ref('')
-const cmdHist = ref([]), histIdx = ref(-1)
-function runCmd() {
-  const c = cmd.value
-  if (!c) return
-  raw(c + '\n')
-  cmdHist.value.push(c)
-  if (cmdHist.value.length > 50) cmdHist.value.shift()
-  histIdx.value = -1
-  cmd.value = ''
-}
-function cmdPrev() {
-  const h = cmdHist.value
-  if (!h.length) return
-  histIdx.value = histIdx.value < 0 ? h.length - 1 : Math.max(0, histIdx.value - 1)
-  cmd.value = h[histIdx.value]
-}
-function cmdNext() {
-  const h = cmdHist.value
-  if (histIdx.value < 0) return
-  histIdx.value = Math.min(h.length - 1, histIdx.value + 1)
-  cmd.value = h[histIdx.value] || ''
-}
-
 function activate(id) {
   const s = tstore.sessions[id]
   if (!s) return
@@ -122,11 +97,6 @@ onUnmounted(() => {
 
     <!-- 虚拟按键（三态：hide→浮球 / slim / full） -->
     <div v-if="keysMode !== 'hide'" class="vkeys" :class="{ full: keysMode === 'full' }">
-      <div class="cmdrow">
-        <input v-model="cmd" class="cmdin" placeholder="输入命令，回车执行…"
-          @keydown.enter.prevent="runCmd" @keydown.up.prevent="cmdPrev" @keydown.down.prevent="cmdNext" />
-        <button class="cmdgo tap" @click="runCmd">执行</button>
-      </div>
       <div class="krow">
         <button class="vk mod tap" :class="{ on: ctrlOn }" @click="press('CTRL')">CTRL</button>
         <button class="vk mod tap" :class="{ on: altOn }" @click="press('ALT')">ALT</button>
@@ -224,10 +194,6 @@ onUnmounted(() => {
 .stage :deep(.xterm-viewport) { background: #0d0e12 !important; }
 /* 虚拟按键 */
 .vkeys { background: #14161c; border-top: 1px solid #23262e; }
-.cmdrow { display: flex; gap: 6px; padding: 6px 8px 2px; }
-.cmdin { flex: 1; background: #1a1d26; border: 1px solid #2c303b; color: #e8e9ec; border-radius: 10px;
-  padding: 9px 12px; font-size: 14px; font-family: ui-monospace, monospace; }
-.cmdgo { background: #8b5cf6; border: 0; color: #fff; border-radius: 10px; padding: 0 16px; font-size: 13px; font-weight: 700; }
 .krow { display: flex; gap: 4px; padding: 5px 7px; overflow-x: auto; scrollbar-width: none; align-items: center; }
 .vk { flex-shrink: 0; min-width: 36px; height: 34px; background: #1a1d26; color: #c6c9d0; border: 1px solid #2c303b; border-radius: 8px; font-size: 12px; font-weight: 600; font-family: ui-monospace, monospace; }
 .vk.mod { background: #232635; color: #a78bfa; border-color: #3d3560; }
@@ -253,17 +219,17 @@ onUnmounted(() => {
 .kgrid.sym .vk { font-size: 13px; }
 /* 会话管理器：顶栏下右侧紧凑弹层（锚定🗂按钮，不居中不挡终端） */
 .mask { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 60; }
-.mgr { position: fixed; top: 56px; right: 10px; width: calc(100% - 24px); max-width: 330px; max-height: 52vh;
-  background: #14161c; border: 1px solid #2c303b; border-radius: 14px; z-index: 61; display: flex; flex-direction: column;
+.mgr { position: fixed; top: 52px; right: 8px; width: 232px; max-height: 56vh;
+  background: #14161c; border: 1px solid #2c303b; border-radius: 12px; z-index: 61; display: flex; flex-direction: column;
   box-shadow: 0 12px 32px rgba(0,0,0,.55); animation: mgrin .14s ease; }
 @keyframes mgrin { from { transform: translateY(-8px); opacity: 0; } }
-.mh { display: flex; align-items: center; gap: 8px; padding: 14px 16px 8px; color: #dcddde; font-size: 15px; }
+.mh { display: flex; align-items: center; gap: 6px; padding: 10px 12px 6px; color: #dcddde; font-size: 13px; }
 .sp { flex: 1; }
-.mb { background: #1a1d26; color: #c6c9d0; border: 1px solid #2c303b; border-radius: 8px; padding: 6px 10px; font-size: 12px; flex-shrink: 0; }
+.mb { background: #1a1d26; color: #c6c9d0; border: 1px solid #2c303b; border-radius: 7px; padding: 4px 8px; font-size: 11.5px; flex-shrink: 0; }
 .mb.del { color: #e08585; border-color: #4a2626; }
-.mlist { overflow-y: auto; padding: 0 10px 14px; }
-.mi { display: flex; align-items: center; gap: 6px; padding: 11px 8px; border-bottom: 1px solid #1e2128; }
-.mib { display: flex; flex-direction: column; gap: 2px; font-size: 13.5px; color: #dcddde; min-width: 0; flex: 1; }
-.mib .muted { font-size: 11px; }
+.mlist { overflow-y: auto; padding: 0 8px 10px; }
+.mi { display: flex; align-items: center; gap: 4px; padding: 8px 4px; border-bottom: 1px solid #1e2128; }
+.mib { display: flex; flex-direction: column; gap: 1px; font-size: 12.5px; color: #dcddde; min-width: 0; flex: 1; }
+.mib .muted { font-size: 10.5px; }
 .rin { background: #1a1d26; border: 1px solid #8b5cf6; color: #dcddde; border-radius: 6px; padding: 3px 8px; font-size: 13px; width: 130px; }
 </style>
