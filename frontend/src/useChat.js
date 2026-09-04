@@ -64,6 +64,7 @@ export function connect() {
         // 对齐 webui：ready 后主动拉全量状态 + 模型清单
         wsSend({ type: 'get_state' })
         wsSend({ type: 'list_models' })
+        wsSend({ type: 'get_commands' })
         break
       case 'snapshot':
         chat.state = m.state

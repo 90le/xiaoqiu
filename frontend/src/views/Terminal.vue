@@ -100,39 +100,37 @@ onUnmounted(() => {
     <!-- 虚拟按键（三态：hide→浮球 / slim / full） -->
     <div v-if="keysMode !== 'hide'" class="vkeys" :class="{ full: keysMode === 'full' }">
       <div class="k2">
-        <div class="kmain">
-          <div class="krow">
-            <button v-if="keysMode === 'slim'" class="vk exp tap" @click="keysMode = 'full'">▾</button>
-            <button v-else class="vk exp on tap" @click="keysMode = 'slim'">▴</button>
-            <button class="vk tap" @click="raw('\x1b')">ESC</button>
-            <button class="vk tap" @click="raw('\t')">TAB</button>
-            <button class="vk mod tap" :class="{ on: ctrlOn }" @click="press('CTRL')">CTRL</button>
-            <button class="vk mod tap" :class="{ on: altOn }" @click="press('ALT')">ALT</button>
-            <button class="vk mod tap" :class="{ on: shiftOn }" @click="press('SHIFT')">SHIFT</button>
-            <button class="vk tap" @click="raw('\x1b[2~')">INS</button>
-            <button class="vk tap" @click="raw('\x7f')">DEL</button>
-          </div>
-          <div class="krow">
-            <button class="vk tap" @click="raw('\r')">ENTER</button>
-            <button class="vk tap" @click="raw('\x1b[H')">HOME</button>
-            <button class="vk tap" @click="raw('\x1b[F')">END</button>
-            <button class="vk tap" @click="raw('\x1b[5~')">PGUP</button>
-            <button class="vk tap" @click="raw('\x1b[6~')">PGDN</button>
-            <button class="vk cc tap" @click="raw('\x03')">^C</button>
-            <button class="vk cc tap" @click="raw('\x0c')">^L</button>
-            <button class="vk cc tap" @click="raw('\x04')">^D</button>
-            <button class="vk kb tap" @click="showKb">⌨</button>
-          </div>
+        <div class="krow">
+          <button v-if="keysMode === 'slim'" class="vk exp tap" @click="keysMode = 'full'">▾</button>
+          <button v-else class="vk exp on tap" @click="keysMode = 'slim'">▴</button>
+          <button class="vk tap" @click="raw('\x1b')">ESC</button>
+          <button class="vk tap" @click="raw('\t')">TAB</button>
+          <button class="vk mod tap" :class="{ on: ctrlOn }" @click="press('CTRL')">CTRL</button>
+          <button class="vk mod tap" :class="{ on: altOn }" @click="press('ALT')">ALT</button>
+          <button class="vk mod tap" :class="{ on: shiftOn }" @click="press('SHIFT')">SHIFT</button>
+          <span class="kfill"></span>
+          <div class="knav one"><button class="vk tap" @click="raw('\x1b[A')">↑</button></div>
         </div>
-        <div class="karr">
-          <button class="vk arr up tap" @click="raw('\x1b[A')">↑</button>
-          <div class="karrb">
-            <button class="vk arr tap" @click="raw('\x1b[D')">←</button>
-            <button class="vk arr tap" @click="raw('\x1b[B')">↓</button>
-            <button class="vk arr tap" @click="raw('\x1b[C')">→</button>
+        <div class="krow">
+          <button class="vk tap" @click="raw('\r')">ENTER</button>
+          <button class="vk tap" @click="raw('\x1b[H')">HOME</button>
+          <button class="vk tap" @click="raw('\x1b[F')">END</button>
+          <button class="vk tap" @click="raw('\x1b[5~')">PGUP</button>
+          <button class="vk tap" @click="raw('\x1b[6~')">PGDN</button>
+          <button class="vk cc tap" @click="raw('\x03')">^C</button>
+          <button class="vk cc tap" @click="raw('\x0c')">^L</button>
+          <button class="vk cc tap" @click="raw('\x04')">^D</button>
+          <button class="vk kb tap" @click="showKb">⌨</button>
+          <button class="vk tap" @click="raw('\x1b[2~')">INS</button>
+          <button class="vk tap" @click="raw('\x7f')">DEL</button>
+          <span class="kfill"></span>
+          <div class="knav tri">
+            <button class="vk tap" @click="raw('\x1b[D')">←</button>
+            <button class="vk tap" @click="raw('\x1b[B')">↓</button>
+            <button class="vk tap" @click="raw('\x1b[C')">→</button>
           </div>
+          <button class="vhide tap" @click="keysMode = 'hide'">✕</button>
         </div>
-        <button class="vhide tap" @click="keysMode = 'hide'">✕</button>
       </div>
       <div v-if="keysMode === 'full'" class="kpanel">
         <div class="kgrid">
@@ -219,15 +217,15 @@ onUnmounted(() => {
 .stage :deep(.xterm-viewport) { background: #0d0e12 !important; }
 /* 虚拟按键 */
 .vkeys { background: #14161c; border-top: 1px solid #23262e; }
-.k2 { display: flex; gap: 5px; padding: 5px 7px; align-items: stretch; }
-.kmain { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
-.krow { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; align-items: center; }
-.karr { display: flex; flex-direction: column; align-items: center; gap: 3px; flex-shrink: 0; }
-.karrb { display: grid; grid-template-columns: repeat(3, 34px); gap: 3px; }
-.karr .vk { min-width: 34px; height: 30px; }
-.karr .up { margin-left: 37px; }
-.karrb .vk { min-width: 0; width: 100%; }
-.vhide { flex-shrink: 0; width: 22px; background: none; border: 0; color: #666b76; font-size: 11px; }
+.k2 { display: flex; flex-direction: column; gap: 4px; padding: 5px 7px; }
+.krow { display: flex; gap: 4px; align-items: center; flex-wrap: wrap; } /* 不横滚，挤了换行 */
+.kfill { flex: 1; min-width: 6px; }
+/* 方向键尾部：两行同宽，↑ 恰好对齐在 ↓ 正上方 */
+.knav { display: flex; gap: 4px; flex-shrink: 0; }
+.knav.tri { width: 116px; }
+.knav.one { width: 116px; justify-content: center; }
+.knav .vk { min-width: 36px; width: 36px; }
+.vhide { flex-shrink: 0; width: 20px; height: 30px; background: none; border: 0; color: #666b76; font-size: 11px; }
 .vk { flex-shrink: 0; min-width: 36px; height: 34px; background: #1a1d26; color: #c6c9d0; border: 1px solid #2c303b; border-radius: 8px; font-size: 12px; font-weight: 600; font-family: ui-monospace, monospace; }
 .vk.mod { background: #232635; color: #a78bfa; border-color: #3d3560; }
 .vk.mod.on { background: #8b5cf6; color: #fff; }
