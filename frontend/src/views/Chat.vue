@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { marked } from 'marked'
 import { chat, api, connect } from '../useChat.js'
 
@@ -36,6 +36,23 @@ function pickSlash(c2) { input.value = '/' + c2.name + ' ' }
 const ctxCls = computed(() => {
   const p = chat.state?.stats?.contextUsage?.percent || 0
   return p >= 85 ? 'hot' : p >= 60 ? 'warm' : ''
+})
+function fT(n) { n = n || 0; return n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n) }
+const ctxTxt = computed(() => {
+  const cu = chat.state?.stats?.contextUsage
+  if (!cu || cu.tokens == null) return (cu?.percent ?? 0) + '%'
+  return fT(cu.tokens) + '/' + fT(cu.contextWindow) + ' ' + (cu.percent ?? 0) + '%'
+})
+const cachePct = computed(() => {
+  const t = chat.state?.stats?.tokens
+  if (!t || !t.cacheRead) return 0
+  const total = (t.cacheRead || 0) + (t.input || 0)
+  return total ? Math.round(t.cacheRead * 100 / total) : 0
+})
+const cacheCls = computed(() => cachePct.value >= 80 ? 'hi' : cachePct.value >= 50 ? 'mid' : 'lo')
+const qTotal = computed(() => {
+  const q = chat.state?.queue
+  return (q?.steering?.length || 0) + (q?.followUp?.length || 0)
 })
 const st = computed(() => chat.state)
 const msgs = computed(() => st.value?.messages || [])
@@ -117,49 +134,60 @@ function submitEdit() {
   attachments.value = []
   autoGrow()
 }
-// 快脑先行（文本+语音同链）：chat→本地秒答；task→优化后的prompt发慢脑
-const fastBusy = ref(false)
+// 快脑=语音专用：悬浮临时气泡+打字机流式+语音同步；文字直发慢脑
 function recentCtx() {
   const ms = (chat.state?.messages || []).slice(-8)
   return ms.map(m => (m.role === 'user' ? '用户:' : '小丘:') +
     (m.content || []).filter(b => b.type === 'text').map(b => b.text).join(' ').slice(0, 80)).join('\n')
 }
-async function smartSend(text, fromVoice) {
-  text = (text || '').trim()
-  if (!text || fastBusy.value) return
-  fastBusy.value = true
+const vb = reactive({ show: false, state: '', text: '', full: '' })
+let typeTimer = null, vbHide = null
+function typewrite(full) {
+  vb.full = full; vb.text = ''
+  let i = 0
+  if (typeTimer) clearInterval(typeTimer)
+  typeTimer = setInterval(() => {
+    vb.text = full.slice(0, ++i)
+    if (i >= full.length) clearInterval(typeTimer)
+  }, 45)
+}
+function vbDismiss(ms) { if (vbHide) clearTimeout(vbHide); vbHide = setTimeout(() => vb.show = false, ms) }
+async function voiceFlow(t) {
+  vb.show = true; vb.state = '理解中…'; vb.text = ''; vb.full = ''
   const atts = attachments.value.length ? attachments.value.map(a => a.path
     ? { path: a.path, mode: 'inline' }
     : { data: a.base64, mimeType: a.mime }) : undefined
   try {
     const r = await fetch('/api/chat_fast', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ q: text, context: recentCtx() }) })
+      body: JSON.stringify({ q: t, context: recentCtx() }) })
     const d = (await r.json()).structuredContent
     const data = d.ok ? d.data : null
     if (data && data.type === 'chat') {
-      // 快答：本地气泡（不打扰pi会话）
-      msgs2.value.push({ role: 'user', text, ts: Date.now() })
-      msgs2.value.push({ role: 'assistant', text: data.answer, fast: true, ts: Date.now() })
-      if (fromVoice || ttsOn.value) speakText(data.answer)
+      vb.state = ''
+      speakText(data.answer) // 语音同步开始
+      typewrite(data.answer) // 打字机流式
+      vbDismiss(data.answer.length * 45 + 4500)
     } else {
-      // 任务：优化prompt → 慢脑（pi会话会收到并流式回复）
-      const opt = data && data.prompt ? data.prompt : text
-      if (fromVoice && data && data.reply) speakText(data.reply) // 语音确认语
-      api.prompt(opt, atts)
+      const opt = (data && data.prompt) ? data.prompt : t
+      vb.state = ''
+      if (data && data.reply) { speakText(data.reply); typewrite('🛠 ' + data.reply) }
+      api.prompt(opt, atts) // 慢脑接管（主消息流可见）
+      vbDismiss(3000)
     }
-  } catch { api.prompt(text, atts) } // 快脑挂了直发慢脑兜底
-  fastBusy.value = false
+  } catch { vb.show = false; api.prompt(t, atts) }
 }
-const msgs2 = ref([]) // 快脑本地气泡（pi快照之外）
 async function speakText(t) {
   const s = t.length > 200 ? t.slice(0, 200) + '……' : t
   try { await fetch('/api/tts_speak', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: s }) }) } catch {}
 }
-function send(mode) { // mode: undefined=普通/steer插队, 'queue'=排队
+function send(mode) { // 文字直发慢脑（快脑只在语音链）
   const text = input.value.trim()
   if (!text) return
   if (editId.value) { submitEdit(); return }
-  smartSend(text, false)
+  const atts = attachments.value.length ? attachments.value.map(a => a.path
+    ? { path: a.path, mode: 'inline' }
+    : { data: a.base64, mimeType: a.mime }) : undefined
+  api.prompt(text, atts)
   input.value = ''; attachments.value = []
   autoGrow()
 }
@@ -215,7 +243,7 @@ function micDown() {
   window.XiaoqiuBridge.startVoice()
 }
 function micUp() { if (recording.value) { recording.value = false; window.XiaoqiuBridge?.stopVoice() } }
-window.__voiceResult = (t) => { voiceState.value = ''; if (t) smartSend(t, true) }
+window.__voiceResult = (t) => { voiceState.value = ''; if (t) voiceFlow(t) }
 window.__voiceStatus = (s) => {
   if (s === 'recording') { recording.value = true; voiceState.value = '🎙 录音中…' }
   else if (s === 'thinking') { recording.value = false; voiceState.value = '识别中…' }
@@ -275,12 +303,7 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
         <div class="muted">操作手机 · 跑命令 · 写代码 · 查记忆</div>
       </div>
 
-      <div v-for="(m, i) in msgs2" :key="'f' + i" class="mrow" :class="m.role === 'user' ? 'urow' : 'arow'">
-      <div v-if="m.role === 'user'" class="ub"><div class="ut">{{ m.text }}</div></div>
-      <div v-else class="ab"><div class="ameta">⚡ 快脑</div><div class="bubble a">{{ m.text }}</div></div>
-    </div>
-
-    <template v-for="m in msgs" :key="m.id">
+      <template v-for="m in msgs" :key="m.id">
         <!-- 用户 -->
         <div v-if="m.role === 'user'" class="mrow urow">
           <div class="ub">
@@ -365,11 +388,17 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
     <!-- 状态条 -->
     <div class="foot muted">
       <template v-if="st?.stats">
-        <button class="ctx tap" :class="ctxCls" :title="'上下文 ' + (st.stats.contextUsage.percent ?? 0) + '%，点击压缩'" @click="api.compact()">
-          <span class="ctxbar"><i :style="{ width: (st.stats.contextUsage.percent || 0) + '%' }"></i></span>
-          {{ st.stats.contextUsage.percent ?? '—' }}%
+        <button class="ctx tap" :class="ctxCls" :title="'上下文 ' + ctxTxt + '，点击压缩'" @click="api.compact()">
+          <span class="ctxbar"><i :style="{ width: Math.min(st.stats.contextUsage.percent || 0, 100) + '%' }"></i></span>
+          <span class="ctxnum">{{ ctxTxt }}</span>
         </button>
-        <span>{{ st.stats.tokens.total }} tok · ${{ (st.stats.cost || 0).toFixed(3) }}</span>
+        <span class="sep">·</span>
+        <span title="累计成本">${{ (st.stats.cost || 0).toFixed(3) }}</span>
+        <span class="sep">·</span>
+        <span :title="'缓存读 ' + fT(st.stats.tokens.cacheRead) + ' / 写 ' + fT(st.stats.tokens.cacheWrite)">缓存<b class="cacheP" :class="cacheCls">{{ cachePct }}%</b></span>
+        <span class="sep">·</span>
+        <span title="消息数">{{ st.stats.totalMessages }} 条</span>
+        <span v-if="busy" class="working"><span class="wspin"></span>处理中<template v-if="qTotal"> ⏳{{ qTotal }}</template></span>
       </template>
       <span class="sp"></span>
       <button class="fb tap" :title="ttsOn ? '朗读开' : '朗读关'" @click="ttsOn = !ttsOn; localStorage.setItem('xq_tts2', ttsOn)">{{ ttsOn ? '🔊' : '🔇' }}</button>
@@ -379,6 +408,15 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
     <div v-if="voiceState" class="vbar">{{ recording ? '⏺ ' : '' }}{{ voiceState }}</div>
 
     <!-- 输入区 -->
+    <!-- 快脑悬浮临时气泡（语音专用） -->
+    <transition name="vbf">
+      <div v-if="vb.show" class="vbub tap" @click="vb.show = false">
+        <span class="vbadge">⚡</span>
+        <span v-if="vb.state" class="vstate">{{ vb.state }}<span class="dots2">…</span></span>
+        <span v-else class="vtxt">{{ vb.text }}<span v-if="vb.text.length < vb.full.length" class="vcur">▍</span></span>
+      </div>
+    </transition>
+
     <div class="composer">
       <div v-if="editId" class="editbn">
         <span>✎ 编辑消息 · 保存后从这里重新生成</span>
@@ -408,7 +446,7 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
           <span v-if="recording" class="recdot"></span><template v-else>🎙</template>
         </button>
         <button v-if="busy && input.trim() && !editId" class="cb q tap" title="排队：本轮结束后再发" @click="sendQueued">⏳</button>
-        <button class="cb send tap" :class="{ edit: editId, dim: !input.trim() || fastBusy }" @click="input.trim() && !fastBusy && send()">
+        <button class="cb send tap" :class="{ edit: editId, dim: !input.trim() }" @click="input.trim() && send()">
           <template v-if="editId">✓</template><template v-else-if="busy">⤴</template><template v-else>➤</template>
         </button>
       </div>
@@ -593,6 +631,29 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
 .cb.edit { background: #e8b268; border-color: #e8b268; }
 .recdot { display: block; width: 12px; height: 12px; border-radius: 50%; background: #fff; animation: pulse 1s infinite; }
 .ctx { display: inline-flex; align-items: center; gap: 5px; background: none; border: 0; color: #8b8f98; font-size: 11px; padding: 0; }
+.ctxnum { font-variant-numeric: tabular-nums; }
+.sep { margin: 0 5px; opacity: .5; }
+.cacheP { font-weight: 700; margin-left: 2px; }
+.cacheP.hi { color: #7dd3a8; }
+.cacheP.mid { color: #e8b268; }
+.cacheP.lo { color: #e08585; }
+.working { display: inline-flex; align-items: center; gap: 5px; color: #a78bfa; }
+.wspin { width: 10px; height: 10px; border: 2px solid #3d3560; border-top-color: #a78bfa; border-radius: 50%; animation: rot 1s linear infinite; }
+@keyframes rot { to { transform: rotate(360deg) } }
+/* 快脑悬浮气泡 */
+.vbub { position: absolute; left: 50%; transform: translateX(-50%); bottom: calc(100% + 10px); z-index: 40;
+  max-width: 86%; background: rgba(26,29,38,.97); border: 1px solid #3d3560; border-radius: 16px;
+  padding: 11px 15px; font-size: 14px; line-height: 1.6; color: #e8e9ec;
+  box-shadow: 0 10px 36px rgba(0,0,0,.55); display: flex; align-items: baseline; gap: 7px; }
+.vbadge { color: #a78bfa; font-size: 13px; flex-shrink: 0; }
+.vstate { color: #a78bfa; font-size: 13px; }
+.dots2::after { content: '…'; animation: kdots 1.2s steps(4) infinite; }
+@keyframes kdots { 0% { content: ''; } 25% { content: '.'; } 50% { content: '..'; } 75% { content: '...'; } }
+.vtxt { white-space: pre-wrap; word-break: break-all; }
+.vcur { color: #a78bfa; animation: blink2 .9s step-start infinite; }
+@keyframes blink2 { 50% { opacity: 0; } }
+.vbf-enter-active, .vbf-leave-active { transition: all .2s ease; }
+.vbf-enter-from, .vbf-leave-to { opacity: 0; transform: translateX(-50%) translateY(12px); }
 .ctxbar { width: 56px; height: 5px; border-radius: 3px; background: #23262e; overflow: hidden; display: inline-block; }
 .ctxbar i { display: block; height: 100%; background: #7dd3a8; border-radius: 3px; transition: width .3s; }
 .ctx.warm .ctxbar i { background: #e8b268; }
