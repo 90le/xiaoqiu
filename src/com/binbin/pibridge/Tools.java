@@ -869,9 +869,15 @@ public class Tools {
                 String q = a.optString("q");
                 String key = fastKey();
                 if (key == null) return err("NO_KEY", "未配置 API Key");
-                String sysPrompt = "你是「小丘」的快脑。判断用户输入属于哪类，只输出一行JSON不要其他内容："
-                  + "闲聊/常识/计算/翻译/简单知识问答（不需要操作手机、不需要写代码、不需要多步骤）→ {\"type\":\"chat\",\"answer\":\"<口语一两句直接回答>\"}；"
-                  + "需要动手执行的任务（写代码/改文件/操作App/查实时信息/多步骤）→ {\"type\":\"task\",\"reply\":\"<一句话确认>\"}。answer/reply用中文口语，简短。";
+                String now = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm EEEE", java.util.Locale.CHINA).format(new java.util.Date());
+                // 时间日期快速回答（代码级拦截，零延迟零成本，不走LLM路由）
+                if (q.matches(".*[几哪]点了?[?？]?") || q.matches(".*现在[几哪]点.*") || q.matches(".*今天.*(几号|星期[几_frequency]|[周周][几哪六日天]).*") || q.matches(".*(星期|周|礼拜)[一二三四五六日天].*")) {
+                    String tstr = new java.text.SimpleDateFormat("现在是 HH:mm，今天 yyyy年MM月dd日 EEEE", java.util.Locale.CHINA).format(new java.util.Date());
+                    return ok(new JSONObject().put("type", "chat").put("answer", tstr));
+                }
+                String sysPrompt = "你是「小丘」的快脑。当前时间：" + now + "。判断用户输入属于哪类，只输出一行JSON不要其他内容："
+                  + "闲聊/常识/计算/翻译/简单知识问答/时间日期问答（你知道当前时间，不需要操作手机、不需要写代码、不需要多步骤）→ {\"type\":\"chat\",\"answer\":\"<口语一两句直接回答>\"}；"
+                  + "需要动手执行的任务（写代码/改文件/操作App/控制设备/多步骤）→ {\"type\":\"task\",\"reply\":\"<一句话确认>\"}。answer/reply用中文口语，简短。";
                 JSONObject body = new JSONObject()
                         .put("model", "glm-5.3-flash")
                         .put("messages", new org.json.JSONArray()
@@ -996,6 +1002,7 @@ public class Tools {
                         String sv = (String) v2;
                         for (int p = 1; p <= 3; p++) sv = sv.replace("{{p" + p + "}}", a.optString("p" + p));
                         sv = sv.replace("{{vd}}", String.valueOf(VdManager.displayId()));
+                        sv = sv.replace("{{now}}", new java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.CHINA).format(new java.util.Date()));
                         if (prevData != null) {
                             sv = sv.replace("{{prev}}", String.valueOf(prevData));
                             java.util.regex.Matcher pm2 = java.util.regex.Pattern.compile("\\{\\{prev\\.([a-zA-Z0-9_.]+)\\}\\}").matcher(sv);
