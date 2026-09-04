@@ -696,7 +696,8 @@ public class Tools {
                     VdManager.track(a.optString("pkg"));
                     int did = VdManager.displayId();
                     JSONObject c = (JSONObject) Tools.call("l2_exec", new JSONObject().put("timeout_sec", 40)
-                        .put("cmd", "am start --display " + did
+                        .put("cmd", "am force-stop " + a.optString("pkg") + " 2>/dev/null; sleep 1; "
+                            + "am start --display " + did
                             + " -n $(cmd package resolve-activity --brief " + a.optString("pkg") + " | tail -1) >/dev/null 2>&1; sleep 2; "
                             + "if dumpsys activity activities | grep -A3 'Display #" + did + " ' | grep -q '" + a.optString("pkg") + "'; "
                             + "then echo __ON_VD__; else echo __ON_MAIN__; fi"));
@@ -2295,11 +2296,26 @@ public class Tools {
             return ok(o);
         }});
 
-        def("ui_set_text", "直接设置焦点输入框文本（display=0 主屏；传副屏 displayId 可在副屏输入，配合 vd）",
-            schema(props("text", prop("string", "要设置的文本"), "display", prop("number", "屏幕ID 默认0主屏")), "text"), new H() { public JSONObject run(JSONObject a) {
+        def("ui_set_text", "直接设置焦点输入框文本（display=0 主屏；副屏自动兜底：L2聚焦+ADBKeyboard中文注入+回读验证）",
+            schema(props("text", prop("string", "要设置的文本"), "display", prop("number", "屏幕ID 默认0主屏")), "text"), new H() { public JSONObject run(JSONObject a) throws Exception {
             int disp = a.optInt("display", 0);
-            String r = disp > 0 ? AdbService.setTextOnDisplay(disp, a.optString("text", "")) : AdbService.setText(a.optString("text", ""));
-            return r.equals("已设置") ? ok(r) : err("SET_FAIL", r);
+            String txt = a.optString("text", "");
+            String r = disp > 0 ? AdbService.setTextOnDisplay(disp, txt) : AdbService.setText(txt);
+            if (r.equals("已设置")) return ok(r);
+            // 副屏兜底：a11y写入无效时的中文输入正解
+            if (disp > 0) {
+                int[] c = AdbService.editableCenterOnDisplay(disp);
+                if (c != null) {
+                    Tools.call("l2_exec", new JSONObject().put("cmd", "input -d " + disp + " tap " + c[0] + " " + c[1]));
+                    try { Thread.sleep(900); } catch (Exception ignore) {}
+                    ctx.sendBroadcast(new android.content.Intent("ADB_INPUT_TEXT").putExtra("msg", txt));
+                    try { Thread.sleep(800); } catch (Exception ignore) {}
+                    String v = AdbService.readEditableTextOnDisplay(disp);
+                    if (v != null && v.contains(txt)) return ok(new JSONObject().put("msg", "已设置(ADBKeyboard兜底)").put("text", v));
+                    return err("SET_FAIL", r + "；兜底后回读=" + (v == null ? "null" : v));
+                }
+            }
+            return err("SET_FAIL", r);
         }});
         def("ui_swipe", "模拟滑动", schema(props("x1", prop("number", "起x"), "y1", prop("number", "起y"),
                 "x2", prop("number", "终x"), "y2", prop("number", "终y"), "ms", prop("number", "时长默认300")),

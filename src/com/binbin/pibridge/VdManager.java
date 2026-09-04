@@ -65,6 +65,9 @@ public class VdManager {
     /** 创建隐形副屏（默认 900x2000@160dpi，够看清单又省内存） */
     public static synchronized JSONObject create(Context c, int width, int height) {
         touch();
+        if (alive()) { // 防泄漏：已有副屏先释放，绝不叠加僵尸display
+            try { android.util.Log.i("PiBridge", "create前释放旧副屏#" + id); destroy(); } catch (Exception ignore) {}
+        }
         // 默认对齐主屏真实分辨率+密度（App渲染与主屏一致）
         int dpi = 160;
         try {

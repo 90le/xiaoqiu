@@ -408,7 +408,65 @@ public class AdbService extends AccessibilityService {
         return null;
     }
 
+
+    /** 副屏兜底：找可编辑节点中心(px) */
+    public static int[] editableCenterOnDisplay(int displayId) {
+        if (inst == null) return null;
+        try {
+            Object arr = AccessibilityService.class.getMethod("getWindowsOnAllDisplays").invoke(inst);
+            if (!(arr instanceof android.util.SparseArray)) return null;
+            Object l = ((android.util.SparseArray<?>) arr).get(displayId);
+            if (!(l instanceof java.util.List)) return null;
+            for (AccessibilityWindowInfo w : (java.util.List<AccessibilityWindowInfo>) l) {
+                int[] c = findEditableCenter(w.getRoot(), 0);
+                if (c != null) return c;
+            }
+        } catch (Throwable ignore) {}
+        return null;
+    }
+    private static int[] findEditableCenter(AccessibilityNodeInfo n, int d) {
+        if (n == null || d > 25) return null;
+        try {
+            if (n.isEditable()) {
+                android.graphics.Rect rc = new android.graphics.Rect();
+                n.getBoundsInScreen(rc);
+                if (rc.width() > 0) return new int[]{rc.centerX(), rc.centerY()};
+            }
+            for (int i = 0; i < n.getChildCount(); i++) {
+                int[] r = findEditableCenter(n.getChild(i), d + 1);
+                if (r != null) return r;
+            }
+        } catch (Exception ignore) {}
+        return null;
+    }
+    /** 副屏兜底：读可编辑节点当前文本（验证注入结果） */
+    public static String readEditableTextOnDisplay(int displayId) {
+        if (inst == null) return null;
+        try {
+            Object arr = AccessibilityService.class.getMethod("getWindowsOnAllDisplays").invoke(inst);
+            if (!(arr instanceof android.util.SparseArray)) return null;
+            Object l = ((android.util.SparseArray<?>) arr).get(displayId);
+            if (!(l instanceof java.util.List)) return null;
+            for (AccessibilityWindowInfo w : (java.util.List<AccessibilityWindowInfo>) l) {
+                String t = readEditableText(w.getRoot(), 0);
+                if (t != null) return t;
+            }
+        } catch (Throwable ignore) {}
+        return null;
+    }
+    private static String readEditableText(AccessibilityNodeInfo n, int d) {
+        if (n == null || d > 25) return null;
+        try {
+            if (n.isEditable()) return n.getText() == null ? "" : n.getText().toString();
+            for (int i = 0; i < n.getChildCount(); i++) {
+                String r = readEditableText(n.getChild(i), d + 1);
+                if (r != null) return r;
+            }
+        } catch (Exception ignore) {}
+        return null;
+    }
     public static String setText(String text) {
+
         if (inst == null) return "辅助服务未开启";
         AccessibilityNodeInfo root = inst.getRootInActiveWindow();
         if (root == null) return "无活动窗口";
