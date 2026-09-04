@@ -354,7 +354,14 @@ if (!window.__tapDbg) {
   }, true)
 }
 
-onMounted(() => { connect(); scroll() })
+import { startWatchdog } from '../useChat.js'
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') {
+    // 切回前台：探活（30s 无消息看门狗也会兜底）
+    wsSend({ type: 'get_state' })
+  }
+})
+onMounted(() => { connect(); startWatchdog(); scroll() })
 onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; delete window.__xiaoqiuTask })
 </script>
 

@@ -22,9 +22,16 @@ export const chat = reactive({
 })
 
 const wsQueue = [] // 未连接期间的发送缓冲（防 terminal_create 等被静默丢弃）
+let lastBeat = 0 // 最近一次收到服务端消息（心跳/任意消息都算活着）
 export function wsSend(obj) {
-  if (ws && ws.readyState === 1) { try { ws.send(JSON.stringify(obj)) } catch {} }
-  else wsQueue.push(obj)
+  if (ws && ws.readyState === 1) {
+    try {
+      ws.send(JSON.stringify(obj))
+      return
+    } catch { /* 写失败=半开连接，落队列+触发重连 */ }
+  }
+  wsQueue.push(obj)
+  if (ws && ws.readyState === 1) { try { ws.close() } catch {} } // 写失败≈死连接，强制走重连
 }
 
 // ── 终端桥：terminalId -> {write, onExit, onList}（Terminal.vue 注册）──
@@ -52,12 +59,14 @@ export function connect() {
   ws = new WebSocket(WSI.replace('http', 'ws') + '/ws')
   ws.onopen = () => {
     chat.status = 'open'
+    lastBeat = Date.now()
     wsSend({ type: 'hello', clientId })
     // hello 是第一个包；排队消息在其后送达
     const q = wsQueue.splice(0)
     for (const m of q) wsSend(m)
   }
   ws.onmessage = (ev) => {
+    lastBeat = Date.now() // 任何服务端消息（含心跳）都证明连接活着
     let m
     try { m = JSON.parse(ev.data) } catch { return }
     switch (m.type) {
@@ -98,6 +107,7 @@ export function connect() {
       case 'sessions': chat.sessions = m.sessions || []; break
       case 'conversations': chat.conversations = m.conversations || []; chat.activeConvId = m.activeId; break
       case 'slash_commands': chat.slashCommands = m.commands || []; break
+      case 'heartbeat': break // 心跳（useChat 的 lastBeat 已在 onmessage 更新）
       case 'notice': chat.notices.push({ level: m.level, text: m.text, id: Date.now() }); if (chat.notices.length > 5) chat.notices.shift(); break
       case 'terminal_output': {
         const w = termWriters[m.terminalId]
@@ -133,6 +143,17 @@ export function connect() {
     setTimeout(connect, delay)
   }
   ws.onerror = () => { try { ws.close() } catch {} }
+}
+
+// 半开连接看门狗：5s 巡检，>30s 无服务端消息 → 强制重连（对标 webui）
+let wdTimer = null
+export function startWatchdog() {
+  if (wdTimer) return
+  wdTimer = setInterval(() => {
+    if (ws && ws.readyState === 1 && Date.now() - lastBeat > 30000) {
+      try { ws.close() } catch {} // onclose 触发重连
+    }
+  }, 5000)
 }
 
 // ── 高层操作 ──
