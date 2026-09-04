@@ -18,9 +18,11 @@ const openThink = ref({})     // msgId:blockIdx -> bool（默认折叠）
 
 const slashHint = computed(() => {
   const v = input.value
-  if (!v.startsWith('/') || v.length > 24) return []
+  if (!v.startsWith('/') || v.includes('\n') || v.length > 30) return []
   const q = v.slice(1).toLowerCase()
-  return chat.slashCommands.filter(x => x.name.toLowerCase().startsWith(q)).slice(0, 7)
+  const all = chat.slashCommands || []
+  const hit = q ? all.filter(x => (x.name + ' ' + (x.description || '')).toLowerCase().includes(q)) : all
+  return hit.slice(0, 30)
 })
 function pickSlash(c2) { input.value = '/' + c2.name + ' ' }
 
@@ -200,7 +202,10 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
           <div class="ub">
             <img v-for="(b, bi) in (m.content||[]).filter(b => b.type === 'image' && b.dataUrl)" :key="bi" :src="b.dataUrl" class="uimg" />
             <div class="ut">{{ (m.content||[]).filter(b => b.type === 'text').map(b => b.text).join('\n') }}</div>
-            <button v-if="!busy" class="uedit tap" title="编辑重发" @click="startEdit(m)">✎</button>
+          </div>
+          <div class="uact">
+            <button v-if="!busy" class="ua tap" @click="startEdit(m)">✎ 编辑</button>
+            <button class="ua tap" @click="navigator.clipboard?.writeText((m.content||[]).filter(b => b.type === 'text').map(b => b.text).join('\n'))">📋</button>
           </div>
         </div>
 
@@ -338,15 +343,16 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
 .qtag.steer { background: #3b2f18; color: #e8b268; }
 .qtag.follow { background: #1e2a3a; color: #7db3e8; }
 .qrm { color: #8b8f98; padding: 0 2px; }
-.uedit { position: absolute; right: -30px; top: 4px; background: none; border: 0; color: #666b76; font-size: 13px; opacity: 0; }
-.ub { position: relative; }
-.msg:hover .uedit, .urow:active .uedit { opacity: 1; }
+.uact { display: flex; gap: 4px; margin-top: 3px; justify-content: flex-end; }
+.ua { background: none; border: 0; color: #666b76; font-size: 11px; padding: 2px 6px; border-radius: 6px; }
+.ua:active { color: #a78bfa; }
 .editbar { display: flex; align-items: center; justify-content: space-between; background: #2a2418; color: #e8b268;
   font-size: 12px; border-radius: 9px; padding: 7px 12px; margin-bottom: 7px; }
 .cb.q { background: #1e2a3a; border-color: #243a4a; color: #7db3e8; }
 /* 斜杠候选 */
-.slash { position: absolute; bottom: 100%; left: 10px; right: 10px; background: #1a1d26; border: 1px solid #2c303b;
-  border-radius: 12px; box-shadow: 0 -8px 28px rgba(0,0,0,.5); overflow: hidden; margin-bottom: 4px; z-index: 5; }
+.slash { position: absolute; bottom: 100%; left: 10px; right: 10px; max-height: 208px; overflow-y: auto;
+  background: #1a1d26; border: 1px solid #2c303b;
+  border-radius: 12px; box-shadow: 0 -8px 28px rgba(0,0,0,.5); margin-bottom: 4px; z-index: 5; }
 .si2 { display: flex; align-items: center; padding: 9px 13px; font-size: 13px; color: #dcddde; border-bottom: 1px solid #23262e; }
 .si2:last-child { border-bottom: 0; }
 .si2 b { color: #a78bfa; }
