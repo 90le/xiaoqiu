@@ -91,22 +91,23 @@ public class WakeService extends Service {
             short[] ring = new short[ringN];
             int wpos = 0;
             long total = 0;
-            final int TH_HIGH = 900, TH_LOW = 400;
+            final int TH_HIGH = 1500, TH_LOW = 600;
             int state = 0; // 0=静音 1=说话中
             long speechStart = 0, silenceMs = 0;
             int speechStartIdx = 0;
             short[] chunk = new short[sr / 10];
             long lastBeat = 0;
             File dir = new File(getFilesDir(), "sherpa/kws/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01");
-            if (ar == null) {
-                int minBuf = AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
-                ar = new AudioRecord(MediaRecorder.AudioSource.MIC, 16000,
-                        AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, Math.max(minBuf, 16000 * 2 * 4));
-                ar.startRecording();
-                Log.i("PiBridge", "唤醒监听就绪（持续监听管线：环形缓冲+VAD+整句转写）");
-            }
+            boolean announced = false;
             while (running) {
                 try {
+                    if (ar == null) {
+                        int minBuf = AudioRecord.getMinBufferSize(16000, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
+                        ar = new AudioRecord(MediaRecorder.AudioSource.MIC, 16000,
+                                AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT, Math.max(minBuf, 16000 * 2 * 4));
+                        ar.startRecording();
+                        if (!announced) { Log.i("PiBridge", "唤醒监听就绪（持续监听管线：环形缓冲+VAD+整句转写）"); announced = true; }
+                    }
                     if (Tools.ttsSpeaking || VoiceCore.running || Tools.micBusy) { Thread.sleep(250); continue; }
                     int n = ar.read(chunk, 0, chunk.length);
                     if (n <= 0) { Thread.sleep(50); continue; }
