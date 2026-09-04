@@ -120,10 +120,15 @@ const editId = ref('')
 function startEdit(m) {
   editId.value = m.id
   input.value = (m.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n')
-  // 携带原附件进主输入区（可增删）
+  // 携带原附件（仅视觉模型带图；非视觉自动剥离，防发送被静默拦截）
+  const vision = !!chat.state?.model?.vision
   const imgs = (m.content || []).filter(b => b.type === 'image' && b.dataUrl)
-    .map((b, i) => ({ name: '原图' + (i + 1), dataUrl: b.dataUrl, mime: b.mimeType || 'image/png', base64: String(b.dataUrl).split(',')[1] }))
-  attachments.value = imgs
+  if (imgs.length && !vision) {
+    attachments.value = []
+    setTimeout(() => warn('原消息含 ' + imgs.length + ' 张图，当前模型不支持图片，编辑将只保留文字'), 350)
+  } else {
+    attachments.value = imgs.map((b, i) => ({ name: '原图' + (i + 1), dataUrl: b.dataUrl, mime: b.mimeType || 'image/png', base64: String(b.dataUrl).split(',')[1] }))
+  }
   autoGrow()
   setTimeout(() => { if (taEl.value) { taEl.value.focus(); taEl.value.setSelectionRange(input.value.length, input.value.length) } }, 150)
 }
@@ -134,6 +139,10 @@ function submitOnce() {
   if (now - submitLock < 400) return // 防双触发
   submitLock = now
   if (!editId.value) return
+  if (attachments.value.some(a => a.base64) && !chat.state?.model?.vision) {
+    warn('含图片但当前模型不支持：已自动去掉图片发送文字')
+    attachments.value = [] // 自动降级：剥图发文字，不再静默拦截
+  }
   submitEdit()
 }
 function submitEdit() {
@@ -209,7 +218,7 @@ function doAbort() {
 }
 const errN = ref('')
 let errT = null
-function warn(msg) { errN.value = msg; if (errT) clearTimeout(errT); errT = setTimeout(() => errN.value = '', 3200) }
+function warn(msg) { errN.value = msg; if (errT) clearTimeout(errT); errT = setTimeout(() => errN.value = '', 4500) }
 function buildAtts() {
   if (!attachments.value.length) return undefined
   const hasImg = attachments.value.some(a => a.base64)
