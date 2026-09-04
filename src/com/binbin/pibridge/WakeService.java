@@ -109,6 +109,10 @@ public class WakeService extends Service {
                         if (!announced) { Log.i("PiBridge", "唤醒监听就绪（持续监听管线：环形缓冲+VAD+整句转写）"); announced = true; }
                     }
                     if (Tools.ttsSpeaking || VoiceCore.running || Tools.micBusy) { Thread.sleep(250); continue; }
+                    try { // 媒体互斥：手机在放音乐/视频时，唤醒让位（不抢麦克风不误识别）
+                        android.media.AudioManager am = (android.media.AudioManager) getSystemService(AUDIO_SERVICE);
+                        if (am != null && am.isMusicActive()) { Thread.sleep(500); continue; }
+                    } catch (Exception ignore) {}
                     int n = ar.read(chunk, 0, chunk.length);
                     if (n <= 0) { Thread.sleep(50); continue; }
                     for (int i = 0; i < n; i++) { ring[wpos] = chunk[i]; wpos = (wpos + 1) % ringN; }
@@ -118,6 +122,10 @@ public class WakeService extends Service {
                     for (int i = 0; i < n; i++) { double sv = chunk[i]; sumSq += sv * sv; }
                     double rms = Math.sqrt(sumSq / n);
                     if (Tools.ttsSpeaking || VoiceCore.running || Tools.micBusy) { state = 0; continue; }
+                    try {
+                        android.media.AudioManager am2 = (android.media.AudioManager) getSystemService(AUDIO_SERVICE);
+                        if (am2 != null && am2.isMusicActive()) { state = 0; continue; }
+                    } catch (Exception ignore) {}
                     if (state == 0) {
                         if (rms >= TH_HIGH) {
                             state = 1; silenceMs = 0;

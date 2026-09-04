@@ -275,6 +275,7 @@ public class Tools {
                     .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH).build());
             cloudPlayer.setDataSource(out.getAbsolutePath());
             cloudPlayer.setOnCompletionListener(mp2 -> { mp2.release(); if (cloudPlayer == mp2) cloudPlayer = null; fireSpeakDone(); });
+            ttsSpeaking = true; // 播放期间占用（唤醒监听让位，防自唤醒）
             cloudPlayer.prepare();
             cloudPlayer.start();
             Log.i("PiBridge", "云TTS 播放中 " + out.length() + " 字节");
@@ -1376,10 +1377,13 @@ public class Tools {
                 if (digest == null || digest.startsWith("ERR:")) return err("DIGEST_FAIL", String.valueOf(digest));
                 return ok(new JSONObject().put("digest", digest).put("raw", sb.toString()));
             }});
-        def("ai_humanize", "通知播报拟人化（调试/演示）：把通知改写成一句自然口语播报文本",
+        def("ai_humanize", "播报拟人化：把通知或助手回复改写成自然口语播报（kind=reply 时面向长回复做口语摘要）",
             schema(props("app", prop("string", "包名如com.tencent.mm"), "title", prop("string", "标题"),
-                    "text", prop("string", "正文"))), new H() { public JSONObject run(JSONObject a) throws Exception {
-            String h = Tools.aiHumanize(a.optString("app"), a.optString("title"), a.optString("text"));
+                    "text", prop("string", "正文"), "kind", prop("string", "可选 reply=助手回复播报摘要")), "app", "title", "text"), new H() { public JSONObject run(JSONObject a) throws Exception {
+            String h = ("reply".equals(a.optString("kind")))
+                ? llmShort("你是语音助手「小丘」。把助手的回复内容转成给用户的口语播报（一两句，30字内）：像朋友随口告诉你结果，保留关键数字和结论，去掉markdown符号/代码/列表标记。只输出要念的话。",
+                    String.valueOf(a.optString("text", "")).substring(0, Math.min(500, a.optString("text", "").length())), 256)
+                : Tools.aiHumanize(a.optString("app"), a.optString("title"), a.optString("text"));
             return h == null ? err("HUMANIZE_FAIL", "改写失败（回退原文播报）") : ok(new JSONObject().put("say", h));
         }});
         def("xhs_search_direct", "小红书深链直达搜索结果页（绕开输入框自动化；内置全套防护：主屏占用检测→清场→副屏发射→落点校验→误落救援）",

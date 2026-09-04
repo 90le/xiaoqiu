@@ -38,10 +38,11 @@ const ctxCls = computed(() => {
   return p >= 85 ? 'hot' : p >= 60 ? 'warm' : ''
 })
 function fT(n) { n = n || 0; return n >= 1000 ? (n / 1000).toFixed(1) + 'k' : String(n) }
+function fmtCost(c) { c = c || 0; return c >= 1 ? c.toFixed(2) : c >= 0.01 ? c.toFixed(3) : c.toFixed(4) }
 const ctxTxt = computed(() => {
   const cu = chat.state?.stats?.contextUsage
   if (!cu || cu.tokens == null) return (cu?.percent ?? 0) + '%'
-  return fT(cu.tokens) + '/' + fT(cu.contextWindow) + ' ' + (cu.percent ?? 0) + '%'
+  return fT(cu.tokens) + '/' + fT(cu.contextWindow) + ' ' + Math.round(cu.percent || 0) + '%'
 })
 const cachePct = computed(() => {
   const t = chat.state?.stats?.tokens
@@ -125,10 +126,9 @@ function cancelEdit() { editId.value = ''; input.value = ''; attachments.value =
 function submitEdit() {
   const text = input.value.trim()
   if (!text || !editId.value) return
-  wsSend({ type: 'edit_message', messageId: editId.value, text,
-    attachments: attachments.value.length ? attachments.value.map(a => a.path
-      ? { path: a.path, mode: 'inline' }
-      : { data: a.base64, mimeType: a.mime }) : undefined })
+  const atts = buildAtts()
+  if (atts === false) return
+  wsSend({ type: 'edit_message', messageId: editId.value, text, attachments: atts })
   editId.value = ''
   input.value = ''
   attachments.value = []
@@ -154,9 +154,8 @@ function typewrite(full) {
 function vbDismiss(ms) { if (vbHide) clearTimeout(vbHide); vbHide = setTimeout(() => vb.show = false, ms) }
 async function voiceFlow(t) {
   vb.show = true; vb.state = '理解中…'; vb.text = ''; vb.full = ''
-  const atts = attachments.value.length ? attachments.value.map(a => a.path
-    ? { path: a.path, mode: 'inline' }
-    : { data: a.base64, mimeType: a.mime }) : undefined
+  const atts = buildAtts()
+  if (atts === false) { vb.show = false; return }
   try {
     const r = await fetch('/api/chat_fast', { method: 'POST', headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ q: t, context: recentCtx() }) })
@@ -177,16 +176,36 @@ async function voiceFlow(t) {
   } catch { vb.show = false; api.prompt(t, atts) }
 }
 async function speakText(t) {
-  const s = t.length > 200 ? t.slice(0, 200) + '……' : t
-  try { await fetch('/api/tts_speak', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: s }) }) } catch {}
+  if (!t) return
+  let say = t.length > 200 ? t.slice(0, 200) + '……' : t
+  try { // 拟人化：像朋友告诉你结果，不复读机
+    const r = await fetch('/api/ai_humanize', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ app: 'com.pihost', title: '回复', text: t, kind: 'reply' }) })
+    const d = (await r.json()).structuredContent
+    if (d.ok && d.data && d.data.say && d.data.say.indexOf('ERR') !== 0) say = d.data.say
+  } catch {}
+  try { await fetch('/api/tts_speak', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: say }) }) } catch {}
+}
+const errN = ref('')
+let errT = null
+function warn(msg) { errN.value = msg; if (errT) clearTimeout(errT); errT = setTimeout(() => errN.value = '', 3200) }
+function buildAtts() {
+  if (!attachments.value.length) return undefined
+  const hasImg = attachments.value.some(a => a.base64)
+  if (hasImg && !chat.state?.model?.vision) {
+    warn('当前模型不支持图片，请先切换视觉模型（🤖下拉选 👁 标记的）')
+    return false
+  }
+  return attachments.value.map(a => a.path
+    ? { path: a.path, mode: 'inline' }
+    : { data: a.base64, mimeType: a.mime })
 }
 function send(mode) { // 文字直发慢脑（快脑只在语音链）
   const text = input.value.trim()
   if (!text) return
   if (editId.value) { submitEdit(); return }
-  const atts = attachments.value.length ? attachments.value.map(a => a.path
-    ? { path: a.path, mode: 'inline' }
-    : { data: a.base64, mimeType: a.mime }) : undefined
+  const atts = buildAtts()
+  if (atts === false) return
   api.prompt(text, atts)
   input.value = ''; attachments.value = []
   autoGrow()
@@ -393,7 +412,7 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
           <span class="ctxnum">{{ ctxTxt }}</span>
         </button>
         <span class="sep">·</span>
-        <span title="累计成本">${{ (st.stats.cost || 0).toFixed(3) }}</span>
+        <span title="累计成本">${{ fmtCost(st.stats.cost) }}</span>
         <span class="sep">·</span>
         <span :title="'缓存读 ' + fT(st.stats.tokens.cacheRead) + ' / 写 ' + fT(st.stats.tokens.cacheWrite)">缓存<b class="cacheP" :class="cacheCls">{{ cachePct }}%</b></span>
         <span class="sep">·</span>
@@ -418,6 +437,7 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
     </transition>
 
     <div class="composer">
+      <div v-if="errN" class="errbn">⚠ {{ errN }}</div>
       <div v-if="editId" class="editbn">
         <span>✎ 编辑消息 · 保存后从这里重新生成</span>
         <button class="tap" @click="cancelEdit">取消</button>
@@ -614,6 +634,7 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
 
 /* 输入区 */
 .composer { position: relative; background: #14161c; border-top: 1px solid #23262e; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); }
+.errbn { background: #2a181c; color: #e08585; font-size: 12.5px; border-radius: 10px; padding: 8px 12px; margin-bottom: 8px; border: 1px solid #4a2626; }
 .editbn { display: flex; align-items: center; justify-content: space-between; background: #2a2418; color: #e8b268;
   font-size: 12px; border-radius: 10px; padding: 7px 12px; margin-bottom: 8px; border: 1px solid #4a3c26; }
 .editbn button { background: none; border: 0; color: #e8b268; font-size: 12px; }
