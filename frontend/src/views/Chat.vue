@@ -495,8 +495,8 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
       <div v-if="errN" class="errbn">⚠ {{ errN }}</div>
       <div v-if="editId" class="editbn">
         <span class="ebtxt">✎ 编辑消息 · 保存后从这里重新生成</span>
-        <button class="tap" @touchend.prevent="cancelEdit" @click="cancelEdit">取消</button>
-        <button class="ebgo tap" @touchend.prevent="submitOnce" @click="submitOnce">✓ 发送</button>
+        <button class="tap" @touchstart.prevent="cancelEdit">取消</button>
+        <button class="ebgo tap" @touchstart.prevent="submitOnce">✓ 发送</button>
       </div>
       <div v-if="attachments.length" class="attrow">
         <div v-for="(a, i) in attachments" :key="i" class="attc">
@@ -522,7 +522,7 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
           <span v-if="recording" class="recdot"></span><template v-else>🎙</template>
         </button>
         <button v-if="busy && input.trim() && !editId" class="cb q tap" title="排队：本轮结束后再发" @click="sendQueued">⏳</button>
-        <button class="cb send tap" :class="{ edit: editId, dim: !input.trim() }" @touchend.prevent="input.trim() && (editId ? submitOnce() : send())" @click="input.trim() && (editId ? submitOnce() : send())">
+        <button class="cb send tap" :class="{ edit: editId, dim: !input.trim() }" @touchstart.prevent="input.trim() && (editId ? submitOnce() : send())">
           <template v-if="editId">✓</template><template v-else-if="busy">⤴</template><template v-else>➤</template>
         </button>
       </div>
