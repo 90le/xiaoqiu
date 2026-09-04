@@ -1341,6 +1341,23 @@ public class Tools {
             }
             });
 
+        def("voice_digest", "汇总最近的语音播报记忆（谁找过你、说了什么）→ AI整理成一段'你错过的事'口语摘要。适合用户问'刚才谁找我/错过什么'时调用",
+            schema(props()), new H() { public JSONObject run(JSONObject a) throws Exception {
+                java.io.File f = new java.io.File(ctx.getFilesDir(), "memory.json");
+                if (!f.isFile()) return err("NO_MEMORY", "暂无播报记忆");
+                JSONObject mem = new JSONObject(new String(java.nio.file.Files.readAllBytes(f.toPath()), "UTF-8"));
+                StringBuilder sb = new StringBuilder();
+                java.util.Iterator<String> it = mem.keys();
+                while (it.hasNext()) {
+                    String k = it.next();
+                    if (k.startsWith("voice.")) sb.append(k.substring(6)).append("：").append(mem.optString(k)).append("\n");
+                }
+                if (sb.length() == 0) return err("NO_MEMORY", "暂无播报记录");
+                String digest = llmShort("把下面的最近播报记录整理成一段自然口语摘要（50字内），按人归组，把提问/邀约/等你回复的事放最前面说。只输出摘要本身。",
+                        sb.toString(), 512);
+                if (digest == null || digest.startsWith("ERR:")) return err("DIGEST_FAIL", String.valueOf(digest));
+                return ok(new JSONObject().put("digest", digest).put("raw", sb.toString()));
+            }});
         def("ai_humanize", "通知播报拟人化（调试/演示）：把通知改写成一句自然口语播报文本",
             schema(props("app", prop("string", "包名如com.tencent.mm"), "title", prop("string", "标题"),
                     "text", prop("string", "正文"))), new H() { public JSONObject run(JSONObject a) throws Exception {
@@ -2459,8 +2476,10 @@ public class Tools {
             return ok(o);
         }});
 
-        def("ui_set_text", "直接设置焦点输入框文本（display=0 主屏；副屏自动兜底：L2聚焦+ADBKeyboard中文注入+回读验证）",
-            schema(props("text", prop("string", "要设置的文本"), "display", prop("number", "屏幕ID 默认0主屏")), "text"), new H() { public JSONObject run(JSONObject a) throws Exception {
+        def("ui_set_text", "直接设置焦点输入框文本（display=0 主屏；副屏自动兜底：L2聚焦+IME自动切换还原+ADBKeyboard中文注入+回读验证；无可编辑节点时可传x/y千分比坐标指定输入框）",
+            schema(props("text", prop("string", "要设置的文本"), "display", prop("number", "屏幕ID 默认0主屏"),
+                    "x", prop("number", "可选：输入框位置千分比x（副屏无a11y可编辑节点时用）"),
+                    "y", prop("number", "可选：输入框位置千分比y")), "text"), new H() { public JSONObject run(JSONObject a) throws Exception {
             int disp = a.optInt("display", 0);
             String txt = a.optString("text", "");
             String r = disp > 0 ? AdbService.setTextOnDisplay(disp, txt) : AdbService.setText(txt);
@@ -2468,7 +2487,11 @@ public class Tools {
             // 副屏兜底：a11y写入无效时 → L2聚焦 + IME切换(存原IME,完事还原) + ADBKeyboard中文注入 + 回读验证
             if (disp > 0) {
                 int[] c = AdbService.editableCenterOnDisplay(disp);
-                if (c == null) return err("SET_FAIL", r + "；副屏无可编辑节点(可vision定位+vd text兜底)");
+                if (c == null && a.has("x") && a.has("y")) {
+                    int[] dsz = AdbService.displaySize(disp);
+                    c = new int[]{ a.optInt("x") * dsz[0] / 1000, a.optInt("y") * dsz[1] / 1000 };
+                }
+                if (c == null) return err("SET_FAIL", r + "；副屏无可编辑节点(可传x/y坐标兜底)");
                 JSONObject gi = (JSONObject) Tools.call("l2_exec", new JSONObject().put("cmd", "settings get secure default_input_method"));
                 String gs = String.valueOf(gi);
                 String prevIme = "com.sohu.inputmethod.sogou.xiaomi/.SogouIME";
