@@ -98,7 +98,12 @@ watch(() => st.value?.streamingMessage?.content?.map(b => b.text || b.thinking |
   if (copyTimer) clearTimeout(copyTimer)
   copyTimer = setTimeout(injectCopyBtns, 600) // 流式中节流注入
 })
-watch(() => st.value?.isStreaming, (b, old) => { if (b === false && old === true && ttsOn.value) speakLast() })
+watch(() => st.value?.isStreaming, (b, old) => {
+  if (b === false && old === true) {
+    abortedUserId.value = '' // 正常回复完成，清中断遗留
+    if (ttsOn.value) speakLast()
+  }
+})
 
 const sesQ = ref(''), newCwd = ref('')
 let sesT = null
@@ -186,6 +191,14 @@ async function speakText(t) {
   } catch {}
   try { await fetch('/api/tts_speak', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: say }) }) } catch {}
 }
+const abortedUserId = ref('') // 中断后未获回复的用户消息（下一条发送自动替换，防回复旧消息）
+function doAbort() {
+  const ms = msgs.value
+  for (let i = ms.length - 1; i >= 0; i--) {
+    if (ms[i].role === 'user') { abortedUserId.value = ms[i].id; break }
+  }
+  api.abort()
+}
 const errN = ref('')
 let errT = null
 function warn(msg) { errN.value = msg; if (errT) clearTimeout(errT); errT = setTimeout(() => errN.value = '', 3200) }
@@ -206,7 +219,13 @@ function send(mode) { // 文字直发慢脑（快脑只在语音链）
   if (editId.value) { submitEdit(); return }
   const atts = buildAtts()
   if (atts === false) return
-  api.prompt(text, atts)
+  // 中断遗留：上一条用户消息没获得回复 → 替换它（模型不会先回旧的）
+  if (abortedUserId.value && msgs.value[msgs.value.length - 1]?.id === abortedUserId.value) {
+    wsSend({ type: 'edit_message', messageId: abortedUserId.value, text, attachments: atts })
+  } else {
+    api.prompt(text, atts)
+  }
+  abortedUserId.value = ''
   input.value = ''; attachments.value = []
   autoGrow()
 }
@@ -290,7 +309,7 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
       </button>
       <span class="sp"></span>
       <button v-if="chat.status !== 'open'" class="tb warn tap" @click="connect()">↻ {{ chat.status === 'connecting' ? '连接中…' : '重连(' + (chat.retryIn || 1) + 's)' }}</button>
-      <button v-if="st?.isStreaming" class="tb stop tap" @click="api.abort()">⏹ 停止</button>
+      <button v-if="st?.isStreaming" class="tb stop tap" @click="doAbort">⏹ 停止</button>
       <button class="tb tap" title="新对话" @click="api.newChat()">✚</button>
     </header>
 
