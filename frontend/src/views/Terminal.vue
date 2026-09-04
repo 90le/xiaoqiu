@@ -106,11 +106,34 @@ onUnmounted(() => {
         <button v-else class="vk exp on tap" @click="keysMode = 'slim'">▾</button>
         <button class="vk hide tap" @click="keysMode = 'hide'">⌨✕</button>
       </div>
-      <template v-if="keysMode === 'full'">
-        <div class="krow"><button v-for="[l, c] in combos" :key="l" class="vk cc tap" @click="raw(c)">{{ l }}</button></div>
-        <div class="krow"><button v-for="[l, c] in alts" :key="l" class="vk alt tap" @click="raw(c)">{{ l }}</button><button v-for="[l, c] in navs" :key="l" class="vk tap" @click="raw(c)">{{ l }}</button></div>
-        <div class="krow"><button v-for="s2 in syms" :key="s2" class="vk sym tap" @click="press(s2)">{{ s2 }}</button></div>
-      </template>
+      <div v-if="keysMode === 'full'" class="kpanel">
+        <div class="kgrid">
+          <button class="vk tap" @click="raw('\x1b')">ESC</button>
+          <button class="vk tap" @click="raw('\t')">TAB</button>
+          <button class="vk mod tap" :class="{ on: ctrlOn }" @click="press('CTRL')">CTRL</button>
+          <button class="vk mod tap" :class="{ on: altOn }" @click="press('ALT')">ALT</button>
+          <button class="vk tap" @click="raw('\x7f')">DEL</button>
+          <button class="vk tap" @click="raw('\r')">ENTER</button>
+          <button class="vk tap" @click="raw('\x1b[H')">HOME</button>
+          <button class="vk tap" @click="raw('\x1b[F')">END</button>
+
+          <button class="vk tap" @click="raw('\x1b[D')">←</button>
+          <button class="vk tap" @click="raw('\x1b[A')">↑</button>
+          <button class="vk tap" @click="raw('\x1b[B')">↓</button>
+          <button class="vk tap" @click="raw('\x1b[C')">→</button>
+          <button class="vk tap" @click="raw('\x1b[5~')">PGUP</button>
+          <button class="vk tap" @click="raw('\x1b[6~')">PGDN</button>
+          <button class="vk tap" @click="raw('\x1b[2~')">INS</button>
+          <button class="vk tap" @click="raw(' ')">SPACE</button>
+        </div>
+        <div class="kgrid cc">
+          <button v-for="[l, c] in combos" :key="l" class="vk tap" @click="raw(c)">{{ l }}</button>
+          <button v-for="[l, c] in alts" :key="l" class="vk alt tap" @click="raw(c)">{{ l }}</button>
+        </div>
+        <div class="kgrid sym">
+          <button v-for="s2 in syms" :key="s2" class="vk tap" @click="press(s2)">{{ s2 }}</button>
+        </div>
+      </div>
     </div>
     <!-- 隐藏态浮球 -->
     <button v-else class="kfab tap" @click="keysMode = 'slim'">⌨</button>
@@ -122,6 +145,7 @@ onUnmounted(() => {
         <b>终端会话</b><span class="muted" style="font-size:12px"> {{ sessions.length }} 个</span>
         <span class="sp"></span>
         <button class="mb tap" @click="newTerm(); showMgr = false">＋ 新建</button>
+        <button class="mb tap" @click="showMgr = false">✕</button>
       </div>
       <div class="mlist">
         <div v-for="s in sessions" :key="s.id" class="mi tap" @click="activate(s.id); showMgr = false">
@@ -178,11 +202,23 @@ onUnmounted(() => {
 .kspace { flex: 1; min-width: 4px; }
 .kfab { position: fixed; right: 14px; bottom: 18px; z-index: 20; width: 44px; height: 44px; border-radius: 50%;
   background: #8b5cf6; color: #fff; border: 0; font-size: 18px; box-shadow: 0 6px 20px rgba(0,0,0,.5); }
-/* 会话管理器 */
-.mask { position: fixed; inset: 0; background: rgba(0,0,0,.5); z-index: 60; }
-.mgr { position: fixed; left: 50%; transform: translateX(-50%); bottom: 0; width: 100%; max-width: 560px; max-height: 72vh;
-  background: #14161c; border: 1px solid #2c303b; border-radius: 18px 18px 0 0; z-index: 61; display: flex; flex-direction: column;
-  box-shadow: 0 -12px 40px rgba(0,0,0,.5); }
+/* 展开键盘：网格自适应（不再横向滚动） */
+.kpanel { border-top: 1px dashed #23262e; background: #101219;
+  animation: kslide .18s ease; max-height: 42vh; overflow-y: auto; padding-bottom: 2px; }
+@keyframes kslide { from { transform: translateY(30px); opacity: 0; } }
+.kgrid { display: grid; grid-template-columns: repeat(8, 1fr); gap: 4px; padding: 5px 7px 2px; }
+.kgrid.cc { grid-template-columns: repeat(7, 1fr); }
+.kgrid .vk { width: 100%; min-width: 0; }
+.kgrid.cc .vk { color: #7dd3a8; background: #182227; border-color: #24402f; }
+.kgrid.cc .vk.alt { color: #e8b268; background: #241f18; border-color: #4a3c26; }
+.kgrid.sym { grid-template-columns: repeat(10, 1fr); }
+.kgrid.sym .vk { font-size: 13px; }
+/* 会话管理器：居中弹窗（不压快捷键条） */
+.mask { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 60; }
+.mgr { position: fixed; left: 50%; top: 44%; transform: translate(-50%, -50%); width: calc(100% - 32px); max-width: 520px; max-height: 64vh;
+  background: #14161c; border: 1px solid #2c303b; border-radius: 16px; z-index: 61; display: flex; flex-direction: column;
+  box-shadow: 0 16px 48px rgba(0,0,0,.6); animation: mgrin .16s ease; }
+@keyframes mgrin { from { transform: translate(-50%, -46%) scale(.97); opacity: 0; } }
 .mh { display: flex; align-items: center; gap: 8px; padding: 14px 16px 8px; color: #dcddde; font-size: 15px; }
 .sp { flex: 1; }
 .mb { background: #1a1d26; color: #c6c9d0; border: 1px solid #2c303b; border-radius: 8px; padding: 6px 10px; font-size: 12px; flex-shrink: 0; }
