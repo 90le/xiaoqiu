@@ -100,7 +100,6 @@ watch(() => st.value?.streamingMessage?.content?.map(b => b.text || b.thinking |
 })
 watch(() => st.value?.isStreaming, (b, old) => {
   if (b === false && old === true) {
-    abortedUserId.value = '' // 正常回复完成，清中断遗留
     if (ttsOn.value) speakLast()
   }
 })
@@ -135,11 +134,10 @@ function startEdit(m) {
 function cancelEdit() { editId.value = ''; input.value = ''; attachments.value = []; autoGrow() }
 let submitLock = 0
 function submitOnce() {
-  window.__dbg && window.__dbg('▶submitOnce editId=' + (editId.value || '空') + ' input=' + input.value.length + '字')
   const now = Date.now()
-  if (now - submitLock < 400) { window.__dbg && window.__dbg('↩防抖锁跳过'); return }
+  if (now - submitLock < 400) return
   submitLock = now
-  if (!editId.value) { window.__dbg && window.__dbg('↩editId空,提前返回'); return }
+  if (!editId.value) return
   if (attachments.value.some(a => a.base64) && !chat.state?.model?.vision) {
     warn('含图片但当前模型不支持：已自动去掉图片发送文字')
     attachments.value = []
@@ -151,27 +149,10 @@ function submitEdit() {
   if (!text || !editId.value) return
   const atts = buildAtts()
   if (atts === false) return
-  // pi SDK 的 fork(edit_message) 在内嵌环境有缺陷：fork 后回复永不到达（多客户端复现）
-  // 改用两条可靠路径：
-  const ms = msgs.value
-  const lastUser = [...ms].reverse().find(x => x.role === 'user')
-  if (editId.value === lastUser?.id) {
-    // 路径1·最后一条用户消息：直接补发新文本——模型视为更正，回复最新意图
-    api.prompt(text, atts)
-  } else {
-    // 路径2·较老消息：新会话 + 语境前缀（老对话留在历史列表）
-    const ctx = recentCtx()
-    api.newChat()
-    setTimeout(() => api.prompt('（继续之前的对话。之前聊到：' + ctx.slice(0, 300) + '）\n\n现在我说：' + text), 400)
-  }
-  editId.value = ''
-  input.value = ''
-  attachments.value = []
-  autoGrow()
-  editId.value = ''
-  input.value = ''
-  attachments.value = []
-  autoGrow()
+  // webui 同款：edit_message = fork（退回该消息/丢弃其后/重发）；
+  // 服务端 fork 后经 conversations+snapshot 自动切换视图，客户端无条件退出编辑态
+  api.editMessage(editId.value, text, atts && atts.length ? atts : undefined)
+  cancelEdit()
 }
 // 快脑=语音专用：悬浮临时气泡+打字机流式+语音同步；文字直发慢脑
 function recentCtx() {
@@ -209,7 +190,7 @@ async function voiceFlow(t) {
       const opt = (data && data.prompt) ? data.prompt : t
       vb.state = ''
       if (data && data.reply) { speakText(data.reply); typewrite('🛠 ' + data.reply) }
-      sendCritical({ type: 'prompt', text: opt, attachments: atts || undefined }) // 慢脑接管（必达）
+      api.prompt(opt, atts) // 慢脑接管（主消息流可见）
       vbDismiss(3000)
     }
   } catch { vb.show = false; api.prompt(t, atts) }
@@ -225,14 +206,7 @@ async function speakText(t) {
   } catch {}
   try { await fetch('/api/tts_speak', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: say }) }) } catch {}
 }
-const abortedUserId = ref('') // 中断后未获回复的用户消息（下一条发送自动替换，防回复旧消息）
-function doAbort() {
-  const ms = msgs.value
-  for (let i = ms.length - 1; i >= 0; i--) {
-    if (ms[i].role === 'user') { abortedUserId.value = ms[i].id; break }
-  }
-  api.abort()
-}
+function doAbort() { api.abort() } // webui 同款：只发 abort；后续 prompt 是普通追加
 const toasts = ref([])
 watch(() => chat.notices.length, () => {
   const list = chat.notices.splice(0) // 消费掉
@@ -258,20 +232,17 @@ function buildAtts() {
     : { data: a.base64, mimeType: a.mime })
 }
 function send(mode) { // 文字直发慢脑（快脑只在语音链）
+  if (editId.value) { submitEdit(); return } // 编辑态优先：绝不落入普通发送
   const text = input.value.trim()
-  if (!text) return
-  if (editId.value) { submitEdit(); return }
+  const hasAtt = attachments.value.some(a => a.base64 || a.fileB64)
+  if (chat.status !== 'open' || (!text && !hasAtt)) return // webui：断线/空内容不发
   const atts = buildAtts()
   if (atts === false) return
-  // 中断遗留：上一条用户消息没获得回复 → 替换它（模型不会先回旧的）
-  if (abortedUserId.value && msgs.value[msgs.value.length - 1]?.id === abortedUserId.value) {
-    sendCritical({ type: 'edit_message', messageId: abortedUserId.value, text, attachments: atts })
-  } else {
-    sendCritical({ type: 'prompt', text, attachments: atts || undefined })
+  // webui submit()：发送成功才清空输入（失败保留文本，按钮断线时禁用）
+  if (api.prompt(text, atts, mode === 'followUp')) {
+    input.value = ''; attachments.value = []
+    autoGrow()
   }
-  abortedUserId.value = ''
-  input.value = ''; attachments.value = []
-  autoGrow()
 }
 function sendQueued() { api.prompt(input.value.trim(), undefined, true); input.value = '' }
 function rmQueued(kind, text) { wsSend({ type: 'queue_remove', kind, text }) }
@@ -335,46 +306,6 @@ window.__voiceStatus = (s) => {
 }
 window.__xiaoqiuTask = (t) => { if (t) api.prompt(t) }
 
-// ── 超级调试 OSD：函数轨迹/早退原因/JS异常/发送包 全屏上可见 ──
-window.__dbgLines = []
-window.__dbg = function (msg) {
-  const arr = window.__dbgLines
-  arr.push('[' + new Date().toLocaleTimeString('zh', { hour12: false }) + '] ' + msg)
-  if (arr.length > 5) arr.shift()
-  const el = document.getElementById('tapdbg2')
-  if (el) el.innerHTML = arr.join('<br>')
-}
-window.addEventListener('error', e => window.__dbg('❌JS错误: ' + (e.message || '') + ' @' + String(e.filename || '').slice(-25) + ':' + e.lineno))
-window.addEventListener('unhandledrejection', e => window.__dbg('❌Promise: ' + (e.reason && e.reason.message || e.reason)))
-
-// ── 调试探针（定位按钮无反应）：右上角显示每次触摸命中的元素 ──
-if (!window.__tapDbg) {
-  window.__tapDbg = true
-  const el = document.createElement('div')
-  el.id = 'tapdbg'
-  el.style.cssText = 'position:fixed;top:3px;right:5px;z-index:99999;background:rgba(0,0,0,.85);color:#3ecf72;font:10px ui-monospace,monospace;padding:3px 7px;border-radius:6px;pointer-events:none;max-width:72%;overflow:hidden;white-space:nowrap'
-  document.body.appendChild(el)
-  const el2 = document.createElement('div')
-  el2.id = 'tapdbg2'
-  el2.style.cssText = 'position:fixed;top:26px;right:5px;z-index:99999;background:rgba(120,0,0,.88);color:#ffd;font:10px ui-monospace,monospace;padding:4px 7px;border-radius:6px;pointer-events:none;max-width:78%;white-space:pre-line;text-align:right'
-  document.body.appendChild(el2)
-  document.addEventListener('touchstart', e => {
-    const t = e.target
-    el.textContent = '⦿ ' + (t.tagName || '?') + '.' + String(t.className).slice(0, 26) + ' "' + String(t.textContent || '').slice(0, 10) + '"'
-  }, true)
-  document.addEventListener('click', e => {
-    const t = e.target
-    el.textContent = '⌖ ' + (t.tagName || '?') + '.' + String(t.className).slice(0, 26) + ' "' + String(t.textContent || '').slice(0, 10) + '"'
-  }, true)
-}
-
-import { startWatchdog } from '../useChat.js'
-document.addEventListener('visibilitychange', () => {
-  if (document.visibilityState === 'visible') {
-    // 切回前台：探活（30s 无消息看门狗也会兜底）
-    wsSend({ type: 'get_state' })
-  }
-})
 onMounted(() => { connect(); startWatchdog(); scroll() })
 onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; delete window.__xiaoqiuTask })
 </script>
