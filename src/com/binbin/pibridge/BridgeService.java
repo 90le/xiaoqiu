@@ -175,6 +175,14 @@ public class BridgeService extends Service {
 
     /** 通知实时聚合播报：等消息流平稳→按发送人合并→带语境拟人化→不打断上一条播报 */
     private void startNotifyAnnouncer() {
+        try { // 语境持久化加载（重启不丢对话记忆）
+            java.io.File cf = new java.io.File(getFilesDir(), "voice-ctx.json");
+            if (cf.canRead()) {
+                org.json.JSONObject saved = new org.json.JSONObject(new String(java.nio.file.Files.readAllBytes(cf.toPath()), "UTF-8"));
+                java.util.Iterator<String> it = saved.keys();
+                while (it.hasNext()) { String k = it.next(); senderCtx.put(k, saved.opt(k)); }
+            }
+        } catch (Exception ignore) {}
         new Thread(() -> {
             long[] lastSeen = {System.currentTimeMillis()};
             while (true) {
@@ -237,6 +245,14 @@ public class BridgeService extends Service {
                     }
                     if (texts.length() == 0) { if (pendMsgs.length() == 0) firstPendMs = 0; continue; }
 
+                    // 去重：与该发送人上一轮完全相同的消息组合 → 不重复播报
+                    StringBuilder sig = new StringBuilder();
+                    for (int i = 0; i < texts.length(); i++) sig.append(texts.optString(i)).append("|");
+                    String lastSig = senderCtx.optString(key + "|sig", "");
+                    if (sig.toString().equals(lastSig)) {
+                        if (pendMsgs.length() == 0) firstPendMs = 0;
+                        continue;
+                    }
                     String prev = senderCtx.optString(key, "");
                     String say0;
                     if ("true".equals(Tools.loadCfg().optString("notify_announce_ai", "true"))) {
@@ -247,12 +263,25 @@ public class BridgeService extends Service {
                         say0 = gTitle + "连发" + texts.length() + "条消息，" + texts.optString(texts.length() - 1);
                     }
                     final String say = say0;
-                    // 语境记忆：每人保留最近4轮播报
+                    // 语境记忆：每人保留最近6轮播报（重启不丢：落盘 voice-ctx.json）
                     org.json.JSONArray cl = senderCtx.optJSONArray(key);
                     if (cl == null) { cl = new org.json.JSONArray(); }
                     cl.put(say);
-                    while (cl.length() > 4) cl.remove(0);
+                    while (cl.length() > 6) cl.remove(0);
                     senderCtx.put(key, cl);
+                    senderCtx.put(key + "|sig", sig.toString());
+                    senderCtx.put(key + "|last", System.currentTimeMillis());
+                    try {
+                        java.io.File cf = new java.io.File(getFilesDir(), "voice-ctx.json");
+                        java.io.FileOutputStream fo2 = new java.io.FileOutputStream(cf);
+                        fo2.write(senderCtx.toString().getBytes("UTF-8")); fo2.close();
+                    } catch (Exception ignore) {}
+                    // 镜像进 pi 记忆系统：小丘做任务时能查到"最近谁找过你"
+                    try {
+                        Tools.call("memory_save", new org.json.JSONObject()
+                            .put("key", "voice." + gTitle)
+                            .put("value", "最近一次播报(" + new java.text.SimpleDateFormat("MM-dd HH:mm", java.util.Locale.CHINA).format(new java.util.Date()) + ")：" + say));
+                    } catch (Exception ignore) {}
 
                     // 不打断：等上一条播报完（最多30s）
                     long deadline = System.currentTimeMillis() + 30000;

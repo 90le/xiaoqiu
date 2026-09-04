@@ -222,7 +222,22 @@ public class Tools {
         return (r == null || r.isEmpty()) ? clean : r;
     }
 
-    /** 云 TTS：智谱 GLM-TTS（童童音色）；失败返回 false 由调用方回退 */
+    /** 云 TTS 异步版：任意线程可调（内部子线程联网），失败自动回退本地；连接超时放宽+重试1次 */
+    static void cloudSpeakAsync(final String text) {
+        new Thread(() -> {
+            boolean ok = false;
+            for (int attempt = 0; attempt < 2 && !ok; attempt++) {
+                if (attempt > 0) { try { Thread.sleep(1500); } catch (Exception ignore) {} }
+                ok = cloudSpeak(text);
+            }
+            if (!ok) {
+                Log.w("PiBridge", "云TTS两次失败，回退本地");
+                speakLocal(text);
+            }
+        }, "cloud-tts").start();
+    }
+
+    /** 云 TTS：智谱 GLM-TTS（童童音色）；失败返回 false 由调用方回退。注意：只能在非主线程调用 */
     static boolean cloudSpeak(String text) {
         try {
             String key = fastKey();
@@ -230,7 +245,7 @@ public class Tools {
             stopCloud();
             javax.net.ssl.HttpsURLConnection c = (javax.net.ssl.HttpsURLConnection)
                     new java.net.URL("https://open.bigmodel.cn/api/paas/v4/audio/speech").openConnection();
-            c.setRequestMethod("POST"); c.setConnectTimeout(4000); c.setReadTimeout(25000); c.setDoOutput(true);
+            c.setRequestMethod("POST"); c.setConnectTimeout(8000); c.setReadTimeout(25000); c.setDoOutput(true);
             c.setRequestProperty("Authorization", "Bearer " + key);
             c.setRequestProperty("Content-Type", "application/json");
             String voice = loadCfg().optString("tts_voice", "tongtong");
@@ -445,8 +460,9 @@ public class Tools {
             + "\n妈妈连发：知道了啦/小宝/我本来过去找你吃饭。但是没时间～/嘻嘻"
             + "\n好：妈妈跟你说，知道啦小宝，她本来想过去找你吃饭，但没时间，嘻嘻～"
             + "\n坏：妈妈发来四条消息，表示知道了并说明无法赴约（这是总结，把人的味道丢了）"
+            + "\n- 如果正文带'名字：'前缀，那是群聊：要提到群名和说话的人（如'项目群里张三喊你…'），几个人说话都点到"
             + "\n\n【格式】"
-            + "\n- 开头点明是谁（妈妈说/老王喊你）"
+            + "\n- 开头点明是谁（妈妈说/老王喊你/项目群里张三说）"
             + "\n- 验证码/金额/地址/取件码等数字一字不差"
             + "\n- 有上一轮语境就自然衔接（可以'又''还是'），别重复旧内容"
             + "\n- 15~60字，一句说完，不要引号不要emoji，只输出要念的话";
@@ -667,11 +683,10 @@ public class Tools {
                 String engine = "auto";
                 try { engine = loadCfg().optString("tts_engine", "auto"); } catch (Exception ignore) {}
                 try { if (a.has("engine") && !a.isNull("engine")) engine = a.getString("engine"); } catch (Exception ignore) {}
-                // 云：快速失败，失败降级小米
+                // 云：异步拉音频（主线程禁止联网！），两次失败自动回退小米
                 if ("cloud".equals(engine) || "auto".equals(engine)) {
-                    if (cloudSpeak(text)) return ok("开始朗读（云端童童）");
-                    speakLocal(text);
-                    return ok("云额度不足，已用小米本地朗读");
+                    cloudSpeakAsync(text);
+                    return ok("开始朗读（云端童童，失败自动回退本地）");
                 }
                 if ("xiaomi".equals(engine)) { speakLocal(text); return ok("开始朗读（小米本地）"); }
                 // system
