@@ -97,6 +97,23 @@ public class Mcp implements Runnable {
                         .put("content", new JSONArray().put(new JSONObject().put("type", "text").put("text", res.toString())))
                         .put("structuredContent", res);
                 resp(s, 200, out);
+            } else if (path.startsWith("/shots/")) {
+                // 副屏截图预览：白名单目录，防路径穿越
+                try {
+                    String fname = path.substring(7);
+                    if (fname.contains("..") || fname.contains("/")) throw new Exception("bad path");
+                    java.io.File sf = new java.io.File("/storage/emulated/0/pibridge/shots/", fname);
+                    if (!sf.canRead()) throw new Exception("not found");
+                    java.io.FileInputStream fis = new java.io.FileInputStream(sf);
+                    ByteArrayOutputStream abo = new ByteArrayOutputStream();
+                    byte[] ab = new byte[8192]; int an;
+                    while ((an = fis.read(ab)) > 0) abo.write(ab, 0, an);
+                    fis.close();
+                    byte[] bodyBytes = abo.toByteArray();
+                    s.getOutputStream().write(("HTTP/1.1 200 OK\r\nContent-Type: image/png\r\nContent-Length: " + bodyBytes.length + "\r\nCache-Control: no-cache\r\nConnection: close\r\n\r\n").getBytes(StandardCharsets.UTF_8));
+                    s.getOutputStream().write(bodyBytes);
+                    s.close();
+                } catch (Exception e2) { resp(s, 404, new JSONObject().put("error", "shot not found")); }
             } else if (path.equals("/") || path.startsWith("/www/") || path.endsWith(".html") || path.endsWith(".css") || path.endsWith(".js") || path.endsWith(".svg")) {
                 // 静态资源（assets/www），同端口零冲突
                 try {

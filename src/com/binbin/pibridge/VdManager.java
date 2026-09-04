@@ -179,16 +179,21 @@ public class VdManager {
         try {
             File dir = new File(c.getExternalFilesDir(null), "vd");
             if (!dir.isDirectory()) dir.mkdirs();
+            java.io.ByteArrayOutputStream pbo = new java.io.ByteArrayOutputStream();
+            last.compress(Bitmap.CompressFormat.PNG, 80, pbo);
+            byte[] png = pbo.toByteArray();
             File f = new File(dir, "shot-" + System.currentTimeMillis() + ".png");
             FileOutputStream fo = new FileOutputStream(f);
-            last.compress(Bitmap.CompressFormat.PNG, 80, fo);
-            fo.close();
+            fo.write(png); fo.close();
             // 同步一份到公共目录，pi 环境直接可读
             File pub = new File("/storage/emulated/0/pibridge/shots/vd-latest.png");
             try { java.nio.file.Files.copy(f.toPath(), pub.toPath(),
                     java.nio.file.StandardCopyOption.REPLACE_EXISTING); } catch (Exception ignore) {}
             JSONObject o = new JSONObject();
-            try { o.put("file", pub.getAbsolutePath()).put("size", pub.length()); } catch (Exception ignore) {}
+            try {
+                o.put("file", pub.getAbsolutePath()).put("size", pub.length());
+                o.put("png_b64", android.util.Base64.encodeToString(png, android.util.Base64.NO_WRAP)); // 前端预览用（绕开FUSE权限）
+            } catch (Exception ignore) {}
             return o;
         } catch (Exception e) { return err("SHOT_FAIL", e.toString()); }
     }
