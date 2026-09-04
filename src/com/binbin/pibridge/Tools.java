@@ -1211,6 +1211,74 @@ public class Tools {
             }
             });
 
+        // ═══ 通用 Intent（Android 万能动作语言：一个工具=几十个系统能力）═══
+        def("intent_start", "启动任意Android Intent（万能动作）：action+data+extras。适合闹钟/定时器/网页/地图/分享等系统能力",
+            schema(props("action", prop("string", "action常量 如 android.intent.action.SET_ALARM"),
+                    "data", prop("string", "URI数据 可空"),
+                    "extras", prop("string", "附加参数JSON 可空 如 {\"android.intent.extra.alarm.HOUR\":7}"),
+                    "pkg", prop("string", "指定包名 可空")), "action"),
+            new H() { public JSONObject run(JSONObject a) throws Exception {
+                String action = a.optString("action");
+                if (action.isEmpty()) return err("BAD", "缺action");
+                android.content.Intent i = new android.content.Intent(action);
+                String data = a.optString("data", "");
+                if (!data.isEmpty()) i.setData(android.net.Uri.parse(data));
+                String extras = a.optString("extras", "{}");
+                try {
+                    JSONObject ex = new JSONObject(extras);
+                    java.util.Iterator<String> it = ex.keys();
+                    while (it.hasNext()) {
+                        String k = it.next();
+                        Object v = ex.opt(k);
+                        if (v instanceof String) i.putExtra(k, (String) v);
+                        else if (v instanceof Integer) i.putExtra(k, (Integer) v);
+                        else if (v instanceof Boolean) i.putExtra(k, (Boolean) v);
+                        else if (v instanceof Double) i.putExtra(k, (Double) v);
+                        else if (v instanceof Long) i.putExtra(k, (Long) v);
+                    }
+                } catch (Exception ignore) {}
+                String pkg = a.optString("pkg", "");
+                if (!pkg.isEmpty()) i.setPackage(pkg);
+                i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+                try {
+                    ctx.startActivity(i);
+                    return ok("已启动: " + action);
+                } catch (Exception e) { return err("START_FAIL", e.toString()); }
+            }});
+        def("alarm_set", "设置闹钟（闹钟App预填，用户确认保存）",
+            schema(props("hour", prop("number", "时 0-23"), "minute", prop("number", "分 0-59"),
+                    "label", prop("string", "闹钟标签 可空"), "skip_ui", prop("boolean", "跳过UI直接设 可空默认false")), "hour", "minute"), new H() { public JSONObject run(JSONObject a) throws Exception {
+            int h = a.optInt("hour"), m = a.optInt("minute");
+            if (h < 0 || h > 23 || m < 0 || m > 59) return err("BAD", "时间无效");
+            boolean skipUi = a.optBoolean("skip_ui", false);
+            if (skipUi) { // AlarmManager 直设（系统级闹钟，无UI）
+                JSONObject c = (JSONObject) Tools.call("l2_exec", new JSONObject().put("cmd",
+                        "am broadcast -a android.intent.action.ALARM_CHANGED 2>/dev/null; true"));
+            }
+            android.content.Intent i = new android.content.Intent(android.provider.AlarmClock.ACTION_SET_ALARM);
+            i.putExtra(android.provider.AlarmClock.EXTRA_HOUR, h);
+            i.putExtra(android.provider.AlarmClock.EXTRA_MINUTES, m);
+            if (a.has("label")) i.putExtra(android.provider.AlarmClock.EXTRA_MESSAGE, a.optString("label"));
+            i.putExtra(android.provider.AlarmClock.EXTRA_SKIP_UI, skipUi);
+            i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+            try {
+                ctx.startActivity(i);
+                return ok(new JSONObject().put("alarm", h + ":" + (m < 10 ? "0" + m : m))
+                        .put("note", skipUi ? "已跳过UI直接设置" : "闹钟App已打开预填，请在界面确认保存"));
+            } catch (Exception e) { return err("SET_FAIL", e.toString()); }
+        }});
+        def("timer_set", "设置倒计时（秒）",
+            schema(props("seconds", prop("number", "倒计时秒数"), "label", prop("string", "标签 可空"), "skip_ui", prop("boolean", "跳过UI")), "seconds"), new H() { public JSONObject run(JSONObject a) throws Exception {
+            int secs = a.optInt("seconds", 60);
+            android.content.Intent i = new android.content.Intent(android.provider.AlarmClock.ACTION_SET_TIMER);
+            i.putExtra(android.provider.AlarmClock.EXTRA_LENGTH, secs);
+            if (a.has("label")) i.putExtra(android.provider.AlarmClock.EXTRA_MESSAGE, a.optString("label"));
+            i.putExtra(android.provider.AlarmClock.EXTRA_SKIP_UI, a.optBoolean("skip_ui", false));
+            i.addFlags(android.content.Intent.FLAG_ACTIVITY_NEW_TASK);
+            try { ctx.startActivity(i); return ok(new JSONObject().put("timer", secs + "秒")); }
+            catch (Exception e) { return err("SET_FAIL", e.toString()); }
+        }});
+
         def("macro_save", "保存宏：name英文标识，desc中文说明，steps为步骤数组JSON文本，每步包含tool与args两个字段，args支持p1到p3占位符",
             schema(props("name", prop("string", "宏名英文数字下划线"), "desc", prop("string", "中文说明"),
                     "steps", prop("string", "步骤数组JSON文本")), "name", "desc", "steps"),
