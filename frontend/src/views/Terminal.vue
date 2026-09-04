@@ -16,7 +16,7 @@ const sessions = computed(() => tstore.order.map(id => tstore.sessions[id]).filt
 function openShellDrawer() { window.dispatchEvent(new Event('xq-open-drawer')) }
 function showKb() { try { window.XiaoqiuBridge && window.XiaoqiuBridge.showKeyboard() } catch {} }
 // 命令输入栏：真实input（原生键盘100%弹出），整行+回车送pty
-const cmdEl = ref(null), cmd = ref('')
+const cmd = ref('')
 const cmdHist = ref([]), histIdx = ref(-1)
 function runCmd() {
   const c = cmd.value
@@ -44,6 +44,8 @@ function activate(id) {
   const s = tstore.sessions[id]
   if (!s) return
   activeId.value = id
+  // 关键：新建的 pane 在隐藏池里，必须搬进舞台（否则黑屏——只切类不搬家）
+  if (stage.value && s.el.parentNode !== stage.value) stage.value.appendChild(s.el)
   for (const sid of tstore.order) tstore.sessions[sid]?.el.classList.toggle('act', sid === id)
   requestAnimationFrame(() => setTimeout(() => {
     try { s.fit.fit() } catch {}
@@ -77,8 +79,7 @@ const combos = [
   ['^C', '\x03'], ['^D', '\x04'], ['^Z', '\x1a'], ['^L', '\x0c'], ['^U', '\x15'], ['^W', '\x17'],
   ['^R', '\x12'], ['^A', '\x01'], ['^E', '\x05'], ['^K', '\x0b'], ['^Y', '\x19'], ['^P', '\x10'], ['^N', '\x0e'],
 ]
-const alts = [['ALT+B', '\x1bb'], ['ALT+F', '\x1bf'], ['ALT+D', '\x1bd'], ['ALT+.', '\x1b.'], ['ALT+<', '\x1b[1~'], ['ALT+>', '\x1b[4~']]
-const navs = [['PGUP', '\x1b[5~'], ['PGDN', '\x1b[6~'], ['HOME', '\x1b[H'], ['END', '\x1b[F']]
+const alts = [['ALT+B', '\x1bb'], ['ALT+F', '\x1bf'], ['ALT+D', '\x1bd'], ['ALT+.', '\x1b.']]
 const syms = ['|','-','/','\\','~','`','$','#','%','^','&','*','(',')','[',']','{','}','<','>','=','+','.',',',';',':','\'','"','!','?','_','@']
 
 function fmtAgo(t) {
@@ -122,7 +123,7 @@ onUnmounted(() => {
     <!-- 虚拟按键（三态：hide→浮球 / slim / full） -->
     <div v-if="keysMode !== 'hide'" class="vkeys" :class="{ full: keysMode === 'full' }">
       <div class="cmdrow">
-        <input ref="cmdEl" v-model="cmd" class="cmdin" placeholder="输入命令，回车执行…"
+        <input v-model="cmd" class="cmdin" placeholder="输入命令，回车执行…"
           @keydown.enter.prevent="runCmd" @keydown.up.prevent="cmdPrev" @keydown.down.prevent="cmdNext" />
         <button class="cmdgo tap" @click="runCmd">执行</button>
       </div>
@@ -250,12 +251,12 @@ onUnmounted(() => {
 .kgrid.cc .vk.alt { color: #e8b268; background: #241f18; border-color: #4a3c26; }
 .kgrid.sym { grid-template-columns: repeat(10, 1fr); }
 .kgrid.sym .vk { font-size: 13px; }
-/* 会话管理器：居中弹窗（不压快捷键条） */
-.mask { position: fixed; inset: 0; background: rgba(0,0,0,.55); z-index: 60; }
-.mgr { position: fixed; left: 50%; top: 152px; transform: translateX(-50%); width: calc(100% - 48px); max-width: 360px; max-height: 46vh;
+/* 会话管理器：顶栏下右侧紧凑弹层（锚定🗂按钮，不居中不挡终端） */
+.mask { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 60; }
+.mgr { position: fixed; top: 56px; right: 10px; width: calc(100% - 24px); max-width: 330px; max-height: 52vh;
   background: #14161c; border: 1px solid #2c303b; border-radius: 14px; z-index: 61; display: flex; flex-direction: column;
   box-shadow: 0 12px 32px rgba(0,0,0,.55); animation: mgrin .14s ease; }
-@keyframes mgrin { from { transform: translate(-50%, -8px); opacity: 0; } }
+@keyframes mgrin { from { transform: translateY(-8px); opacity: 0; } }
 .mh { display: flex; align-items: center; gap: 8px; padding: 14px 16px 8px; color: #dcddde; font-size: 15px; }
 .sp { flex: 1; }
 .mb { background: #1a1d26; color: #c6c9d0; border: 1px solid #2c303b; border-radius: 8px; padding: 6px 10px; font-size: 12px; flex-shrink: 0; }
