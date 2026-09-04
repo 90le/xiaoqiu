@@ -685,6 +685,11 @@ public class Tools {
                     return r.has("error") ? err(r.getString("error"), r.optString("msg")) : ok(r);
                 }
                 if ("launch".equals(act)) {
+                    // 主屏正在用 → 拒绝发射（绝不从用户手里抢App，防MIUI自动切后台）
+                    JSONObject busy = (JSONObject) Tools.call("l2_exec", new JSONObject().put("cmd",
+                            "dumpsys activity activities 2>/dev/null | grep topResumedActivity | grep -q '" + a.optString("pkg") + "' && echo BUSY_YES || echo BUSY_NO"));
+                    if (String.valueOf(busy).contains("BUSY_YES"))
+                        return err("IN_USE", "该App正在主屏前台使用中，为避免打扰你，已取消副屏发射");
                     JSONObject r = VdManager.launch(ctx, a.optString("pkg"));
                     if (r != null) return r.has("error") ? err(r.getString("error"), r.optString("msg")) : ok(r);
                     // 锁屏检测：锁屏时系统禁止App渲染，诚实报错
@@ -707,8 +712,13 @@ public class Tools {
                                 .put("displayId", did).put("memories", relatedMemories(a.optString("pkg")));
                         return ok(lo);
                     }
-                    // 落主屏了：立刻击杀，绝不占用户前台
-                    Tools.call("l2_exec", new JSONObject().put("cmd", "am force-stop " + a.optString("pkg")));
+                    // 落主屏了：先挪回副屏（保任务少闪断），挪不动再清场
+                    JSONObject mv = (JSONObject) Tools.call("l2_exec", new JSONObject().put("timeout_sec", 40)
+                        .put("cmd", "tid=$(am stack list 2>/dev/null | grep '" + a.optString("pkg") + "' | grep -oE 'taskId=[0-9]+' | head -1 | cut -d= -f2); "
+                            + "if [ -n \"$tid\" ]; then am stack move-task $tid " + did + " 2>/dev/null; fi; sleep 1; "
+                            + "if dumpsys activity activities | grep -A3 'Display #" + did + " ' | grep -q '" + a.optString("pkg") + "'; then echo __RESCUED__; else am force-stop " + a.optString("pkg") + "; echo __KILLED__; fi"));
+                    if (String.valueOf(mv).contains("__RESCUED__"))
+                        return ok(new JSONObject().put("msg", "App原本落主屏，已挪回副屏" + did));
                     return err("LAUNCH_LANDED_MAIN", "未能发射到副屏（已清理），主屏未受影响");
                 }
                 // tap / swipe / text / key / longpress / scroll_until
@@ -1219,6 +1229,39 @@ public class Tools {
             }
             });
 
+        def("xhs_search_direct", "小红书深链直达搜索结果页（绕开输入框自动化；内置全套防护：主屏占用检测→清场→副屏发射→落点校验→误落救援）",
+            schema(props("keyword", prop("string", "搜索关键词（自动URL编码）")), "keyword"), new H() { public JSONObject run(JSONObject a) throws Exception {
+            String kw = a.optString("keyword", "");
+            if (kw.isEmpty()) return err("BAD", "缺keyword");
+            String pkg = "com.xingin.xhs";
+            // ① 主屏正在用 → 拒绝（绝不抢用户App）
+            JSONObject busy = (JSONObject) Tools.call("l2_exec", new JSONObject().put("cmd",
+                    "dumpsys activity activities 2>/dev/null | grep topResumedActivity | grep -q '" + pkg + "' && echo BUSY_YES || echo BUSY_NO"));
+            if (String.valueOf(busy).contains("BUSY_YES"))
+                return err("IN_USE", "小红书正在你主屏前台使用中，为避免打扰已取消");
+            // ② 确保副屏存在（复用带防护的 vd create/launch）
+            if (!VdManager.alive()) {
+                Tools.call("vd", new JSONObject().put("action", "create"));
+                JSONObject rl = (JSONObject) Tools.call("vd", new JSONObject().put("action", "launch").put("pkg", pkg));
+                if (!rl.optBoolean("ok", false)) return rl; // 只在真失败时返回（成功响应里error:null不能误判）
+            }
+            int did = VdManager.displayId();
+            // ③ 记住用户当前前台App → 深链(会瞬间抢焦点) → 立刻把用户的App拉回前台 → 验证搜索页在副屏
+            String enc = android.net.Uri.encode(kw);
+            JSONObject c = (JSONObject) Tools.call("l2_exec", new JSONObject().put("timeout_sec", 60)
+                .put("cmd", "top=$(dumpsys activity activities | grep topResumedActivity | head -1 | awk '{print $3}'); "
+                    + "sleep 5; am start --display " + did + " -a android.intent.action.VIEW -d 'xhsdiscover://search/result?keyword=" + enc + "' >/dev/null 2>&1; sleep 4; "
+                    + "if [ -n \"$top\" ]; then am start --display 0 -n \"$top\" >/dev/null 2>&1; fi; sleep 1; "
+                    + "if dumpsys activity activities | grep -A3 'Display #" + did + " ' | grep -q GlobalSearchActivity; then echo __SEARCH_OK__; "
+                    + "elif dumpsys activity activities | grep -A3 'Display #" + did + " ' | grep -q '" + pkg + "'; then echo __ON_VD_NO_SEARCH__; "
+                    + "else echo __MISS__; fi"));
+            String out = String.valueOf(c);
+            VdManager.touch();
+            if (out.contains("__SEARCH_OK__")) return ok(new JSONObject().put("displayId", did).put("keyword", kw).put("note", "搜索结果页已在副屏打开，可 vd shot + vision_elements 提取"));
+            if (out.contains("__ON_VD_NO_SEARCH__")) return err("SEARCH_NOT_OPEN", "App在副屏但深链未生效（可重试一次或用 vision 手动流程）");
+            if (out.contains("__RESCUED__")) return ok(new JSONObject().put("displayId", did).put("keyword", kw).put("note", "曾落主屏已挪回副屏"));
+            return err("LAUNCH_LANDED_MAIN", "深链落到主屏已清理（防打扰），可重试");
+        }});
         // ═══ 通用 Intent（Android 万能动作语言：一个工具=几十个系统能力）═══
         def("intent_start", "启动任意Android Intent（万能动作）：action+data+extras。适合闹钟/定时器/网页/地图/分享等系统能力",
             schema(props("action", prop("string", "action常量 如 android.intent.action.SET_ALARM"),
@@ -2059,9 +2102,11 @@ public class Tools {
         def("ui_recents", "打开最近任务", schema(props()), new H() { public JSONObject run(JSONObject a) {
             return AdbService.global(AdbService.GLOBAL_RECENTS) ? ok("已打开最近任务") : err("NO_SERVICE", "辅助服务未开启");
         }});
-        def("ui_screen_read", "读取屏幕控件树（结构化 JSON：编号/文本/ID/坐标/可点击性）。display=0 主屏；display=N 读隐形副屏（配合 vd 工具）",
-            schema(props("display", prop("number", "屏幕ID 默认0主屏；读副屏传 vd create 返回的 displayId"))), new H() { public JSONObject run(JSONObject a) {
-            JSONArray nodes = AdbService.readTree(a.optInt("display", 0));
+        def("ui_screen_read", "读取屏幕控件树（结构化 JSON：编号/文本/ID/坐标/可点击性）。display=0 主屏；display=N 读隐形副屏（配合 vd 工具）；副屏建议传 pkg 过滤系统窗口串扰",
+            schema(props("display", prop("number", "屏幕ID 默认0主屏；读副屏传 vd create 返回的 displayId"),
+                    "pkg", prop("string", "只保留该包名的窗口节点（副屏强烈建议传，过滤系统窗口串扰）"))), new H() { public JSONObject run(JSONObject a) {
+            String fp = a.optString("pkg", "");
+            JSONArray nodes = AdbService.readTree(a.optInt("display", 0), fp.isEmpty() ? null : fp);
             if (nodes == null) return err("NO_SERVICE", "辅助服务未开启或该屏无活动窗口; diag=" + AdbService.diag);
             try { return ok(new JSONObject().put("count", nodes.length()).put("nodes", nodes)); }
             catch (Exception e) { return err("INTERNAL", e.toString()); }
@@ -2302,10 +2347,23 @@ public class Tools {
             String txt = a.optString("text", "");
             String r = disp > 0 ? AdbService.setTextOnDisplay(disp, txt) : AdbService.setText(txt);
             if (r.equals("已设置")) return ok(r);
-            // 副屏兜底：a11y写入无效时的中文输入正解
+            // 副屏兜底：a11y写入无效时 → L2聚焦 + IME切换(存原IME,完事还原) + ADBKeyboard中文注入 + 回读验证
             if (disp > 0) {
                 int[] c = AdbService.editableCenterOnDisplay(disp);
-                if (c != null) {
+                if (c == null) return err("SET_FAIL", r + "；副屏无可编辑节点(可vision定位+vd text兜底)");
+                JSONObject gi = (JSONObject) Tools.call("l2_exec", new JSONObject().put("cmd", "settings get secure default_input_method"));
+                String gs = String.valueOf(gi);
+                String prevIme = "com.sohu.inputmethod.sogou.xiaomi/.SogouIME";
+                int p1 = gs.indexOf("\"data\"");
+                if (p1 >= 0) {
+                    int p2 = gs.indexOf('"', gs.indexOf(':', p1) + 1);
+                    int p3 = gs.indexOf('"', p2 + 1);
+                    if (p2 > 0 && p3 > p2) prevIme = gs.substring(p2 + 1, p3);
+                }
+                boolean needSwitch = !prevIme.contains("adbkeyboard");
+                try {
+                    if (needSwitch)
+                        Tools.call("l2_exec", new JSONObject().put("cmd", "ime enable com.android.adbkeyboard/.AdbIME; ime set com.android.adbkeyboard/.AdbIME"));
                     Tools.call("l2_exec", new JSONObject().put("cmd", "input -d " + disp + " tap " + c[0] + " " + c[1]));
                     try { Thread.sleep(900); } catch (Exception ignore) {}
                     ctx.sendBroadcast(new android.content.Intent("ADB_INPUT_TEXT").putExtra("msg", txt));
@@ -2313,6 +2371,9 @@ public class Tools {
                     String v = AdbService.readEditableTextOnDisplay(disp);
                     if (v != null && v.contains(txt)) return ok(new JSONObject().put("msg", "已设置(ADBKeyboard兜底)").put("text", v));
                     return err("SET_FAIL", r + "；兜底后回读=" + (v == null ? "null" : v));
+                } finally {
+                    if (needSwitch)
+                        Tools.call("l2_exec", new JSONObject().put("cmd", "ime set " + prevIme));
                 }
             }
             return err("SET_FAIL", r);

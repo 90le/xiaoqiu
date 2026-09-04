@@ -160,7 +160,8 @@ public class AdbService extends AccessibilityService {
     }
 
     /** 读结构树；displayId>0 时读指定副屏（隐形虚拟屏同样可读，API33+） */
-    public static JSONArray readTree(int displayId) {
+    public static JSONArray readTree(int displayId) { return readTree(displayId, null); }
+    public static JSONArray readTree(int displayId, String filterPkg) {
         seq = 0;
         if (inst == null) return null;
         JSONArray out = new JSONArray();
@@ -187,10 +188,10 @@ public class AdbService extends AccessibilityService {
                         for (AccessibilityWindowInfo w : wins) {
                             AccessibilityNodeInfo r = null;
                             try { r = w.getRoot(); } catch (Throwable e) { diag += " root异常:" + e; }
-                            diag += "[w" + w.getType() + "/" + w.getLayer() + ":";
                             if (r != null) {
                                 String wp = String.valueOf(r.getPackageName());
-                                diag += wp + " 子节点" + r.getChildCount() + "]";
+                                if (filterPkg != null && !filterPkg.isEmpty() && !wp.equals(filterPkg)) { diag += "[skip:" + wp + "]"; continue; }
+                                diag += "[w" + w.getType() + "/" + w.getLayer() + ":" + wp + " 子节点" + r.getChildCount() + "]";
                                 try { lastPkg.put(displayId, wp); } catch (Exception ignore) {}
                                 walk(r, out, 0);
                             } else diag += "无根]";
