@@ -147,13 +147,27 @@ function submitOnce() {
   submitEdit()
 }
 function submitEdit() {
-  window.__dbg && window.__dbg('▶submitEdit text=' + input.value.trim().length + '字 id=' + editId.value)
   const text = input.value.trim()
-  if (!text || !editId.value) { window.__dbg && window.__dbg('↩submitEdit空值早退'); return }
+  if (!text || !editId.value) return
   const atts = buildAtts()
-  if (atts === false) { window.__dbg && window.__dbg('↩buildAtts拦截'); return }
-  window.__dbg && window.__dbg('→发送edit_message')
-  wsSend({ type: 'edit_message', messageId: editId.value, text, attachments: atts })
+  if (atts === false) return
+  // pi SDK 的 fork(edit_message) 在内嵌环境有缺陷：fork 后回复永不到达（多客户端复现）
+  // 改用两条可靠路径：
+  const ms = msgs.value
+  const lastUser = [...ms].reverse().find(x => x.role === 'user')
+  if (editId.value === lastUser?.id) {
+    // 路径1·最后一条用户消息：直接补发新文本——模型视为更正，回复最新意图
+    api.prompt(text, atts)
+  } else {
+    // 路径2·较老消息：新会话 + 语境前缀（老对话留在历史列表）
+    const ctx = recentCtx()
+    api.newChat()
+    setTimeout(() => api.prompt('（继续之前的对话。之前聊到：' + ctx.slice(0, 300) + '）\n\n现在我说：' + text), 400)
+  }
+  editId.value = ''
+  input.value = ''
+  attachments.value = []
+  autoGrow()
   editId.value = ''
   input.value = ''
   attachments.value = []
