@@ -16,6 +16,14 @@ const fileEl = ref(null)
 const openTools = ref({})     // toolCallId -> bool（默认折叠）
 const openThink = ref({})     // msgId:blockIdx -> bool（默认折叠）
 
+const slashHint = computed(() => {
+  const v = input.value
+  if (!v.startsWith('/') || v.length > 24) return []
+  const q = v.slice(1).toLowerCase()
+  return chat.slashCommands.filter(x => x.name.toLowerCase().startsWith(q)).slice(0, 7)
+})
+function pickSlash(c2) { input.value = '/' + c2.name + ' ' }
+
 const st = computed(() => chat.state)
 const msgs = computed(() => st.value?.messages || [])
 const streaming = computed(() => st.value?.isStreaming ? (st.value?.streamingMessage || { role: 'assistant', content: [] }) : null)
@@ -105,7 +113,6 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
       <span class="sp"></span>
       <button v-if="chat.status !== 'open'" class="tb warn tap" @click="connect()">↻ {{ chat.status === 'connecting' ? '连接中…' : '重连(' + (chat.retryIn || 1) + 's)' }}</button>
       <button v-if="st?.isStreaming" class="tb stop tap" @click="api.abort()">⏹ 停止</button>
-      <button class="tb tap" :class="{ ttsOn: ttsOn }" :title="ttsOn ? '朗读开' : '朗读关'" @click="ttsOn = !ttsOn; localStorage.setItem('xq_tts2', ttsOn)">{{ ttsOn ? '🔊' : '🔇' }}</button>
       <button class="tb tap" title="新对话" @click="api.newChat()">✚</button>
     </header>
 
@@ -211,6 +218,7 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
         {{ st.stats.tokens.total }} tok · 上下文 {{ st.stats.contextUsage.percent ?? '—' }}% · ${{ (st.stats.cost || 0).toFixed(3) }}
       </template>
       <span class="sp"></span>
+      <button class="fb tap" :title="ttsOn ? '朗读开' : '朗读关'" @click="ttsOn = !ttsOn; localStorage.setItem('xq_tts2', ttsOn)">{{ ttsOn ? '🔊' : '🔇' }}</button>
     </div>
 
     <!-- 语音状态浮条 -->
@@ -223,6 +231,11 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
           <img v-if="a.dataUrl" :src="a.dataUrl" class="att-thumb" />📎{{ a.name }}
           <b class="tap" @click="rmAtt(i)">✕</b>
         </span>
+      </div>
+      <div v-if="slashHint.length" class="slash">
+        <div v-for="sc in slashHint" :key="sc.name" class="si2 tap" @mousedown.prevent="pickSlash(sc)">
+          <b>/{{ sc.name }}</b><span class="muted" style="font-size:10px;margin-left:6px">{{ (sc.description || '').slice(0, 22) }}</span>
+        </div>
       </div>
       <div class="crow">
         <button class="cb tap" @click="pickFile">📎</button>
@@ -243,7 +256,7 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
           <div class="sin"><b>{{ s.name || s.firstMessage?.slice(0, 26) || '会话' }}</b>
             <span v-if="s.source === 'tui'" class="tag">CLI</span></div>
           <div class="dim">{{ s.messageCount }} 条 · {{ new Date(s.modified).toLocaleString('zh', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) }}</div>
-          <span class="sdel tap" @click.stop="api.deleteSession(s.path)">🗑</span>
+          <span class="sdel tap" @click.stop="api.deleteSession(s.path); setTimeout(() => api.listSessions(), 500)">🗑 删</span>
         </div>
       </div>
     </div>
@@ -251,6 +264,12 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
 </template>
 
 <style scoped>
+/* 斜杠候选 */
+.slash { position: absolute; bottom: 100%; left: 10px; right: 10px; background: #1a1d26; border: 1px solid #2c303b;
+  border-radius: 12px; box-shadow: 0 -8px 28px rgba(0,0,0,.5); overflow: hidden; margin-bottom: 4px; z-index: 5; }
+.si2 { display: flex; align-items: center; padding: 9px 13px; font-size: 13px; color: #dcddde; border-bottom: 1px solid #23262e; }
+.si2:last-child { border-bottom: 0; }
+.si2 b { color: #a78bfa; }
 .chatwrap { position: fixed; inset: 0; background: #0d0e12; color: #dcddde;
   display: flex; flex-direction: column; z-index: 10; }
 
@@ -259,7 +278,7 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
 .tb { background: #1a1d26; color: #dcddde; border: 1px solid #23262e; border-radius: 18px; padding: 6px 12px; font-size: 13px; }
 .tb.name { max-width: 40vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tb.stop { background: #3b1f24; border-color: #5c2b30; color: #f2a4a4; }
-.tb.ttsOn { border-color: #3d3560; background: #232635; }
+.fb { background: none; border: 0; font-size: 15px; padding: 2px 4px; }
 .car { opacity: .6; font-size: 10px; }
 .sp { flex: 1; }
 
@@ -340,7 +359,7 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
   border-radius: 20px; padding: 8px 18px; box-shadow: 0 8px 24px rgba(0,0,0,.5); }
 
 /* 输入区 */
-.composer { background: #14161c; border-top: 1px solid #23262e; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); }
+.composer { position: relative; background: #14161c; border-top: 1px solid #23262e; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); }
 .atts { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
 .att { display: inline-flex; align-items: center; gap: 5px; background: #1a1d26; border: 1px solid #2c303b;
   color: #dcddde; font-size: 12px; border-radius: 10px; padding: 4px 8px; }
@@ -363,5 +382,5 @@ input[type="checkbox"] { accent-color: #8b5cf6; }
 .slist { margin-top: 8px; }
 .si { padding: 11px 8px; border-bottom: 1px solid #1e2128; position: relative; border-radius: 8px; }
 .sin { font-size: 14px; padding-right: 30px; }
-.sdel { position: absolute; right: 8px; top: 14px; color: #666b76; font-size: 13px; }
+.sdel { position: absolute; right: 8px; top: 12px; color: #e08585; font-size: 12px; padding: 3px 8px; border: 1px solid #4a2626; border-radius: 6px; background: #241a1a; }
 </style>
