@@ -633,7 +633,7 @@ public class Tools {
 
         // ═══ 位置 / 短信 / 通话 / 联系人 ═══
         // ═══ 虚拟屏后台操控 v2（App级隐形副屏：无悬浮窗/主屏无感/画面直进内存）═══
-        def("vd", "隐形虚拟屏后台操控（用户无感）：create 创建 / launch 发射App到副屏 / shot 截副屏画面 / tap 点击 / swipe 滑动 / text 输入 / info 状态 / stop 销毁",
+        def("vd", "隐形虚拟屏后台操控（用户无感）：create 创建 / launch 发射App到副屏 / shot 截副屏画面 / tap 点击 / swipe 滑动 / text 输入 / info 状态 / stop 销毁。坐标默认千分比0-1000(unit=pm)，传unit=px才是像素",
             schema(props("action", prop("string", "create/launch/shot/tap/swipe/text/info/stop"),
                     "pkg", prop("string", "launch: 应用包名"),
                     "x", prop("number", "tap/swipe: x"), "y", prop("number", "tap/swipe: y"),
@@ -726,7 +726,7 @@ public class Tools {
                     return ok(new JSONObject().put("found", false).put("hint", "滚到底也未出现"));
                 }
                 String cmd;
-                boolean pm = "pm".equals(a.optString("unit", "px"));
+                boolean pm = !"px".equals(a.optString("unit", "pm"));
                 int[] dsz = AdbService.displaySize(VdManager.displayId());
                 int cx1 = pm ? a.optInt("x") * dsz[0] / 1000 : a.optInt("x");
                 int cy1 = pm ? a.optInt("y") * dsz[1] / 1000 : a.optInt("y");
