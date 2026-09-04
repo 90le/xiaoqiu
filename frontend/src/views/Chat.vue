@@ -36,7 +36,7 @@ function md(txt) {
 function fmtTs(t) { return t ? new Date(t).toLocaleTimeString('zh', { hour: '2-digit', minute: '2-digit' }) : '' }
 function scroll() { nextTick(() => { if (listEl.value) listEl.value.scrollTop = listEl.value.scrollHeight }) }
 watch(() => [msgs.value.length, st.value?.streamingMessage?.content?.length], () => scroll())
-watch(() => st.value?.isStreaming, (b) => { if (!b && ttsOn.value) speakLast() })
+watch(() => st.value?.isStreaming, (b, old) => { if (b === false && old === true && ttsOn.value) speakLast() })
 
 function send() {
   const text = input.value.trim()
@@ -105,6 +105,7 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
       <span class="sp"></span>
       <button v-if="chat.status !== 'open'" class="tb warn tap" @click="connect()">↻ {{ chat.status === 'connecting' ? '连接中…' : '重连(' + (chat.retryIn || 1) + 's)' }}</button>
       <button v-if="st?.isStreaming" class="tb stop tap" @click="api.abort()">⏹ 停止</button>
+      <button class="tb tap" :class="{ ttsOn: ttsOn }" :title="ttsOn ? '朗读开' : '朗读关'" @click="ttsOn = !ttsOn; localStorage.setItem('xq_tts2', ttsOn)">{{ ttsOn ? '🔊' : '🔇' }}</button>
       <button class="tb tap" title="新对话" @click="api.newChat()">✚</button>
     </header>
 
@@ -210,7 +211,6 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
         {{ st.stats.tokens.total }} tok · 上下文 {{ st.stats.contextUsage.percent ?? '—' }}% · ${{ (st.stats.cost || 0).toFixed(3) }}
       </template>
       <span class="sp"></span>
-      <label class="ttsc"><input type="checkbox" v-model="ttsOn" @change="localStorage.setItem('xq_tts2', ttsOn)" /> 🔊朗读</label>
     </div>
 
     <!-- 语音状态浮条 -->
@@ -259,6 +259,7 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
 .tb { background: #1a1d26; color: #dcddde; border: 1px solid #23262e; border-radius: 18px; padding: 6px 12px; font-size: 13px; }
 .tb.name { max-width: 40vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .tb.stop { background: #3b1f24; border-color: #5c2b30; color: #f2a4a4; }
+.tb.ttsOn { border-color: #3d3560; background: #232635; }
 .car { opacity: .6; font-size: 10px; }
 .sp { flex: 1; }
 

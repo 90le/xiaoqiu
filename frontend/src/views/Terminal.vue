@@ -38,18 +38,20 @@ function raw(data) {
   wsSend({ type: 'terminal_input', terminalId: activeId.value, data })
   tstore.sessions[activeId.value]?.term.focus()
 }
+const shiftOn = ref(false)
 function press(k) {
-  if (k === 'CTRL') { ctrlOn.value = !ctrlOn.value; altOn.value = false; return }
-  if (k === 'ALT') { altOn.value = !altOn.value; ctrlOn.value = false; return }
+  if (k === 'CTRL') { ctrlOn.value = !ctrlOn.value; altOn.value = false; shiftOn.value = false; return }
+  if (k === 'ALT') { altOn.value = !altOn.value; ctrlOn.value = false; shiftOn.value = false; return }
+  if (k === 'SHIFT') { shiftOn.value = !shiftOn.value; ctrlOn.value = false; altOn.value = false; return }
   let data = k
   if (ctrlOn.value && data.length === 1) {
     const c = data.toUpperCase().charCodeAt(0)
     if (c >= 64 && c <= 95) data = String.fromCharCode(c - 64)
   } else if (altOn.value && data.length === 1) data = '\x1b' + data
-  ctrlOn.value = false; altOn.value = false
+  else if (shiftOn.value && data.length === 1) data = data.toUpperCase()
+  ctrlOn.value = false; altOn.value = false; shiftOn.value = false
   raw(data)
 }
-const slim = { ESC: '\x1b', TAB: '\t', '↑': '\x1b[A', '↓': '\x1b[B', '←': '\x1b[D', '→': '\x1b[C', DEL: '\x7f', ENTER: '\r' }
 const combos = [
   ['^C', '\x03'], ['^D', '\x04'], ['^Z', '\x1a'], ['^L', '\x0c'], ['^U', '\x15'], ['^W', '\x17'],
   ['^R', '\x12'], ['^A', '\x01'], ['^E', '\x05'], ['^K', '\x0b'], ['^Y', '\x19'], ['^P', '\x10'], ['^N', '\x0e'],
@@ -97,17 +99,40 @@ onUnmounted(() => {
 
     <!-- 虚拟按键（三态：hide→浮球 / slim / full） -->
     <div v-if="keysMode !== 'hide'" class="vkeys" :class="{ full: keysMode === 'full' }">
-      <div class="krow">
-        <button class="vk mod tap" :class="{ on: ctrlOn }" @click="press('CTRL')">CTRL</button>
-        <button class="vk mod tap" :class="{ on: altOn }" @click="press('ALT')">ALT</button>
-        <button v-for="(v, k) in slim" :key="k" class="vk tap" @click="press(v)">{{ k }}</button>
-        <button class="vk cc tap" @click="raw('\x03')">^C</button>
-        <button class="vk cc tap" @click="raw('\x0c')">^L</button>
-        <button class="vk kb tap" @click="showKb">⌨盘</button>
-        <span class="kspace"></span>
-        <button v-if="keysMode === 'slim'" class="vk exp tap" @click="keysMode = 'full'">▴</button>
-        <button v-else class="vk exp on tap" @click="keysMode = 'slim'">▾</button>
-        <button class="vk hide tap" @click="keysMode = 'hide'">⌨✕</button>
+      <div class="k2">
+        <div class="kmain">
+          <div class="krow">
+            <button v-if="keysMode === 'slim'" class="vk exp tap" @click="keysMode = 'full'">▾</button>
+            <button v-else class="vk exp on tap" @click="keysMode = 'slim'">▴</button>
+            <button class="vk tap" @click="raw('\x1b')">ESC</button>
+            <button class="vk tap" @click="raw('\t')">TAB</button>
+            <button class="vk mod tap" :class="{ on: ctrlOn }" @click="press('CTRL')">CTRL</button>
+            <button class="vk mod tap" :class="{ on: altOn }" @click="press('ALT')">ALT</button>
+            <button class="vk mod tap" :class="{ on: shiftOn }" @click="press('SHIFT')">SHIFT</button>
+            <button class="vk tap" @click="raw('\x1b[2~')">INS</button>
+            <button class="vk tap" @click="raw('\x7f')">DEL</button>
+          </div>
+          <div class="krow">
+            <button class="vk tap" @click="raw('\r')">ENTER</button>
+            <button class="vk tap" @click="raw('\x1b[H')">HOME</button>
+            <button class="vk tap" @click="raw('\x1b[F')">END</button>
+            <button class="vk tap" @click="raw('\x1b[5~')">PGUP</button>
+            <button class="vk tap" @click="raw('\x1b[6~')">PGDN</button>
+            <button class="vk cc tap" @click="raw('\x03')">^C</button>
+            <button class="vk cc tap" @click="raw('\x0c')">^L</button>
+            <button class="vk cc tap" @click="raw('\x04')">^D</button>
+            <button class="vk kb tap" @click="showKb">⌨</button>
+          </div>
+        </div>
+        <div class="karr">
+          <button class="vk arr up tap" @click="raw('\x1b[A')">↑</button>
+          <div class="karrb">
+            <button class="vk arr tap" @click="raw('\x1b[D')">←</button>
+            <button class="vk arr tap" @click="raw('\x1b[B')">↓</button>
+            <button class="vk arr tap" @click="raw('\x1b[C')">→</button>
+          </div>
+        </div>
+        <button class="vhide tap" @click="keysMode = 'hide'">✕</button>
       </div>
       <div v-if="keysMode === 'full'" class="kpanel">
         <div class="kgrid">
@@ -194,7 +219,15 @@ onUnmounted(() => {
 .stage :deep(.xterm-viewport) { background: #0d0e12 !important; }
 /* 虚拟按键 */
 .vkeys { background: #14161c; border-top: 1px solid #23262e; }
-.krow { display: flex; gap: 4px; padding: 5px 7px; overflow-x: auto; scrollbar-width: none; align-items: center; }
+.k2 { display: flex; gap: 5px; padding: 5px 7px; align-items: stretch; }
+.kmain { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 4px; }
+.krow { display: flex; gap: 4px; overflow-x: auto; scrollbar-width: none; align-items: center; }
+.karr { display: flex; flex-direction: column; align-items: center; gap: 3px; flex-shrink: 0; }
+.karrb { display: grid; grid-template-columns: repeat(3, 34px); gap: 3px; }
+.karr .vk { min-width: 34px; height: 30px; }
+.karr .up { margin-left: 37px; }
+.karrb .vk { min-width: 0; width: 100%; }
+.vhide { flex-shrink: 0; width: 22px; background: none; border: 0; color: #666b76; font-size: 11px; }
 .vk { flex-shrink: 0; min-width: 36px; height: 34px; background: #1a1d26; color: #c6c9d0; border: 1px solid #2c303b; border-radius: 8px; font-size: 12px; font-weight: 600; font-family: ui-monospace, monospace; }
 .vk.mod { background: #232635; color: #a78bfa; border-color: #3d3560; }
 .vk.mod.on { background: #8b5cf6; color: #fff; }
@@ -219,17 +252,17 @@ onUnmounted(() => {
 .kgrid.sym .vk { font-size: 13px; }
 /* 会话管理器：顶栏下右侧紧凑弹层（锚定🗂按钮，不居中不挡终端） */
 .mask { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 60; }
-.mgr { position: fixed; top: 52px; right: 8px; width: 232px; max-height: 56vh;
-  background: #14161c; border: 1px solid #2c303b; border-radius: 12px; z-index: 61; display: flex; flex-direction: column;
-  box-shadow: 0 12px 32px rgba(0,0,0,.55); animation: mgrin .14s ease; }
-@keyframes mgrin { from { transform: translateY(-8px); opacity: 0; } }
-.mh { display: flex; align-items: center; gap: 6px; padding: 10px 12px 6px; color: #dcddde; font-size: 13px; }
+.mgr { position: fixed; left: 50%; top: 45%; transform: translate(-50%, -50%); width: calc(100% - 48px); max-width: 340px; max-height: 58vh;
+  background: #14161c; border: 1px solid #2c303b; border-radius: 14px; z-index: 61; display: flex; flex-direction: column;
+  box-shadow: 0 16px 48px rgba(0,0,0,.6); animation: mgrin .14s ease; }
+@keyframes mgrin { from { transform: translate(-50%, -47%) scale(.97); opacity: 0; } }
+.mh { display: flex; align-items: center; gap: 8px; padding: 13px 15px 7px; color: #dcddde; font-size: 14px; }
 .sp { flex: 1; }
-.mb { background: #1a1d26; color: #c6c9d0; border: 1px solid #2c303b; border-radius: 7px; padding: 4px 8px; font-size: 11.5px; flex-shrink: 0; }
+.mb { background: #1a1d26; color: #c6c9d0; border: 1px solid #2c303b; border-radius: 8px; padding: 5px 10px; font-size: 12px; flex-shrink: 0; }
 .mb.del { color: #e08585; border-color: #4a2626; }
-.mlist { overflow-y: auto; padding: 0 8px 10px; }
-.mi { display: flex; align-items: center; gap: 4px; padding: 8px 4px; border-bottom: 1px solid #1e2128; }
-.mib { display: flex; flex-direction: column; gap: 1px; font-size: 12.5px; color: #dcddde; min-width: 0; flex: 1; }
+.mlist { overflow-y: auto; padding: 0 10px 12px; }
+.mi { display: flex; align-items: center; gap: 6px; padding: 10px 6px; border-bottom: 1px solid #1e2128; }
+.mib { display: flex; flex-direction: column; gap: 2px; font-size: 13.5px; color: #dcddde; min-width: 0; flex: 1; }
 .mib .muted { font-size: 10.5px; }
 .rin { background: #1a1d26; border: 1px solid #8b5cf6; color: #dcddde; border-radius: 6px; padding: 3px 8px; font-size: 13px; width: 130px; }
 </style>
