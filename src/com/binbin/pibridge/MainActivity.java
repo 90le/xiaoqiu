@@ -33,6 +33,7 @@ public class MainActivity extends Activity {
 
     private WebView web;
     private TextView splash;
+    private android.webkit.ValueCallback<android.net.Uri[]> fileCb; // 网页文件选择回调
     private final java.util.concurrent.atomic.AtomicBoolean stopFlag =
             new java.util.concurrent.atomic.AtomicBoolean(false);
     private volatile boolean recording = false;
@@ -56,6 +57,25 @@ public class MainActivity extends Activity {
         web.setWebViewClient(new WebViewClient() {
             @Override public void onReceivedError(WebView v, WebResourceRequest r, WebResourceError e) {
                 if (r.isForMainFrame()) scheduleRetry();
+            }
+        });
+        // 文件选择器（网页 📎 必须走这里，否则点了没反应）
+        web.setWebChromeClient(new android.webkit.WebChromeClient() {
+            @Override public boolean onShowFileChooser(WebView v, android.webkit.ValueCallback<android.net.Uri[]> cb, android.webkit.WebChromeClient.FileChooserParams params) {
+                if (fileCb != null) { try { fileCb.onReceiveValue(null); } catch (Exception ignore) {} }
+                fileCb = cb;
+                try {
+                    String[] acc = params != null ? params.getAcceptTypes() : new String[0];
+                    String mime = (acc.length > 0 && acc[0] != null && acc[0].contains("image")) ? "image/*" : "*/*";
+                    Intent i = new Intent(Intent.ACTION_GET_CONTENT);
+                    i.addCategory(Intent.CATEGORY_OPENABLE);
+                    i.setType(mime);
+                    startActivityForResult(Intent.createChooser(i, "选择文件"), 7701);
+                } catch (Exception e) {
+                    fileCb = null;
+                    return false;
+                }
+                return true;
             }
         });
         web.addJavascriptInterface(new JsBridge(), "XiaoqiuBridge");
@@ -142,7 +162,9 @@ public class MainActivity extends Activity {
                     String heard = sttEnv.optString("data", "").trim();
                     recording = false;
                     Tools.micBusy = false;
-                    if (heard.isEmpty() || heard.startsWith("(")) {
+                    boolean noise = heard.isEmpty() || heard.startsWith("(")
+                            || (heard.length() <= 2 && heard.matches("[a-zA-Z0-9 \\t.,!?，。！？]+")); // 环境噪声常识别成短英文
+                    if (noise) {
                         js("window.__voiceStatus && window.__voiceStatus('empty')");
                     } else {
                         js("window.__voiceResult && window.__voiceResult(" + JSONObject.quote(heard) + ")");
@@ -210,6 +232,17 @@ public class MainActivity extends Activity {
             js("location.hash='#chat'");
             ui.postDelayed(() -> dispatchTask(q, true), 300);
         }
+    }
+
+    @Override protected void onActivityResult(int req, int res, Intent data) {
+        if (req == 7701 && fileCb != null) {
+            android.net.Uri[] uris = null;
+            if (res == -1 && data != null && data.getData() != null) uris = new android.net.Uri[]{ data.getData() };
+            try { fileCb.onReceiveValue(uris); } catch (Exception ignore) {}
+            fileCb = null;
+            return;
+        }
+        super.onActivityResult(req, res, data);
     }
 
     @Override public void onBackPressed() {

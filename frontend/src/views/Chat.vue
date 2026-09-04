@@ -117,14 +117,49 @@ function submitEdit() {
   attachments.value = []
   autoGrow()
 }
-function send(mode) { // mode: undefined=普通/steer插队, 'queue'=排队
-  const text = input.value.trim()
-  if (!text) return
+// 快脑先行（文本+语音同链）：chat→本地秒答；task→优化后的prompt发慢脑
+const fastBusy = ref(false)
+function recentCtx() {
+  const ms = (chat.state?.messages || []).slice(-8)
+  return ms.map(m => (m.role === 'user' ? '用户:' : '小丘:') +
+    (m.content || []).filter(b => b.type === 'text').map(b => b.text).join(' ').slice(0, 80)).join('\n')
+}
+async function smartSend(text, fromVoice) {
+  text = (text || '').trim()
+  if (!text || fastBusy.value) return
+  fastBusy.value = true
   const atts = attachments.value.length ? attachments.value.map(a => a.path
     ? { path: a.path, mode: 'inline' }
     : { data: a.base64, mimeType: a.mime }) : undefined
+  try {
+    const r = await fetch('/api/chat_fast', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ q: text, context: recentCtx() }) })
+    const d = (await r.json()).structuredContent
+    const data = d.ok ? d.data : null
+    if (data && data.type === 'chat') {
+      // 快答：本地气泡（不打扰pi会话）
+      msgs2.value.push({ role: 'user', text, ts: Date.now() })
+      msgs2.value.push({ role: 'assistant', text: data.answer, fast: true, ts: Date.now() })
+      if (fromVoice || ttsOn.value) speakText(data.answer)
+    } else {
+      // 任务：优化prompt → 慢脑（pi会话会收到并流式回复）
+      const opt = data && data.prompt ? data.prompt : text
+      if (fromVoice && data && data.reply) speakText(data.reply) // 语音确认语
+      api.prompt(opt, atts)
+    }
+  } catch { api.prompt(text, atts) } // 快脑挂了直发慢脑兜底
+  fastBusy.value = false
+}
+const msgs2 = ref([]) // 快脑本地气泡（pi快照之外）
+async function speakText(t) {
+  const s = t.length > 200 ? t.slice(0, 200) + '……' : t
+  try { await fetch('/api/tts_speak', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: s }) }) } catch {}
+}
+function send(mode) { // mode: undefined=普通/steer插队, 'queue'=排队
+  const text = input.value.trim()
+  if (!text) return
   if (editId.value) { submitEdit(); return }
-  api.prompt(text, atts)
+  smartSend(text, false)
   input.value = ''; attachments.value = []
   autoGrow()
 }
@@ -180,7 +215,7 @@ function micDown() {
   window.XiaoqiuBridge.startVoice()
 }
 function micUp() { if (recording.value) { recording.value = false; window.XiaoqiuBridge?.stopVoice() } }
-window.__voiceResult = (t) => { voiceState.value = ''; if (t) api.prompt(t) }
+window.__voiceResult = (t) => { voiceState.value = ''; if (t) smartSend(t, true) }
 window.__voiceStatus = (s) => {
   if (s === 'recording') { recording.value = true; voiceState.value = '🎙 录音中…' }
   else if (s === 'thinking') { recording.value = false; voiceState.value = '识别中…' }
@@ -240,7 +275,12 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
         <div class="muted">操作手机 · 跑命令 · 写代码 · 查记忆</div>
       </div>
 
-      <template v-for="m in msgs" :key="m.id">
+      <div v-for="(m, i) in msgs2" :key="'f' + i" class="mrow" :class="m.role === 'user' ? 'urow' : 'arow'">
+      <div v-if="m.role === 'user'" class="ub"><div class="ut">{{ m.text }}</div></div>
+      <div v-else class="ab"><div class="ameta">⚡ 快脑</div><div class="bubble a">{{ m.text }}</div></div>
+    </div>
+
+    <template v-for="m in msgs" :key="m.id">
         <!-- 用户 -->
         <div v-if="m.role === 'user'" class="mrow urow">
           <div class="ub">
@@ -368,7 +408,7 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
           <span v-if="recording" class="recdot"></span><template v-else>🎙</template>
         </button>
         <button v-if="busy && input.trim() && !editId" class="cb q tap" title="排队：本轮结束后再发" @click="sendQueued">⏳</button>
-        <button class="cb send tap" :class="{ edit: editId, dim: !input.trim() }" @click="input.trim() && send()">
+        <button class="cb send tap" :class="{ edit: editId, dim: !input.trim() || fastBusy }" @click="input.trim() && !fastBusy && send()">
           <template v-if="editId">✓</template><template v-else-if="busy">⤴</template><template v-else>➤</template>
         </button>
       </div>

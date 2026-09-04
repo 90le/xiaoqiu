@@ -987,7 +987,9 @@ public class Tools {
             return ok(arr);
         }});
 
-        def("chat_fast", "快脑：闲聊秒答，任务则返回 task 交慢脑(pi)", schema(props("q", prop("string", "用户的话")), "q"),
+        def("chat_fast", "快脑（意图脑）：带上下文理解输入。闲聊→chat直接答；任务→task并输出优化后的prompt（修ASR错字/结合上下文补全指代/明确目标）交慢脑执行",
+            schema(props("q", prop("string", "用户的话"),
+                    "context", prop("string", "可选：最近对话上下文摘要（快脑据此理解指代和意图）")), "q"),
             new H() { public JSONObject run(JSONObject a) throws Exception {
                 String q = a.optString("q");
                 String key = fastKey();
@@ -998,15 +1000,19 @@ public class Tools {
                     String tstr = new java.text.SimpleDateFormat("现在是 HH:mm，今天 yyyy年MM月dd日 EEEE", java.util.Locale.CHINA).format(new java.util.Date());
                     return ok(new JSONObject().put("type", "chat").put("answer", tstr));
                 }
-                String sysPrompt = "你是「小丘」的快脑。当前时间：" + now + "。判断用户输入属于哪类，只输出一行JSON不要其他内容："
-                  + "闲聊/常识/计算/翻译/简单知识问答/时间日期问答（你知道当前时间，不需要操作手机、不需要写代码、不需要多步骤）→ {\"type\":\"chat\",\"answer\":\"<口语一两句直接回答>\"}；"
-                  + "需要动手执行的任务（写代码/改文件/操作App/控制设备/多步骤）→ {\"type\":\"task\",\"reply\":\"<一句话确认>\"}。answer/reply用中文口语，简短。";
+                String ctx = a.optString("context", "");
+                String ctxBlock = ctx.isEmpty() ? "" : "\n【最近对话上下文】\n" + ctx + "\n";
+                String sysPrompt = "你是「小丘」的快脑（意图脑）。当前时间：" + now + "。结合上下文理解用户这句话的意图，只输出一行JSON不要其他内容：\n"
+                  + "A.闲聊/常识/计算/翻译/时间日期等无需动手的 → {\"type\":\"chat\",\"answer\":\"<口语一两句直接回答>\"}\n"
+                  + "B.需要动手执行的（写代码/改文件/操作App/控制设备/多步骤）→ {\"type\":\"task\",\"reply\":\"<一句话口语确认>\"，\"prompt\":\"<必填！优化后发给执行脑的完整指令：修正语音错字、把它/那个/继续等指代结合上下文展开成具体对象、写清要做什么和完成标准。这是执行脑唯一能看到的内容，它看不到上下文>\"}\n"
+                  + ctxBlock
+                  + "规则：上下文里的指代（它/那个/继续）必须结合理解；语音输入可能有错字要纠正；answer/reply/prompt用中文。";
                 JSONObject body = new JSONObject()
                         .put("model", "glm-5.3-flash")
                         .put("messages", new org.json.JSONArray()
                                 .put(new JSONObject().put("role", "system").put("content", sysPrompt))
                                 .put(new JSONObject().put("role", "user").put("content", q)))
-                        .put("max_tokens", 400).put("temperature", 0.3);
+                        .put("max_tokens", 800).put("temperature", 0.3);
                 javax.net.ssl.HttpsURLConnection c = (javax.net.ssl.HttpsURLConnection)
                         new java.net.URL("https://open.bigmodel.cn/api/coding/paas/v4/chat/completions").openConnection();
                 c.setRequestMethod("POST"); c.setConnectTimeout(5000); c.setReadTimeout(20000); c.setDoOutput(true);
@@ -1028,7 +1034,8 @@ public class Tools {
                     if (j.contains("{")) j = j.substring(j.indexOf('{'), j.lastIndexOf('}') + 1);
                     JSONObject r = new JSONObject(j);
                     if ("task".equals(r.optString("type")))
-                        return ok(new JSONObject().put("type", "task").put("reply", r.optString("reply", "好的，交给我处理")));
+                        return ok(new JSONObject().put("type", "task").put("reply", r.optString("reply", "好的，交给我处理"))
+                        .put("prompt", r.optString("prompt", ""))); // 优化后的执行指令（快脑给慢脑）
                     return ok(new JSONObject().put("type", "chat").put("answer", r.optString("answer", content)));
                 } catch (Exception e) {
                     return ok(new JSONObject().put("type", "chat").put("answer", content));
