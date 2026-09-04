@@ -209,7 +209,7 @@ async function voiceFlow(t) {
       const opt = (data && data.prompt) ? data.prompt : t
       vb.state = ''
       if (data && data.reply) { speakText(data.reply); typewrite('🛠 ' + data.reply) }
-      api.prompt(opt, atts) // 慢脑接管（主消息流可见）
+      sendCritical({ type: 'prompt', text: opt, attachments: atts || undefined }) // 慢脑接管（必达）
       vbDismiss(3000)
     }
   } catch { vb.show = false; api.prompt(t, atts) }
@@ -265,9 +265,9 @@ function send(mode) { // 文字直发慢脑（快脑只在语音链）
   if (atts === false) return
   // 中断遗留：上一条用户消息没获得回复 → 替换它（模型不会先回旧的）
   if (abortedUserId.value && msgs.value[msgs.value.length - 1]?.id === abortedUserId.value) {
-    wsSend({ type: 'edit_message', messageId: abortedUserId.value, text, attachments: atts })
+    sendCritical({ type: 'edit_message', messageId: abortedUserId.value, text, attachments: atts })
   } else {
-    api.prompt(text, atts)
+    sendCritical({ type: 'prompt', text, attachments: atts || undefined })
   }
   abortedUserId.value = ''
   input.value = ''; attachments.value = []
