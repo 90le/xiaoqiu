@@ -82,11 +82,12 @@ const editId = ref(''), editDraft = ref('')
 function startEdit(m) {
   editId.value = m.id
   editDraft.value = (m.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n')
+  setTimeout(() => { const el = document.querySelector('.esheet textarea'); if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length) } }, 250)
 }
-function submitEdit(m) {
+function submitEdit() {
   const text = editDraft.value.trim()
-  if (!text) return
-  wsSend({ type: 'edit_message', messageId: m.id, text })
+  if (!text || !editId.value) return
+  wsSend({ type: 'edit_message', messageId: editId.value, text })
   editId.value = ''
 }
 function send(mode) { // mode: undefined=普通/steer插队, 'queue'=排队
@@ -113,6 +114,13 @@ function onFile(e) {
   e.target.value = ''
 }
 function rmAtt(i) { attachments.value.splice(i, 1) }
+const taEl = ref(null)
+function autoGrow() {
+  const el = taEl.value
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = Math.min(el.scrollHeight, 110) + 'px'
+}
 function onPaste(e) {
   const items = e.clipboardData?.items || []
   for (const it of items) {
@@ -207,25 +215,14 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
       <template v-for="m in msgs" :key="m.id">
         <!-- 用户 -->
         <div v-if="m.role === 'user'" class="mrow urow">
-          <template v-if="editId === m.id">
-            <div class="ueditbox">
-              <textarea v-model="editDraft" rows="3"></textarea>
-              <div class="ueditops">
-                <button class="ubtn cancel tap" @click="editId = ''">取消</button>
-                <button class="ubtn ok tap" @click="submitEdit(m)">✓ 保存并发送</button>
-              </div>
-            </div>
-          </template>
-          <template v-else>
-            <div class="ub">
-              <img v-for="(b, bi) in (m.content||[]).filter(b => b.type === 'image' && b.dataUrl)" :key="bi" :src="b.dataUrl" class="uimg" />
-              <div class="ut">{{ (m.content||[]).filter(b => b.type === 'text').map(b => b.text).join('\n') }}</div>
-            </div>
-            <div class="uact">
-              <button v-if="!busy" class="ua tap" @click="startEdit(m)">✎ 编辑</button>
-              <button class="ua tap" @click="navigator.clipboard?.writeText((m.content||[]).filter(b => b.type === 'text').map(b => b.text).join('\n'))">📋</button>
-            </div>
-          </template>
+          <div class="ub">
+            <img v-for="(b, bi) in (m.content||[]).filter(b => b.type === 'image' && b.dataUrl)" :key="bi" :src="b.dataUrl" class="uimg" />
+            <div class="ut">{{ (m.content||[]).filter(b => b.type === 'text').map(b => b.text).join('\n') }}</div>
+          </div>
+          <div class="uact">
+            <button v-if="!busy" class="ua tap" @click="startEdit(m)">✎ 编辑</button>
+            <button class="ua tap" @click="navigator.clipboard?.writeText((m.content||[]).filter(b => b.type === 'text').map(b => b.text).join('\n'))">📋</button>
+          </div>
         </div>
 
         <!-- 助手 -->
@@ -306,6 +303,19 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
       <button class="fb tap" :title="ttsOn ? '朗读开' : '朗读关'" @click="ttsOn = !ttsOn; localStorage.setItem('xq_tts2', ttsOn)">{{ ttsOn ? '🔊' : '🔇' }}</button>
     </div>
 
+    <!-- 编辑面板：底部滑出 -->
+    <transition name="sheet">
+      <div v-if="editId" class="esheet">
+        <div class="eshead">
+          <b>✎ 编辑消息</b><span class="muted" style="font-size:11px">保存后将从这里重新生成</span>
+          <span class="sp"></span>
+          <button class="ubtn cancel tap" @click="editId = ''">取消</button>
+        </div>
+        <textarea v-model="editDraft" rows="4"></textarea>
+        <button class="ubtn ok blk tap" @click="submitEdit">✓ 保存并发送</button>
+      </div>
+    </transition>
+
     <!-- 语音状态浮条 -->
     <div v-if="voiceState" class="vbar">{{ recording ? '⏺ ' : '' }}{{ voiceState }}</div>
 
@@ -327,7 +337,7 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
       <div class="crow">
         <button class="cb tap" @click="pickFile">📎</button>
         <input ref="fileEl" type="file" hidden @change="onFile" />
-        <textarea v-model="input" rows="1" placeholder="发消息…" @keydown.enter.exact.prevent="send" @paste="onPaste"></textarea>
+        <textarea ref="taEl" v-model="input" rows="1" placeholder="发消息…" @paste="onPaste" @input="autoGrow"></textarea>
         <button class="cb mic tap" :class="{ rec: recording }"
           @touchstart.prevent="micDown" @touchend.prevent="micUp" @mousedown="micDown" @mouseup="micUp">🎙</button>
         <button v-if="busy && input.trim()" class="cb q tap" title="排队：本轮全部结束后再发" @click="sendQueued">⏳</button>
@@ -357,14 +367,19 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
 </style>
 
 <style scoped>
-/* 内联消息编辑器 */
-.ueditbox { background: rgba(139,92,246,.1); border: 1px solid rgba(139,92,246,.35); border-radius: 14px; padding: 10px; max-width: 85%; }
-.ueditbox textarea { width: 100%; background: #1a1d26; border: 1px solid #2c303b; color: #e8e9ec;
-  border-radius: 9px; padding: 9px 11px; font-size: 14px; font-family: inherit; resize: vertical; min-height: 64px; }
-.ueditops { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+/* 底部编辑面板 */
+.esheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 30; background: #14161c;
+  border-top: 1px solid #3d3560; border-radius: 18px 18px 0 0; padding: 14px 14px calc(14px + env(safe-area-inset-bottom));
+  box-shadow: 0 -12px 40px rgba(0,0,0,.6); }
+.eshead { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; color: #dcddde; font-size: 14px; }
+.esheet textarea { width: 100%; background: #1a1d26; border: 1px solid #2c303b; color: #e8e9ec;
+  border-radius: 10px; padding: 11px 13px; font-size: 14.5px; font-family: inherit; resize: vertical; min-height: 96px; }
 .ubtn { border-radius: 9px; padding: 7px 14px; font-size: 12.5px; font-weight: 700; border: 1px solid; }
 .ubtn.cancel { background: none; color: #8b8f98; border-color: #2c303b; }
 .ubtn.ok { background: #8b5cf6; color: #fff; border-color: #8b5cf6; }
+.ubtn.blk { width: 100%; margin-top: 10px; padding: 11px; font-size: 14px; }
+.sheet-enter-active, .sheet-leave-active { transition: transform .22s ease, opacity .22s ease; }
+.sheet-enter-from, .sheet-leave-to { transform: translateY(60%); opacity: 0; }
 /* 队列气泡/编辑/排队钮 */
 .queued { display: flex; align-items: center; gap: 6px; font-size: 13px; opacity: .85; }
 .qtag { font-size: 10px; padding: 2px 6px; border-radius: 8px; flex-shrink: 0; }
