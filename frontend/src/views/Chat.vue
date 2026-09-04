@@ -16,6 +16,13 @@ const fileEl = ref(null)
 const openTools = ref({})     // toolCallId -> bool（默认折叠）
 const openThink = ref({})     // msgId:blockIdx -> bool（默认折叠）
 
+const SRC = {
+  builtin: { label: '内置', c: '#7db3e8' },
+  extension: { label: '扩展', c: '#a78bfa' },
+  prompt: { label: '模板', c: '#e8b268' },
+  skill: { label: '技能', c: '#7dd3a8' },
+  plugin: { label: '插件', c: '#e08585' },
+}
 const slashHint = computed(() => {
   const v = input.value
   if (!v.startsWith('/') || v.includes('\n') || v.length > 30) return []
@@ -71,10 +78,16 @@ watch(() => st.value?.streamingMessage?.content?.map(b => b.text || b.thinking |
 })
 watch(() => st.value?.isStreaming, (b, old) => { if (b === false && old === true && ttsOn.value) speakLast() })
 
-const editTarget = ref('') // 编辑中的消息id（发送改走 edit_message）
+const editId = ref(''), editDraft = ref('')
 function startEdit(m) {
-  editTarget.value = m.id
-  input.value = (m.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n')
+  editId.value = m.id
+  editDraft.value = (m.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n')
+}
+function submitEdit(m) {
+  const text = editDraft.value.trim()
+  if (!text) return
+  wsSend({ type: 'edit_message', messageId: m.id, text })
+  editId.value = ''
 }
 function send(mode) { // mode: undefined=普通/steer插队, 'queue'=排队
   const text = input.value.trim()
@@ -82,12 +95,7 @@ function send(mode) { // mode: undefined=普通/steer插队, 'queue'=排队
   const atts = attachments.value.length ? attachments.value.map(a => a.path
     ? { path: a.path, mode: 'inline' }
     : { data: a.base64, mimeType: a.mime }) : undefined
-  if (editTarget.value) {
-    wsSend({ type: 'edit_message', messageId: editTarget.value, text, attachments: atts })
-    editTarget.value = ''
-  } else {
-    api.prompt(text, atts)
-  }
+  api.prompt(text, atts)
   input.value = ''; attachments.value = ''
   attachments.value = []
 }
@@ -199,14 +207,25 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
       <template v-for="m in msgs" :key="m.id">
         <!-- 用户 -->
         <div v-if="m.role === 'user'" class="mrow urow">
-          <div class="ub">
-            <img v-for="(b, bi) in (m.content||[]).filter(b => b.type === 'image' && b.dataUrl)" :key="bi" :src="b.dataUrl" class="uimg" />
-            <div class="ut">{{ (m.content||[]).filter(b => b.type === 'text').map(b => b.text).join('\n') }}</div>
-          </div>
-          <div class="uact">
-            <button v-if="!busy" class="ua tap" @click="startEdit(m)">✎ 编辑</button>
-            <button class="ua tap" @click="navigator.clipboard?.writeText((m.content||[]).filter(b => b.type === 'text').map(b => b.text).join('\n'))">📋</button>
-          </div>
+          <template v-if="editId === m.id">
+            <div class="ueditbox">
+              <textarea v-model="editDraft" rows="3"></textarea>
+              <div class="ueditops">
+                <button class="ubtn cancel tap" @click="editId = ''">取消</button>
+                <button class="ubtn ok tap" @click="submitEdit(m)">✓ 保存并发送</button>
+              </div>
+            </div>
+          </template>
+          <template v-else>
+            <div class="ub">
+              <img v-for="(b, bi) in (m.content||[]).filter(b => b.type === 'image' && b.dataUrl)" :key="bi" :src="b.dataUrl" class="uimg" />
+              <div class="ut">{{ (m.content||[]).filter(b => b.type === 'text').map(b => b.text).join('\n') }}</div>
+            </div>
+            <div class="uact">
+              <button v-if="!busy" class="ua tap" @click="startEdit(m)">✎ 编辑</button>
+              <button class="ua tap" @click="navigator.clipboard?.writeText((m.content||[]).filter(b => b.type === 'text').map(b => b.text).join('\n'))">📋</button>
+            </div>
+          </template>
         </div>
 
         <!-- 助手 -->
@@ -300,11 +319,12 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
       </div>
       <div v-if="slashHint.length" class="slash">
         <div v-for="sc in slashHint" :key="sc.name" class="si2 tap" @mousedown.prevent="pickSlash(sc)">
-          <b>/{{ sc.name }}</b><span class="muted" style="font-size:10px;margin-left:6px">{{ (sc.description || '').slice(0, 22) }}</span>
+          <b class="sname2">/{{ sc.name }}</b>
+          <span class="stag" :class="sc.source">{{ SRC[sc.source]?.label || sc.source }}</span>
+          <span class="sdesc2">{{ sc.description || '' }}<i v-if="sc.argumentHint" class="shint">{{ sc.argumentHint }}</i></span>
         </div>
       </div>
-      <div v-if="editTarget" class="editbar">✎ 编辑重发中（修改后发送将从这里重新生成）<span class="tap" @click="editTarget = ''; input.value = ''">取消</span></div>
-    <div class="crow">
+      <div class="crow">
         <button class="cb tap" @click="pickFile">📎</button>
         <input ref="fileEl" type="file" hidden @change="onFile" />
         <textarea v-model="input" rows="1" placeholder="发消息…" @keydown.enter.exact.prevent="send" @paste="onPaste"></textarea>
@@ -337,6 +357,14 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
 </style>
 
 <style scoped>
+/* 内联消息编辑器 */
+.ueditbox { background: rgba(139,92,246,.1); border: 1px solid rgba(139,92,246,.35); border-radius: 14px; padding: 10px; max-width: 85%; }
+.ueditbox textarea { width: 100%; background: #1a1d26; border: 1px solid #2c303b; color: #e8e9ec;
+  border-radius: 9px; padding: 9px 11px; font-size: 14px; font-family: inherit; resize: vertical; min-height: 64px; }
+.ueditops { display: flex; gap: 8px; justify-content: flex-end; margin-top: 8px; }
+.ubtn { border-radius: 9px; padding: 7px 14px; font-size: 12.5px; font-weight: 700; border: 1px solid; }
+.ubtn.cancel { background: none; color: #8b8f98; border-color: #2c303b; }
+.ubtn.ok { background: #8b5cf6; color: #fff; border-color: #8b5cf6; }
 /* 队列气泡/编辑/排队钮 */
 .queued { display: flex; align-items: center; gap: 6px; font-size: 13px; opacity: .85; }
 .qtag { font-size: 10px; padding: 2px 6px; border-radius: 8px; flex-shrink: 0; }
@@ -353,9 +381,18 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
 .slash { position: absolute; bottom: 100%; left: 10px; right: 10px; max-height: 208px; overflow-y: auto;
   background: #1a1d26; border: 1px solid #2c303b;
   border-radius: 12px; box-shadow: 0 -8px 28px rgba(0,0,0,.5); margin-bottom: 4px; z-index: 5; }
-.si2 { display: flex; align-items: center; padding: 9px 13px; font-size: 13px; color: #dcddde; border-bottom: 1px solid #23262e; }
+.si2 { display: flex; align-items: center; gap: 8px; padding: 9px 13px; font-size: 13px; color: #dcddde; border-bottom: 1px solid #23262e; }
 .si2:last-child { border-bottom: 0; }
-.si2 b { color: #a78bfa; }
+.si2:active { background: #232635; }
+.sname2 { color: #a78bfa; flex-shrink: 0; max-width: 40%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.stag { flex-shrink: 0; font-size: 10px; padding: 2px 7px; border-radius: 7px; border: 1px solid; line-height: 1.2; }
+.stag.builtin { color: #7db3e8; border-color: #24405a; background: #16222c; }
+.stag.extension { color: #a78bfa; border-color: #3d3560; background: #232635; }
+.stag.prompt { color: #e8b268; border-color: #4a3c26; background: #241f18; }
+.stag.skill { color: #7dd3a8; border-color: #24402f; background: #182227; }
+.stag.plugin { color: #e08585; border-color: #4a2626; background: #241a1a; }
+.sdesc2 { flex: 1; min-width: 0; font-size: 11.5px; color: #8b8f98; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.shint { font-style: normal; color: #666b76; margin-left: 5px; }
 .chatwrap { position: fixed; inset: 0; background: #0d0e12; color: #dcddde;
   display: flex; flex-direction: column; z-index: 10; }
 
