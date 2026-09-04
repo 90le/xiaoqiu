@@ -135,22 +135,24 @@ function startEdit(m) {
 function cancelEdit() { editId.value = ''; input.value = ''; attachments.value = []; autoGrow() }
 let submitLock = 0
 function submitOnce() {
-  warn('⚡submitOnce已触发 editId=' + (editId.value || '空'))
+  window.__dbg && window.__dbg('▶submitOnce editId=' + (editId.value || '空') + ' input=' + input.value.length + '字')
   const now = Date.now()
-  if (now - submitLock < 400) return // 防双触发
+  if (now - submitLock < 400) { window.__dbg && window.__dbg('↩防抖锁跳过'); return }
   submitLock = now
-  if (!editId.value) return
+  if (!editId.value) { window.__dbg && window.__dbg('↩editId空,提前返回'); return }
   if (attachments.value.some(a => a.base64) && !chat.state?.model?.vision) {
     warn('含图片但当前模型不支持：已自动去掉图片发送文字')
-    attachments.value = [] // 自动降级：剥图发文字，不再静默拦截
+    attachments.value = []
   }
   submitEdit()
 }
 function submitEdit() {
+  window.__dbg && window.__dbg('▶submitEdit text=' + input.value.trim().length + '字 id=' + editId.value)
   const text = input.value.trim()
-  if (!text || !editId.value) return
+  if (!text || !editId.value) { window.__dbg && window.__dbg('↩submitEdit空值早退'); return }
   const atts = buildAtts()
-  if (atts === false) return
+  if (atts === false) { window.__dbg && window.__dbg('↩buildAtts拦截'); return }
+  window.__dbg && window.__dbg('→发送edit_message')
   wsSend({ type: 'edit_message', messageId: editId.value, text, attachments: atts })
   editId.value = ''
   input.value = ''
@@ -319,6 +321,18 @@ window.__voiceStatus = (s) => {
 }
 window.__xiaoqiuTask = (t) => { if (t) api.prompt(t) }
 
+// ── 超级调试 OSD：函数轨迹/早退原因/JS异常/发送包 全屏上可见 ──
+window.__dbgLines = []
+window.__dbg = function (msg) {
+  const arr = window.__dbgLines
+  arr.push('[' + new Date().toLocaleTimeString('zh', { hour12: false }) + '] ' + msg)
+  if (arr.length > 5) arr.shift()
+  const el = document.getElementById('tapdbg2')
+  if (el) el.innerHTML = arr.join('<br>')
+}
+window.addEventListener('error', e => window.__dbg('❌JS错误: ' + (e.message || '') + ' @' + String(e.filename || '').slice(-25) + ':' + e.lineno))
+window.addEventListener('unhandledrejection', e => window.__dbg('❌Promise: ' + (e.reason && e.reason.message || e.reason)))
+
 // ── 调试探针（定位按钮无反应）：右上角显示每次触摸命中的元素 ──
 if (!window.__tapDbg) {
   window.__tapDbg = true
@@ -326,6 +340,10 @@ if (!window.__tapDbg) {
   el.id = 'tapdbg'
   el.style.cssText = 'position:fixed;top:3px;right:5px;z-index:99999;background:rgba(0,0,0,.85);color:#3ecf72;font:10px ui-monospace,monospace;padding:3px 7px;border-radius:6px;pointer-events:none;max-width:72%;overflow:hidden;white-space:nowrap'
   document.body.appendChild(el)
+  const el2 = document.createElement('div')
+  el2.id = 'tapdbg2'
+  el2.style.cssText = 'position:fixed;top:26px;right:5px;z-index:99999;background:rgba(120,0,0,.88);color:#ffd;font:10px ui-monospace,monospace;padding:4px 7px;border-radius:6px;pointer-events:none;max-width:78%;white-space:pre-line;text-align:right'
+  document.body.appendChild(el2)
   document.addEventListener('touchstart', e => {
     const t = e.target
     el.textContent = '⦿ ' + (t.tagName || '?') + '.' + String(t.className).slice(0, 26) + ' "' + String(t.textContent || '').slice(0, 10) + '"'
