@@ -79,16 +79,12 @@ function go(id) { view.value = id; location.hash = '#' + id; drawer.value = fals
       <Settings v-else-if="view === 'settings'" />
     </main>
 
-    <nav class="tabbar">
-      <div v-for="n in nav.slice(0, 5)" :key="n.id" class="tab tap" :class="{ act: view === n.id }" @click="go(n.id)">
-        <span class="ti">{{ n.icon }}</span><span class="tl">{{ n.label }}</span>
-      </div>
-    </nav>
+
   </div>
 </template>
 
 <style scoped>
-.shell { min-height: 100vh; padding-bottom: 64px; }
+.shell { min-height: 100vh; padding-bottom: 10px; }
 .top { position: sticky; top: 0; z-index: 20; display: flex; align-items: center; gap: 10px;
   padding: 10px 14px; background: rgba(247,243,236,.92); backdrop-filter: blur(8px); border-bottom: 1px solid var(--line); }
 .burger { border: 0; background: none; font-size: 22px; color: var(--ink); padding: 4px 8px; }
@@ -109,11 +105,6 @@ function go(id) { view.value = id; location.hash = '#' + id; drawer.value = fals
 .ni { width: 24px; text-align: center; }
 .side-foot { margin-top: auto; font-size: 12px; padding: 10px; }
 .page { padding: 14px 14px 10px; max-width: 720px; margin: 0 auto; }
-.tabbar { position: fixed; bottom: 0; left: 0; right: 0; z-index: 20; display: flex;
-  background: var(--card); border-top: 1px solid var(--line); padding: 6px 4px calc(6px + env(safe-area-inset-bottom)); }
-.tab { flex: 1; display: flex; flex-direction: column; align-items: center; gap: 2px; color: var(--muted); font-size: 11px; }
-.tab.act { color: var(--hill); font-weight: 700; }
-.ti { font-size: 20px; }
 .drawer-enter-active, .drawer-leave-active { transition: all .2s ease; }
 .drawer-enter-from, .drawer-leave-to { opacity: 0; transform: translateX(-16px); }
 </style>

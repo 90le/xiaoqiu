@@ -46,17 +46,12 @@ public class MainActivity extends Activity {
     public static volatile String PENDING_TASK = null;    // 悬浮球对话中的任务交接
     private final java.util.concurrent.atomic.AtomicBoolean stopFlag = new java.util.concurrent.atomic.AtomicBoolean(false);
     private Button[] btns;
+    private WebView chatWeb; // 对话（pi-web-ui:8182，注入textarea）
     private int currentTab = 0;
     private int retries = 0;
     private volatile boolean recording = false;
 
-    private static final String[] TABS = {"💬 对话", "⚡ 场景", "🔧 工具", "⚙ 设置"};
-    private static final String[] URLS = {
-            "http://127.0.0.1:8182",
-            "http://127.0.0.1:8181/#/scenes",
-            "http://127.0.0.1:8181/#/tools",
-            "http://127.0.0.1:8181/#/settings"
-    };
+    private static final String[] TABS = {"💬 对话", "🏠 工作台"};
     private static final int ACTIVE = 0xFF3E7C59;
     private static final int IDLE = 0xFF7A8471;
 
@@ -73,6 +68,13 @@ public class MainActivity extends Activity {
         page.setOrientation(LinearLayout.VERTICAL);
         page.setBackgroundColor(Color.WHITE);
 
+        chatWeb = new WebView(this);
+        WebSettings cs = chatWeb.getSettings();
+        cs.setJavaScriptEnabled(true);
+        cs.setDomStorageEnabled(true);
+        cs.setCacheMode(WebSettings.LOAD_NO_CACHE);
+        chatWeb.loadUrl("http://127.0.0.1:8182");
+
         web = new WebView(this);
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
@@ -83,8 +85,12 @@ public class MainActivity extends Activity {
                 if (r.isForMainFrame()) scheduleRetry();
             }
         });
+        page.addView(chatWeb, new LinearLayout.LayoutParams(
+                ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
         page.addView(web, new LinearLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, 0, 1f));
+        web.loadUrl("http://127.0.0.1:8181/");
+        chatWeb.setVisibility(View.GONE); // 默认显示工作台
 
         voiceStrip = new LinearLayout(this);
         voiceStrip.setOrientation(LinearLayout.HORIZONTAL);
@@ -171,24 +177,8 @@ public class MainActivity extends Activity {
     private void switchTab(int idx) {
         currentTab = idx;
         for (int j = 0; j < btns.length; j++) btns[j].setTextColor(j == idx ? ACTIVE : IDLE);
-        final String url = URLS[idx];
-        int slash = url.indexOf('/', 7);
-        final String base = slash > 0 ? url.substring(0, slash) : url;
-        splash.setText("🏔\n小丘启动中…");
-        splash.setVisibility(View.VISIBLE);
-        new Thread(() -> {
-            boolean ok = waitUp(base + "/ping", 20) || waitUp(base + "/", 15);
-            runOnUiThread(() -> {
-                if (currentTab != idx) return;
-                if (ok) {
-                    splash.setVisibility(View.GONE);
-                    web.loadUrl(url);
-                } else {
-                    splash.setText("🏔\n小丘服务准备中\n将持续重试…");
-                    retryLater();
-                }
-            });
-        }, "tab-load").start();
+        chatWeb.setVisibility(idx == 0 ? View.VISIBLE : View.GONE);
+        web.setVisibility(idx == 0 ? View.GONE : View.VISIBLE);
     }
 
     private void scheduleRetry() {
@@ -317,7 +307,7 @@ public class MainActivity extends Activity {
         final int gen = ++voiceGen;
         if (speakReply) watchReplyAndSpeak(gen, text);
         final String[] attempt = {0 + ""};
-        web.postDelayed(new Runnable() {
+        chatWeb.postDelayed(new Runnable() {
             int tries = 0;
             @Override public void run() {
                 String js = "(function(){const ta=document.querySelector('textarea');if(!ta)return 'NO_TA';" +
@@ -326,10 +316,10 @@ public class MainActivity extends Activity {
                         "ta.dispatchEvent(new Event('input',{bubbles:true}));ta.focus();" +
                         "ta.dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',code:'Enter',keyCode:13,bubbles:true}));" +
                         "return 'OK';})()";
-                web.evaluateJavascript(js, r -> {
+                chatWeb.evaluateJavascript(js, r -> {
                     String res = r != null ? r.replace("\"", "") : "";
                     if (res.contains("OK")) return;
-                    if (tries++ < 5) web.postDelayed(this, 1200);
+                    if (tries++ < 5) chatWeb.postDelayed(this, 1200);
                 });
             }
         }, 1200);
@@ -342,10 +332,10 @@ public class MainActivity extends Activity {
         final String[] last = {""};
         final boolean[] busySeen = {false};
         final int[] initCount = {-1};
-        web.postDelayed(new Runnable() {
+        chatWeb.postDelayed(new Runnable() {
             @Override public void run() {
                 if (gen != voiceGen || polls[0]++ > 300) return; // 新发送/超时(~5min)终止
-                web.evaluateJavascript(
+                chatWeb.evaluateJavascript(
                     "(function(){var busy=document.body.innerText.indexOf('进行中…')>=0;"
                   + "var n=document.querySelectorAll('.msg-text,.fp-markdown,[class*=markdown]');"
                   + "if(!n.length)return (busy?'B1':'B0')+'|N0';"
@@ -372,16 +362,16 @@ public class MainActivity extends Activity {
                         // 用户原话回显/空文本 → 跳过
                         if (body.isEmpty() || body.equals(sentText) || body.contains(sentText)) {
                             stable[0] = 0; last[0] = t;
-                            web.postDelayed(this, 1000); return;
+                            chatWeb.postDelayed(this, 1000); return;
                         }
                         if (busy) { // 还在流式，继续等
                             stable[0] = 0; last[0] = t;
-                            web.postDelayed(this, 1000); return;
+                            chatWeb.postDelayed(this, 1000); return;
                         }
                         // 不在流式：必须是「见过流式」或「消息数变多」才是新答案
                         if (!busySeen[0] && !(cnt > initCount[0] && initCount[0] >= 0)) {
                             last[0] = t; stable[0] = 0;
-                            web.postDelayed(this, 1000); return;
+                            chatWeb.postDelayed(this, 1000); return;
                         }
                         if (t.equals(last[0])) stable[0]++; else stable[0] = 0;
                         last[0] = t;
@@ -399,7 +389,7 @@ public class MainActivity extends Activity {
                             voiceStrip.postDelayed(() -> voiceStrip.setVisibility(View.GONE), 8000);
                             return;
                         }
-                        web.postDelayed(this, 1000);
+                        chatWeb.postDelayed(this, 1000);
                     });
             }
         }, 2000);
