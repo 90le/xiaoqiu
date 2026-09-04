@@ -29,7 +29,9 @@ function pick(h) {
   const id = nav.find(n => h.includes(n.id))?.id
   if (id) view.value = id
 }
+const openDrawerReq = () => { drawer.value = true }
 onMounted(() => {
+  window.addEventListener('xq-open-drawer', openDrawerReq)
   pick(location.hash)
   window.addEventListener('hashchange', () => pick(location.hash))
   const ping = async () => {
@@ -37,13 +39,13 @@ onMounted(() => {
   }
   ping(); timer = setInterval(ping, 5000)
 })
-onUnmounted(() => clearInterval(timer))
+onUnmounted(() => { clearInterval(timer); window.removeEventListener('xq-open-drawer', openDrawerReq) })
 function go(id) { view.value = id; location.hash = '#' + id; drawer.value = false }
 </script>
 
 <template>
   <div class="shell">
-    <header class="top">
+    <header v-if="view !== 'chat'" class="top">
       <button class="burger tap" @click="drawer = !drawer">☰</button>
       <div class="brand">
         <span class="logo">丘</span>

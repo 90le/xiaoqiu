@@ -69,6 +69,7 @@ async function speakLast() {
   try { await fetch('/api/tts_speak', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ text: s }) }) } catch {}
 }
 
+function openShellDrawer() { window.dispatchEvent(new Event('xq-open-drawer')) }
 function micDown() {
   if (recording.value) return
   if (!window.XiaoqiuBridge) { voiceState.value = '桥未就绪'; return }
@@ -94,6 +95,7 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
   <div class="chatwrap">
     <!-- ═══ 顶栏：历史 | 模型▾ | 思考▾ | 新对话 ═══ -->
     <header class="top">
+      <button class="tb tap" title="工作台" @click="openShellDrawer">☰</button>
       <button class="tb tap" title="历史会话" @click="menu = 'sessions'; api.listSessions()">🗂</button>
       <button class="tb name tap" @click="menu = menu === 'model' ? '' : 'model'">
         {{ st?.model?.name || '模型' }} <span class="car">▾</span>
@@ -249,7 +251,7 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
 </template>
 
 <style scoped>
-.chatwrap { position: fixed; inset: 0; margin-top: 52px; background: #0d0e12; color: #dcddde;
+.chatwrap { position: fixed; inset: 0; background: #0d0e12; color: #dcddde;
   display: flex; flex-direction: column; z-index: 10; }
 
 /* 顶栏 */

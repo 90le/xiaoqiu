@@ -32,6 +32,7 @@ public class BridgeService extends Service {
     private static final String PUI_SH =
             "#!/system/bin/sh\n" +
             "export PI_WEB_PORT=8182\n" +
+            "export PI_WEB_ALLOW_ORIGINS=http://127.0.0.1:8181,http://localhost:8181\n" +
             "export HOME=/data/data/com.pihost/files/home\n" +
             "export PREFIX=/data/data/com.pihost/files/usr\n" +
             "export PATH=$PREFIX/bin:/system/bin\n" +
