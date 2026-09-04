@@ -58,7 +58,45 @@ const qTotal = computed(() => {
 const st = computed(() => chat.state)
 const msgs = computed(() => st.value?.messages || [])
 const streaming = computed(() => st.value?.isStreaming ? (st.value?.streamingMessage || { role: 'assistant', content: [] }) : null)
-const levels = computed(() => st.value?.availableThinkingLevels?.length ? st.value.availableThinkingLevels : ['off', 'low', 'medium', 'high'])
+// webui 同款：全部 7 档 + 中文标签；不支持的档位置灰禁用（而非隐藏——SDK 会钳制无效请求）
+const THINKING_ALL = [
+  { v: 'off', label: '关闭' }, { v: 'minimal', label: '极简' }, { v: 'low', label: '低' },
+  { v: 'medium', label: '中' }, { v: 'high', label: '高' }, { v: 'xhigh', label: '极高' }, { v: 'max', label: '最大' },
+]
+const levels = computed(() => {
+  const avail = st.value?.availableThinkingLevels
+  const ok = Array.isArray(avail) && avail.length ? new Set(avail) : null
+  return THINKING_ALL.map(l => ({ ...l, ok: ok ? ok.has(l.v) : true }))
+})
+const thinkLabel = (v) => (THINKING_ALL.find(l => l.v === v) || {}).label || v || '—'
+// 模型使用次数（webui modelUsage 同款：localStorage 轻量记账，下拉按热度排序）
+const MU_KEY = 'xq_model_usage'
+function recordModelUsage(id) { try { const u = JSON.parse(localStorage.getItem(MU_KEY) || '{}'); u[id] = (u[id] || 0) + 1; localStorage.setItem(MU_KEY, JSON.stringify(u)) } catch {} }
+const modelUsage = JSON.parse(localStorage.getItem(MU_KEY) || '{}')
+const modelFilter = ref('')
+const modelScrollEl = ref(null)
+const filteredModels = computed(() => {
+  const q = modelFilter.value.trim().toLowerCase()
+  const list = q ? chat.models.filter(m => (m.name + ' ' + m.provider).toLowerCase().includes(q)) : chat.models
+  return [...list].sort((a, b) => (modelUsage[b.id] || 0) - (modelUsage[a.id] || 0))
+})
+function refreshModels() {
+  chat.models = [] // 清空显示"清单载入中…"（webui reqLoading 同款反馈）
+  api.listModels()
+}
+function pickModel(m) {
+  api.setModel(m.id)
+  recordModelUsage(m.id)
+  menu.value = ''
+}
+// webui 同款：打开时把当前选中模型滚入视野
+watch(() => menu.value, (v) => {
+  if (v !== 'model') return
+  nextTick(() => {
+    const el = modelScrollEl.value?.querySelector('.di.sel')
+    el?.scrollIntoView({ block: 'nearest' })
+  })
+})
 
 function toolResultOf(id) { return msgs.value.find(x => x.role === 'toolResult' && x.toolCallId === id) }
 function thinkKey(m, i) { return (m.id || '') + ':' + i }
@@ -242,6 +280,7 @@ function submit(queue = false) {
   if (atts === false) return
   // 发送成功才清空输入（失败保留文本重试）
   if (api.prompt(text, atts, queue || undefined)) {
+    if (st.value?.model?.id) recordModelUsage(st.value.model.id)
     input.value = ''; attachments.value = []
     autoGrow()
   }
@@ -317,10 +356,10 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
       <button class="tb tap" title="工作台" @click="openShellDrawer">☰</button>
       <button class="tb tap" title="历史会话" @click="menu = 'sessions'; api.listSessions()">🗂</button>
       <button class="tb name tap" @click="menu = menu === 'model' ? '' : 'model'">
-        {{ st?.model?.name || '模型' }} <span class="car">▾</span>
+        {{ st?.model?.name || '模型' }}{{ st?.model?.vision ? ' 👁' : '' }} <span class="car">▾</span>
       </button>
       <button class="tb tap" @click="menu = menu === 'think' ? '' : 'think'">
-        🧠 {{ st?.thinkingLevel || '—' }} <span class="car">▾</span>
+        🧠 {{ thinkLabel(st?.thinkingLevel) }} <span class="car">▾</span>
       </button>
       <span class="sp"></span>
       <button v-if="chat.status !== 'open'" class="tb warn tap" @click="connect()">↻ {{ chat.status === 'connecting' ? '连接中…' : '重连(' + (chat.retryIn || 1) + 's)' }}</button>
@@ -332,19 +371,30 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
     <div v-if="menu === 'model'" class="backdrop tap" @click="menu = ''"></div>
     <div v-if="menu === 'model'" class="drop">
       <div class="dh">选择模型</div>
-      <div v-for="m in chat.models" :key="m.id" class="di tap" :class="{ sel: m.id === st?.model?.id }" @click="api.setModel(m.id); menu = ''">
-        <div class="din"><b>{{ m.name }}</b><span class="dim">{{ m.provider }}</span></div>
-        <span class="tag">{{ m.vision ? '👁' : '' }}{{ m.reasoning ? '🧠' : '' }}</span>
+      <input v-model="modelFilter" class="msearch tap" placeholder="🔍 搜索模型…" />
+      <div class="mscroll" ref="modelScrollEl">
+        <div v-for="m in filteredModels" :key="m.id" class="di tap" :class="{ sel: m.id === st?.model?.id }" @click="pickModel(m)">
+          <div class="din"><b>{{ m.name }}</b><span class="dim">{{ m.provider }}</span></div>
+          <span class="tag">
+            <i v-if="modelUsage[m.id]" class="muse">{{ modelUsage[m.id] }}次</i>
+            {{ m.vision ? '👁' : '' }}{{ m.reasoning ? '🧠' : '' }}
+          </span>
+        </div>
+        <div v-if="!chat.models.length" class="dh muted">清单载入中…</div>
+        <div v-else-if="!filteredModels.length" class="dh muted">无匹配模型</div>
       </div>
-      <div v-if="!chat.models.length" class="dh muted">清单载入中…</div>
+      <div class="dfoot">
+        <button class="dfb tap" @click="refreshModels">↻ 刷新清单</button>
+      </div>
     </div>
 
     <!-- 思考级下拉 -->
     <div v-if="menu === 'think'" class="backdrop tap" @click="menu = ''"></div>
     <div v-if="menu === 'think'" class="drop small">
       <div class="dh">思考深度</div>
-      <div v-for="l in levels" :key="l" class="di tap" :class="{ sel: l === st?.thinkingLevel }" @click="api.setThinking(l); menu = ''">
-        <b>{{ l }}</b>
+      <div v-for="l in levels" :key="l.v" class="di tap" :class="{ sel: l.v === st?.thinkingLevel, dis: !l.ok }"
+        :title="l.ok ? '' : '当前模型不支持此档位'" @click="l.ok && api.setThinking(l.v); l.ok && (menu = '')">
+        <b>{{ l.label }}</b><span v-if="l.v === st?.thinkingLevel" class="oks">✓</span>
       </div>
     </div>
 
@@ -486,12 +536,13 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
         <button class="tap" @touchstart.prevent="cancelEdit">取消</button>
       </div>
       <div v-if="attachments.length" class="attrow">
-        <div v-for="(a, i) in attachments" :key="i" class="attc">
+        <div v-for="(a, i) in attachments" :key="i" class="attc" :title="a.dataUrl ? '图片：' + a.name : '文件：' + (a.path || a.name)">
           <img v-if="a.dataUrl" :src="a.dataUrl" class="attimg2" />
-          <span v-else class="attfile2">📎<i>{{ a.name }}</i></span>
+          <span v-else class="attfile2">{{ (a.path || a.name || '').endsWith('/') ? '📁' : '📄' }}<i>{{ a.name }}</i></span>
           <button class="attx tap" @click="rmAtt(i)">✕</button>
         </div>
         <button class="attadd tap" @click="pickFile">＋</button>
+        <span class="atthint">将随下一条消息发送</span>
       </div>
       <div v-if="slashHint.length" class="slash">
         <div v-for="sc in slashHint" :key="sc.name" class="si2 tap" @mousedown.prevent="pickSlash(sc)">
@@ -558,6 +609,16 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
 </style>
 
 <style scoped>
+
+/* 模型/思考下拉升级（webui 对齐） */
+.di.dis { opacity: .35; pointer-events: none; }
+.di .oks { margin-left: auto; color: #7cc47f; font-weight: 700; }
+.msearch { width: calc(100% - 20px); margin: 4px 10px 6px; padding: 7px 10px; border: 1px solid #3a3f4a; border-radius: 8px; background: #171a20; color: #dfe4ec; font-size: 13px; outline: none; }
+.mscroll { max-height: 46vh; overflow-y: auto; overscroll-behavior: contain; }
+.dfoot { display: flex; gap: 8px; padding: 8px 12px; border-top: 1px solid #2a2e38; }
+.dfb { flex: 1; background: none; border: 0; color: #8ab4f8; font-size: 12.5px; padding: 6px 0; }
+.muse { font-style: normal; font-size: 10px; color: #9aa3b2; margin-right: 4px; }
+.atthint { align-self: center; font-size: 10.5px; color: #8a93a3; white-space: nowrap; }
 
 /* 队列气泡/编辑/排队钮 */
 .queued { display: flex; align-items: center; gap: 6px; font-size: 13px; opacity: .85; }

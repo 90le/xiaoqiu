@@ -188,6 +188,7 @@ export const api = {
   setModel(modelId) { return send({ type: 'set_model', modelId }) },
   setThinking(level) { return send({ type: 'set_thinking', level }) },
   listSessions() { return send({ type: 'list_sessions' }) },
+  listModels() { return send({ type: 'list_models' }) },
   switchSession(path) { return send({ type: 'switch_session', path }) },
   deleteSession(path) { return send({ type: 'delete_session', path }) },
   switchConversation(id) { return send({ type: 'switch_conversation', id }) },
