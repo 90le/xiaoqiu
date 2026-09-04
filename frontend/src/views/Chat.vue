@@ -135,6 +135,7 @@ function startEdit(m) {
 function cancelEdit() { editId.value = ''; input.value = ''; attachments.value = []; autoGrow() }
 let submitLock = 0
 function submitOnce() {
+  warn('⚡submitOnce已触发 editId=' + (editId.value || '空'))
   const now = Date.now()
   if (now - submitLock < 400) return // 防双触发
   submitLock = now
@@ -317,6 +318,23 @@ window.__voiceStatus = (s) => {
   else voiceState.value = ''
 }
 window.__xiaoqiuTask = (t) => { if (t) api.prompt(t) }
+
+// ── 调试探针（定位按钮无反应）：右上角显示每次触摸命中的元素 ──
+if (!window.__tapDbg) {
+  window.__tapDbg = true
+  const el = document.createElement('div')
+  el.id = 'tapdbg'
+  el.style.cssText = 'position:fixed;top:3px;right:5px;z-index:99999;background:rgba(0,0,0,.85);color:#3ecf72;font:10px ui-monospace,monospace;padding:3px 7px;border-radius:6px;pointer-events:none;max-width:72%;overflow:hidden;white-space:nowrap'
+  document.body.appendChild(el)
+  document.addEventListener('touchstart', e => {
+    const t = e.target
+    el.textContent = '⦿ ' + (t.tagName || '?') + '.' + String(t.className).slice(0, 26) + ' "' + String(t.textContent || '').slice(0, 10) + '"'
+  }, true)
+  document.addEventListener('click', e => {
+    const t = e.target
+    el.textContent = '⌖ ' + (t.tagName || '?') + '.' + String(t.className).slice(0, 26) + ' "' + String(t.textContent || '').slice(0, 10) + '"'
+  }, true)
+}
 
 onMounted(() => { connect(); scroll() })
 onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; delete window.__xiaoqiuTask })
