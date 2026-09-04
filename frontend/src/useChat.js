@@ -24,14 +24,15 @@ export const chat = reactive({
 const wsQueue = [] // 未连接期间的发送缓冲（防 terminal_create 等被静默丢弃）
 let lastBeat = 0 // 最近一次收到服务端消息（心跳/任意消息都算活着）
 export function wsSend(obj) {
-  if (ws && ws.readyState === 1) {
-    try {
-      ws.send(JSON.stringify(obj))
-      return
-    } catch { /* 写失败=半开连接，落队列+触发重连 */ }
+  // 活性门：发送前要求 12 秒内收到过服务端消息（心跳 10s 周期）
+  // 半开连接（切后台/锁屏掐网）readyState 仍是 OPEN 但写入=黑洞 → 强制重连+排队补发
+  const stale = ws && ws.readyState === 1 && Date.now() - lastBeat > 12000
+  if (ws && ws.readyState === 1 && !stale) {
+    try { ws.send(JSON.stringify(obj)); return } catch {}
   }
   wsQueue.push(obj)
-  if (ws && ws.readyState === 1) { try { ws.close() } catch {} } // 写失败≈死连接，强制走重连
+  if (stale) { try { ws.close() } catch {} }
+  else if (!ws || ws.readyState !== 1) connect()
 }
 
 // ── 终端桥：terminalId -> {write, onExit, onList}（Terminal.vue 注册）──
