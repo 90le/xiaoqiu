@@ -8,6 +8,7 @@ import Macros from './views/Macros.vue'
 import Memory from './views/Memory.vue'
 import Tools from './views/Tools.vue'
 import Settings from './views/Settings.vue'
+import Terminal from './views/Terminal.vue'
 
 const view = ref('dashboard')
 const drawer = ref(false)
@@ -17,6 +18,7 @@ let timer = null
 const nav = [
   { id: 'dashboard', icon: '🏠', label: '总览' },
   { id: 'chat', icon: '💬', label: '对话' },
+  { id: 'terminal', icon: '🖥', label: '终端' },
   { id: 'device', icon: '📱', label: '设备' },
   { id: 'broadcast', icon: '🔔', label: '播报' },
   { id: 'macros', icon: '🔁', label: '自动化' },
@@ -45,7 +47,7 @@ function go(id) { view.value = id; location.hash = '#' + id; drawer.value = fals
 
 <template>
   <div class="shell">
-    <header v-if="view !== 'chat'" class="top">
+    <header v-if="view !== 'chat' && view !== 'terminal'" class="top">
       <button class="burger tap" @click="drawer = !drawer">☰</button>
       <div class="brand">
         <span class="logo">丘</span>
@@ -73,6 +75,7 @@ function go(id) { view.value = id; location.hash = '#' + id; drawer.value = fals
     <main class="page">
       <Dashboard v-if="view === 'dashboard'" />
       <Chat v-else-if="view === 'chat'" />
+      <Terminal v-else-if="view === 'terminal'" />
       <Device v-else-if="view === 'device'" />
       <Broadcast v-else-if="view === 'broadcast'" />
       <Macros v-else-if="view === 'macros'" />

@@ -13,6 +13,7 @@ export const chat = reactive({
   sessions: [],           // SessionSummary[]
   conversations: [], activeConvId: '',
   slashCommands: [],
+  terminals: [],
   notices: [],
   liveTools: {},          // toolCallId -> {name, text, done, isError, exitCode}
 })
@@ -20,6 +21,10 @@ export const chat = reactive({
 export function wsSend(obj) {
   if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj))
 }
+
+// ── 终端桥：terminalId -> {write, onExit, onList}（Terminal.vue 注册）──
+const termWriters = {}
+export function termRegister(id, w) { termWriters[id] = w; return () => delete termWriters[id] }
 
 function applyDelta(st, msg) {
   // message_delta: 打进 streamingMessage（文本/思考增量）
@@ -84,6 +89,19 @@ export function connect() {
       case 'conversations': chat.conversations = m.conversations || []; chat.activeConvId = m.activeId; break
       case 'slash_commands': chat.slashCommands = m.commands || []; break
       case 'notice': chat.notices.push({ level: m.level, text: m.text, id: Date.now() }); if (chat.notices.length > 5) chat.notices.shift(); break
+      case 'terminal_output': {
+        const w = termWriters[m.terminalId]
+        if (w) w.write(m.data)
+        break
+      }
+      case 'terminal_exit': {
+        const w = termWriters[m.terminalId]
+        if (w && w.onExit) w.onExit(m.exitCode)
+        break
+      }
+      case 'terminal_list':
+        chat.terminals = m.terminals || []
+        break
       default: break
     }
   }
