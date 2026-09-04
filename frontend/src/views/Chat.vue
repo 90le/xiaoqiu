@@ -128,6 +128,14 @@ function startEdit(m) {
   setTimeout(() => { if (taEl.value) { taEl.value.focus(); taEl.value.setSelectionRange(input.value.length, input.value.length) } }, 150)
 }
 function cancelEdit() { editId.value = ''; input.value = ''; attachments.value = []; autoGrow() }
+let submitLock = 0
+function submitOnce() {
+  const now = Date.now()
+  if (now - submitLock < 400) return // 防双触发
+  submitLock = now
+  if (!editId.value) return
+  submitEdit()
+}
 function submitEdit() {
   const text = input.value.trim()
   if (!text || !editId.value) return
@@ -458,8 +466,9 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
     <div class="composer">
       <div v-if="errN" class="errbn">⚠ {{ errN }}</div>
       <div v-if="editId" class="editbn">
-        <span>✎ 编辑消息 · 保存后从这里重新生成</span>
-        <button class="tap" @click="cancelEdit">取消</button>
+        <span class="ebtxt">✎ 编辑消息 · 保存后从这里重新生成</span>
+        <button class="tap" @touchend.prevent="cancelEdit" @click="cancelEdit">取消</button>
+        <button class="ebgo tap" @touchend.prevent="submitOnce" @click="submitOnce">✓ 发送</button>
       </div>
       <div v-if="attachments.length" class="attrow">
         <div v-for="(a, i) in attachments" :key="i" class="attc">
@@ -485,7 +494,7 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
           <span v-if="recording" class="recdot"></span><template v-else>🎙</template>
         </button>
         <button v-if="busy && input.trim() && !editId" class="cb q tap" title="排队：本轮结束后再发" @click="sendQueued">⏳</button>
-        <button class="cb send tap" :class="{ edit: editId, dim: !input.trim() }" @click="input.trim() && send()">
+        <button class="cb send tap" :class="{ edit: editId, dim: !input.trim() }" @touchend.prevent="input.trim() && (editId ? submitOnce() : send())" @click="input.trim() && (editId ? submitOnce() : send())">
           <template v-if="editId">✓</template><template v-else-if="busy">⤴</template><template v-else>➤</template>
         </button>
       </div>
@@ -656,7 +665,10 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
 .errbn { background: #2a181c; color: #e08585; font-size: 12.5px; border-radius: 10px; padding: 8px 12px; margin-bottom: 8px; border: 1px solid #4a2626; }
 .editbn { display: flex; align-items: center; justify-content: space-between; background: #2a2418; color: #e8b268;
   font-size: 12px; border-radius: 10px; padding: 7px 12px; margin-bottom: 8px; border: 1px solid #4a3c26; }
-.editbn button { background: none; border: 0; color: #e8b268; font-size: 12px; }
+.editbn { gap: 6px; }
+.ebtxt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.editbn button { background: none; border: 0; color: #e8b268; font-size: 12.5px; flex-shrink: 0; padding: 4px 8px; }
+.editbn .ebgo { color: #fff; background: #e8b268; border-radius: 8px; font-weight: 700; }
 .attrow { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding: 2px 2px 8px; }
 .attc { position: relative; flex-shrink: 0; width: 62px; height: 62px; border-radius: 11px; overflow: hidden;
   background: #1a1d26; border: 1px solid #2c303b; display: flex; align-items: center; justify-content: center; }
