@@ -33,6 +33,10 @@ const slashHint = computed(() => {
 })
 function pickSlash(c2) { input.value = '/' + c2.name + ' ' }
 
+const ctxCls = computed(() => {
+  const p = chat.state?.stats?.contextUsage?.percent || 0
+  return p >= 85 ? 'hot' : p >= 60 ? 'warm' : ''
+})
 const st = computed(() => chat.state)
 const msgs = computed(() => st.value?.messages || [])
 const streaming = computed(() => st.value?.isStreaming ? (st.value?.streamingMessage || { role: 'assistant', content: [] }) : null)
@@ -78,17 +82,40 @@ watch(() => st.value?.streamingMessage?.content?.map(b => b.text || b.thinking |
 })
 watch(() => st.value?.isStreaming, (b, old) => { if (b === false && old === true && ttsOn.value) speakLast() })
 
-const editId = ref(''), editDraft = ref('')
+const sesQ = ref(''), newCwd = ref('')
+let sesT = null
+function sesDeb() {
+  if (sesT) clearTimeout(sesT)
+  sesT = setTimeout(() => {
+    if (sesQ.value.trim()) api.searchSessions(sesQ.value.trim())
+    else chat.sessionSearch = null
+  }, 500)
+}
+let cwdT = null
+function cwdDeb() { if (cwdT) clearTimeout(cwdT); cwdT = setTimeout(() => newCwd.value && api.completePath(newCwd.value), 450) }
+const editId = ref('')
 function startEdit(m) {
   editId.value = m.id
-  editDraft.value = (m.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n')
-  setTimeout(() => { const el = document.querySelector('.esheet textarea'); if (el) { el.focus(); el.setSelectionRange(el.value.length, el.value.length) } }, 250)
+  input.value = (m.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n')
+  // 携带原附件进主输入区（可增删）
+  const imgs = (m.content || []).filter(b => b.type === 'image' && b.dataUrl)
+    .map((b, i) => ({ name: '原图' + (i + 1), dataUrl: b.dataUrl, mime: b.mimeType || 'image/png', base64: String(b.dataUrl).split(',')[1] }))
+  attachments.value = imgs
+  autoGrow()
+  setTimeout(() => { if (taEl.value) { taEl.value.focus(); taEl.value.setSelectionRange(input.value.length, input.value.length) } }, 150)
 }
+function cancelEdit() { editId.value = ''; input.value = ''; attachments.value = []; autoGrow() }
 function submitEdit() {
-  const text = editDraft.value.trim()
+  const text = input.value.trim()
   if (!text || !editId.value) return
-  wsSend({ type: 'edit_message', messageId: editId.value, text })
+  wsSend({ type: 'edit_message', messageId: editId.value, text,
+    attachments: attachments.value.length ? attachments.value.map(a => a.path
+      ? { path: a.path, mode: 'inline' }
+      : { data: a.base64, mimeType: a.mime }) : undefined })
   editId.value = ''
+  input.value = ''
+  attachments.value = []
+  autoGrow()
 }
 function send(mode) { // mode: undefined=普通/steer插队, 'queue'=排队
   const text = input.value.trim()
@@ -96,9 +123,10 @@ function send(mode) { // mode: undefined=普通/steer插队, 'queue'=排队
   const atts = attachments.value.length ? attachments.value.map(a => a.path
     ? { path: a.path, mode: 'inline' }
     : { data: a.base64, mimeType: a.mime }) : undefined
+  if (editId.value) { submitEdit(); return }
   api.prompt(text, atts)
-  input.value = ''; attachments.value = ''
-  attachments.value = []
+  input.value = ''; attachments.value = []
+  autoGrow()
 }
 function sendQueued() { api.prompt(input.value.trim(), undefined, true); input.value = '' }
 function rmQueued(kind, text) { wsSend({ type: 'queue_remove', kind, text }) }
@@ -297,35 +325,32 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
     <!-- 状态条 -->
     <div class="foot muted">
       <template v-if="st?.stats">
-        {{ st.stats.tokens.total }} tok · 上下文 {{ st.stats.contextUsage.percent ?? '—' }}% · ${{ (st.stats.cost || 0).toFixed(3) }}
+        <button class="ctx tap" :class="ctxCls" :title="'上下文 ' + (st.stats.contextUsage.percent ?? 0) + '%，点击压缩'" @click="api.compact()">
+          <span class="ctxbar"><i :style="{ width: (st.stats.contextUsage.percent || 0) + '%' }"></i></span>
+          {{ st.stats.contextUsage.percent ?? '—' }}%
+        </button>
+        <span>{{ st.stats.tokens.total }} tok · ${{ (st.stats.cost || 0).toFixed(3) }}</span>
       </template>
       <span class="sp"></span>
       <button class="fb tap" :title="ttsOn ? '朗读开' : '朗读关'" @click="ttsOn = !ttsOn; localStorage.setItem('xq_tts2', ttsOn)">{{ ttsOn ? '🔊' : '🔇' }}</button>
     </div>
-
-    <!-- 编辑面板：底部滑出 -->
-    <transition name="sheet">
-      <div v-if="editId" class="esheet">
-        <div class="eshead">
-          <b>✎ 编辑消息</b><span class="muted" style="font-size:11px">保存后将从这里重新生成</span>
-          <span class="sp"></span>
-          <button class="ubtn cancel tap" @click="editId = ''">取消</button>
-        </div>
-        <textarea v-model="editDraft" rows="4"></textarea>
-        <button class="ubtn ok blk tap" @click="submitEdit">✓ 保存并发送</button>
-      </div>
-    </transition>
 
     <!-- 语音状态浮条 -->
     <div v-if="voiceState" class="vbar">{{ recording ? '⏺ ' : '' }}{{ voiceState }}</div>
 
     <!-- 输入区 -->
     <div class="composer">
-      <div v-if="attachments.length" class="atts">
-        <span v-for="(a, i) in attachments" :key="i" class="att">
-          <img v-if="a.dataUrl" :src="a.dataUrl" class="att-thumb" />📎{{ a.name }}
-          <b class="tap" @click="rmAtt(i)">✕</b>
-        </span>
+      <div v-if="editId" class="editbn">
+        <span>✎ 编辑消息 · 保存后从这里重新生成</span>
+        <button class="tap" @click="cancelEdit">取消</button>
+      </div>
+      <div v-if="attachments.length" class="attrow">
+        <div v-for="(a, i) in attachments" :key="i" class="attc">
+          <img v-if="a.dataUrl" :src="a.dataUrl" class="attimg2" />
+          <span v-else class="attfile2">📎<i>{{ a.name }}</i></span>
+          <button class="attx tap" @click="rmAtt(i)">✕</button>
+        </div>
+        <button class="attadd tap" @click="pickFile">＋</button>
       </div>
       <div v-if="slashHint.length" class="slash">
         <div v-for="sc in slashHint" :key="sc.name" class="si2 tap" @mousedown.prevent="pickSlash(sc)">
@@ -338,23 +363,48 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
         <button class="cb tap" @click="pickFile">📎</button>
         <input ref="fileEl" type="file" hidden @change="onFile" />
         <textarea ref="taEl" v-model="input" rows="1" placeholder="发消息…" @paste="onPaste" @input="autoGrow"></textarea>
-        <button class="cb mic tap" :class="{ rec: recording }"
-          @touchstart.prevent="micDown" @touchend.prevent="micUp" @mousedown="micDown" @mouseup="micUp">🎙</button>
-        <button v-if="busy && input.trim()" class="cb q tap" title="排队：本轮全部结束后再发" @click="sendQueued">⏳</button>
-        <button class="cb send tap" :disabled="!input.trim()" @click="send">{{ busy ? '⤴' : '➤' }}</button>
+        <button class="cb mic tap" :class="{ rec: recording }" title="按住说话"
+          @touchstart.prevent="micDown" @touchend.prevent="micUp" @mousedown="micDown" @mouseup="micUp">
+          <span v-if="recording" class="recdot"></span><template v-else>🎙</template>
+        </button>
+        <button v-if="busy && input.trim() && !editId" class="cb q tap" title="排队：本轮结束后再发" @click="sendQueued">⏳</button>
+        <button class="cb send tap" :class="{ edit: editId, dim: !input.trim() }" @click="input.trim() && send()">
+          <template v-if="editId">✓</template><template v-else-if="busy">⤴</template><template v-else>➤</template>
+        </button>
       </div>
     </div>
 
     <!-- 历史会话抽屉 -->
     <div v-if="menu === 'sessions'" class="backdrop tap" @click="menu = ''"></div>
     <div v-if="menu === 'sessions'" class="drawer">
-      <div class="dh big">历史会话 <span class="muted">({{ chat.sessions.length }})</span></div>
+      <div class="dh big">历史会话 <span class="muted">({{ (chat.sessionSearch ?? chat.sessions).length }})</span></div>
+      <div class="ssearch">
+        <input v-model="sesQ" placeholder="搜索会话内容（全文）…" @input="sesDeb" />
+      </div>
       <div class="slist">
-        <div v-for="s in chat.sessions" :key="s.path" class="si tap" @click="api.switchSession(s.path); menu = ''">
+        <div v-for="s in (chat.sessionSearch ?? chat.sessions)" :key="s.path" class="si tap" @click="api.switchSession(s.path); menu = ''">
           <div class="sin"><b>{{ s.name || s.firstMessage?.slice(0, 26) || '会话' }}</b>
             <span v-if="s.source === 'tui'" class="tag">CLI</span></div>
           <div class="dim">{{ s.messageCount }} 条 · {{ new Date(s.modified).toLocaleString('zh', { month: 'numeric', day: 'numeric', hour: '2-digit', minute: '2-digit' }) }}</div>
           <span class="sdel tap" @click.stop="api.deleteSession(s.path); setTimeout(() => api.listSessions(), 500)">🗑 删</span>
+        </div>
+      </div>
+      <div class="ws">
+        <div class="dh big">工作区</div>
+        <div class="cwdnow muted">📁 {{ st?.cwd || '—' }}</div>
+        <div v-for="p in chat.projects" :key="p.path" class="prow tap" :class="{ cur: p.path === st?.cwd }" @click="api.setCwd(p.path)">
+          <span class="pico">📂</span>
+          <span class="ppath">{{ p.path }}</span>
+          <b v-if="p.path === st?.cwd" class="pcur">当前</b>
+        </div>
+        <div class="pinput">
+          <input v-model="newCwd" placeholder="输入新路径…" @input="cwdDeb" />
+          <button class="tap" @click="api.setCwd(newCwd); newCwd = ''">切换</button>
+        </div>
+        <div v-if="chat.pathCompletions.length" class="pcomp">
+          <div v-for="pc in chat.pathCompletions.slice(0, 6)" :key="pc.path" class="pci tap" @click="newCwd = pc.path; api.completePath(pc.path)">
+            {{ pc.type === 'dir' ? '📁' : '📄' }} {{ pc.name }}
+          </div>
         </div>
       </div>
     </div>
@@ -367,19 +417,7 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
 </style>
 
 <style scoped>
-/* 底部编辑面板 */
-.esheet { position: absolute; left: 0; right: 0; bottom: 0; z-index: 30; background: #14161c;
-  border-top: 1px solid #3d3560; border-radius: 18px 18px 0 0; padding: 14px 14px calc(14px + env(safe-area-inset-bottom));
-  box-shadow: 0 -12px 40px rgba(0,0,0,.6); }
-.eshead { display: flex; align-items: center; gap: 8px; margin-bottom: 10px; color: #dcddde; font-size: 14px; }
-.esheet textarea { width: 100%; background: #1a1d26; border: 1px solid #2c303b; color: #e8e9ec;
-  border-radius: 10px; padding: 11px 13px; font-size: 14.5px; font-family: inherit; resize: vertical; min-height: 96px; }
-.ubtn { border-radius: 9px; padding: 7px 14px; font-size: 12.5px; font-weight: 700; border: 1px solid; }
-.ubtn.cancel { background: none; color: #8b8f98; border-color: #2c303b; }
-.ubtn.ok { background: #8b5cf6; color: #fff; border-color: #8b5cf6; }
-.ubtn.blk { width: 100%; margin-top: 10px; padding: 11px; font-size: 14px; }
-.sheet-enter-active, .sheet-leave-active { transition: transform .22s ease, opacity .22s ease; }
-.sheet-enter-from, .sheet-leave-to { transform: translateY(60%); opacity: 0; }
+
 /* 队列气泡/编辑/排队钮 */
 .queued { display: flex; align-items: center; gap: 6px; font-size: 13px; opacity: .85; }
 .qtag { font-size: 10px; padding: 2px 6px; border-radius: 8px; flex-shrink: 0; }
@@ -498,10 +536,42 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
 
 /* 输入区 */
 .composer { position: relative; background: #14161c; border-top: 1px solid #23262e; padding: 10px 12px calc(10px + env(safe-area-inset-bottom)); }
-.atts { display: flex; gap: 6px; flex-wrap: wrap; margin-bottom: 8px; }
-.att { display: inline-flex; align-items: center; gap: 5px; background: #1a1d26; border: 1px solid #2c303b;
-  color: #dcddde; font-size: 12px; border-radius: 10px; padding: 4px 8px; }
-.att-thumb { width: 22px; height: 22px; object-fit: cover; border-radius: 5px; }
+.editbn { display: flex; align-items: center; justify-content: space-between; background: #2a2418; color: #e8b268;
+  font-size: 12px; border-radius: 10px; padding: 7px 12px; margin-bottom: 8px; border: 1px solid #4a3c26; }
+.editbn button { background: none; border: 0; color: #e8b268; font-size: 12px; }
+.attrow { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding: 2px 2px 8px; }
+.attc { position: relative; flex-shrink: 0; width: 62px; height: 62px; border-radius: 11px; overflow: hidden;
+  background: #1a1d26; border: 1px solid #2c303b; display: flex; align-items: center; justify-content: center; }
+.attimg2 { width: 100%; height: 100%; object-fit: cover; }
+.attfile2 { font-size: 16px; color: #8b8f98; display: flex; flex-direction: column; align-items: center; gap: 1px; }
+.attfile2 i { font-style: normal; font-size: 8.5px; max-width: 54px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.attx { position: absolute; top: 2px; right: 2px; width: 17px; height: 17px; border-radius: 50%;
+  background: rgba(0,0,0,.7); color: #fff; border: 0; font-size: 9px; line-height: 1; }
+.attadd { flex-shrink: 0; width: 62px; height: 62px; border-radius: 11px; border: 1px dashed #3a3e48;
+  background: none; color: #666b76; font-size: 19px; }
+.cb.dim { opacity: .35; }
+.cb.edit { background: #e8b268; border-color: #e8b268; }
+.recdot { display: block; width: 12px; height: 12px; border-radius: 50%; background: #fff; animation: pulse 1s infinite; }
+.ctx { display: inline-flex; align-items: center; gap: 5px; background: none; border: 0; color: #8b8f98; font-size: 11px; padding: 0; }
+.ctxbar { width: 56px; height: 5px; border-radius: 3px; background: #23262e; overflow: hidden; display: inline-block; }
+.ctxbar i { display: block; height: 100%; background: #7dd3a8; border-radius: 3px; transition: width .3s; }
+.ctx.warm .ctxbar i { background: #e8b268; }
+.ctx.hot .ctxbar i { background: #e05555; }
+.ctx.hot { color: #e08585; }
+.ssearch { padding: 0 2px 8px; }
+.ssearch input { width: 100%; background: #1a1d26; border: 1px solid #2c303b; color: #dcddde; border-radius: 9px; padding: 8px 11px; font-size: 13px; }
+.ws { border-top: 1px solid #23262e; margin-top: 10px; padding-top: 8px; }
+.cwdnow { font-size: 11px; padding: 0 4px 6px; word-break: break-all; }
+.prow { display: flex; align-items: center; gap: 7px; padding: 8px 6px; border-radius: 8px; font-size: 12.5px; }
+.prow.cur { background: rgba(139,92,246,.12); }
+.pico { flex-shrink: 0; }
+.ppath { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; color: #dcddde; }
+.pcur { color: #a78bfa; font-size: 10px; flex-shrink: 0; }
+.pinput { display: flex; gap: 6px; padding: 8px 2px 4px; }
+.pinput input { flex: 1; background: #1a1d26; border: 1px solid #2c303b; color: #dcddde; border-radius: 8px; padding: 7px 10px; font-size: 12px; min-width: 0; }
+.pinput button { background: #8b5cf6; border: 0; color: #fff; border-radius: 8px; padding: 0 13px; font-size: 12px; }
+.pcomp { padding: 4px 2px; }
+.pci { font-size: 11.5px; color: #8b8f98; padding: 5px 6px; border-radius: 6px; font-family: ui-monospace, monospace; }
 .crow { display: flex; gap: 8px; align-items: flex-end; }
 .crow textarea { flex: 1; background: #1a1d26; border: 1px solid #2c303b; color: #dcddde;
   border-radius: 14px; padding: 12px 13px; font-size: 14.5px; font-family: inherit; resize: none;

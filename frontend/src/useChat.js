@@ -14,6 +14,9 @@ export const chat = reactive({
   conversations: [], activeConvId: '',
   slashCommands: [],
   terminals: [],
+  projects: [],            // 工作区列表
+  pathCompletions: [],     // 路径补全
+  sessionSearch: null,     // 会话搜索结果
   notices: [],
   liveTools: {},          // toolCallId -> {name, text, done, isError, exitCode}
 })
@@ -65,6 +68,7 @@ export function connect() {
         wsSend({ type: 'get_state' })
         wsSend({ type: 'list_models' })
         wsSend({ type: 'get_commands' })
+        wsSend({ type: 'list_projects' })
         break
       case 'snapshot':
         chat.state = m.state
@@ -108,6 +112,16 @@ export function connect() {
       case 'terminal_list':
         chat.terminals = m.terminals || []
         break
+      case 'projects':
+        chat.projects = (m.projects || []).sort((a, b) => (b.lastUsed || 0) - (a.lastUsed || 0))
+        break
+      case 'path_completions':
+        chat.pathCompletions = m.completions || []
+        break
+      case 'session_search_results':
+      case 'session_search_result':
+        chat.sessionSearch = m.results || m.hits || m.sessions || []
+        break
       default: break
     }
   }
@@ -133,4 +147,10 @@ export const api = {
   deleteSession(path) { wsSend({ type: 'delete_session', path }) },
   switchConversation(id) { wsSend({ type: 'switch_conversation', id }) },
   getState() { wsSend({ type: 'get_state' }) },
+  setCwd(path) { wsSend({ type: 'set_cwd', path }) },
+  listProjects() { wsSend({ type: 'list_projects' }) },
+  searchSessions(q) { wsSend({ type: 'search_sessions', reqId: Date.now(), query: q }) },
+  completePath(p) { wsSend({ type: 'complete_path', path: p }) },
+  makeDir(p) { wsSend({ type: 'make_dir', path: p }) },
+  compact() { wsSend({ type: 'prompt', text: '/compact' }) },
 }
