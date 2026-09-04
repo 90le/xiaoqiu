@@ -1155,8 +1155,19 @@ public class Tools {
                         if (dd != null && dd.has("answer")) lastAnswer = dd.optString("answer");
                     } catch (Exception ignore3) {}
                     results.put(rec);
-                    if (!r.optBoolean("ok", false) && s.optBoolean("critical", true))
+                    if (!r.optBoolean("ok", false) && s.optBoolean("critical", true)) {
+                        // 中止清场：宏若创建过副屏则销毁，防僵尸display泄漏
+                        try {
+                            for (int ri = 0; ri < results.length(); ri++) {
+                                JSONObject rr = results.optJSONObject(ri);
+                                if (rr != null && "vd".equals(rr.optString("tool")) && rr.optBoolean("ok", false)) {
+                                    Tools.call("vd", new JSONObject().put("action", "stop"));
+                                    break;
+                                }
+                            }
+                        } catch (Exception ignore5) {}
                         return ok(new JSONObject().put("aborted", true).put("atStep", i + 1).put("results", results));
+                    }
                 }
                 if (a.optBoolean("speak", false) && lastAnswer != null) {
                     try {
@@ -2781,7 +2792,14 @@ public class Tools {
                 }
                 Thread.sleep(1000);
             }
-            return err("TIMEOUT", "特权执行超时（队列或 adbc 通道异常）");
+            // 自愈：adbd 端口轮换/假死 → app 内软重启无线调试（无需 adbc），下次 l2_exec 通常即恢复
+            try {
+                android.provider.Settings.Global.putInt(ctx.getContentResolver(), "adb_wifi_enabled", 0);
+                Thread.sleep(1500);
+                android.provider.Settings.Global.putInt(ctx.getContentResolver(), "adb_wifi_enabled", 1);
+                Log.w("PiBridge", "l2_exec超时，已触发adbd软重启自愈");
+            } catch (Exception ignore2) {}
+            return err("TIMEOUT", "特权执行超时（已触发adbd软重启自愈，10秒后重试通常恢复）");
         }});
 
         def("floatball", "开关小丘悬浮球（on=开 off=关 缺省=切换）", schema(props("on", prop("string", "on/off，缺省切换"))), new H() { public JSONObject run(JSONObject a) {
