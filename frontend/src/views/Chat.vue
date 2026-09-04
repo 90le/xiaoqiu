@@ -231,21 +231,21 @@ function buildAtts() {
     ? { path: a.path, mode: 'inline' }
     : { data: a.base64, mimeType: a.mime })
 }
-function send(mode) { // 文字直发慢脑（快脑只在语音链）
+// webui submit(queue) 同款：queue=false → steer（插队：当前回合结束立即处理，跳过剩余工具调用）
+//                        queue=true  → followUp（排队：整个回复运行结束后才发送）
+function submit(queue = false) {
   if (editId.value) { submitEdit(); return } // 编辑态优先：绝不落入普通发送
   const text = input.value.trim()
   const hasAtt = attachments.value.some(a => a.base64 || a.fileB64)
   if (chat.status !== 'open' || (!text && !hasAtt)) return // webui：断线/空内容不发
   const atts = buildAtts()
   if (atts === false) return
-  // webui submit()：发送成功才清空输入（失败保留文本，按钮断线时禁用）
-  if (api.prompt(text, atts, mode === 'followUp')) {
+  // 发送成功才清空输入（失败保留文本重试）
+  if (api.prompt(text, atts, queue || undefined)) {
     input.value = ''; attachments.value = []
     autoGrow()
   }
 }
-function sendQueued() { api.prompt(input.value.trim(), undefined, true); input.value = '' }
-function rmQueued(kind, text) { wsSend({ type: 'queue_remove', kind, text }) }
 function pickFile() { fileEl.value?.click() }
 function onFile(e) {
   const f = e.target.files?.[0]
@@ -417,10 +417,10 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
       <!-- 排队/插队气泡 -->
       <div v-if="st?.queue">
         <div v-for="(q, i) in (st.queue.steering || [])" :key="'s' + i" class="mrow urow">
-          <div class="ub queued"><span class="qtag steer">插队</span>{{ q }}<span class="qrm tap" @click="rmQueued('steering', q)">✕</span></div>
+          <div class="ub queued"><span class="qtag steer">插队</span>{{ q }}</div>
         </div>
         <div v-for="(q, i) in (st.queue.followUp || [])" :key="'f' + i" class="mrow urow">
-          <div class="ub queued"><span class="qtag follow">排队</span>{{ q }}<span class="qrm tap" @click="rmQueued('followUp', q)">✕</span></div>
+          <div class="ub queued"><span class="qtag follow">排队</span>{{ q }}</div>
         </div>
       </div>
 
@@ -482,9 +482,8 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
     <div class="composer">
       <div v-if="errN" class="errbn">⚠ {{ errN }}</div>
       <div v-if="editId" class="editbn">
-        <span class="ebtxt">✎ 编辑消息 · 保存后从这里重新生成</span>
+        <span class="ebtxt">✎ 编辑消息 · ✓ 发送后从这里重新生成</span>
         <button class="tap" @touchstart.prevent="cancelEdit">取消</button>
-        <button class="ebgo tap" @touchstart.prevent="submitOnce">✓ 发送</button>
       </div>
       <div v-if="attachments.length" class="attrow">
         <div v-for="(a, i) in attachments" :key="i" class="attc">
@@ -509,8 +508,8 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
           @touchstart.prevent="micDown" @touchend.prevent="micUp" @mousedown="micDown" @mouseup="micUp">
           <span v-if="recording" class="recdot"></span><template v-else>🎙</template>
         </button>
-        <button v-if="busy && input.trim() && !editId" class="cb q tap" title="排队：本轮结束后再发" @click="sendQueued">⏳</button>
-        <button class="cb send tap" :class="{ edit: editId, dim: !input.trim() }" @touchstart.prevent="input.trim() && (editId ? submitOnce() : send())">
+        <button v-if="busy && input.trim() && !editId" class="cb q tap" title="排队：整个回复结束后再发送" @touchstart.prevent="submit(true)">⏳</button>
+        <button class="cb send tap" :class="{ edit: editId, dim: !input.trim() || chat.status !== 'open' }" @touchstart.prevent="input.trim() && (editId ? submitOnce() : submit())">
           <template v-if="editId">✓</template><template v-else-if="busy">⤴</template><template v-else>➤</template>
         </button>
       </div>
