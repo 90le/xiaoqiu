@@ -68,6 +68,7 @@ export function connect() {
   }
   ws.onmessage = (ev) => {
     lastBeat = Date.now() // 任何服务端消息（含心跳）都证明连接活着
+    criticalPending = null // 有回音=此前发送已投递（TCP 保序）
     let m
     try { m = JSON.parse(ev.data) } catch { return }
     // 消息级探针：右上第二行显示最近收到的 WS 消息类型
@@ -154,9 +155,20 @@ export function connect() {
 
 // 半开连接看门狗：5s 巡检，>30s 无服务端消息 → 强制重连（对标 webui）
 let wdTimer = null
+let criticalPending = null // 关键消息必达：{obj, at}——12s 无任何服务端回音=连接死→重连+重发
+export function sendCritical(obj) {
+  criticalPending = { obj, at: Date.now() }
+  wsSend(obj)
+}
 export function startWatchdog() {
   if (wdTimer) return
   wdTimer = setInterval(() => {
+    // 关键消息 ACK 超时：socket 半开 → 关闭重连，消息从队列补发
+    if (criticalPending && Date.now() - criticalPending.at > 12000) {
+      if (ws && ws.readyState === 1) { try { ws.close() } catch {} }
+      criticalPending = null
+      return
+    }
     if (ws && ws.readyState === 1 && Date.now() - lastBeat > 30000) {
       try { ws.close() } catch {} // onclose 触发重连
     }
