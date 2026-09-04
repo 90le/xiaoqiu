@@ -264,9 +264,10 @@ public class BridgeService extends Service {
                     final String fkey = key;
                     new android.os.Handler(android.os.Looper.getMainLooper()).post(() -> {
                         try {
-                            Tools.call("tts_speak", new org.json.JSONObject()
-                                    .put("text", say).put("engine",
-                                            Tools.loadCfg().optString("notify_announce_engine", "xiaomi")));
+                            org.json.JSONObject ttsArg = new org.json.JSONObject().put("text", say);
+                            String fengine = Tools.loadCfg().optString("notify_announce_engine", "");
+                            if (!fengine.trim().isEmpty()) ttsArg.put("engine", fengine.trim()); // 显式设置才覆盖，否则跟随设置页全局tts_engine
+                            Tools.call("tts_speak", ttsArg);
                             android.util.Log.i("PiBridge", "聚合播报(" + fkey + "): " + fsay);
                         } catch (Exception ignore) {}
                     });
