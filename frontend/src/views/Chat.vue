@@ -683,7 +683,6 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
 .editbn { gap: 6px; }
 .ebtxt { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
 .editbn button { background: none; border: 0; color: #e8b268; font-size: 12.5px; flex-shrink: 0; padding: 4px 8px; }
-.editbn .ebgo { color: #fff; background: #e8b268; border-radius: 8px; font-weight: 700; }
 .attrow { display: flex; gap: 8px; overflow-x: auto; scrollbar-width: none; padding: 2px 2px 8px; }
 .attc { position: relative; flex-shrink: 0; width: 62px; height: 62px; border-radius: 11px; overflow: hidden;
   background: #1a1d26; border: 1px solid #2c303b; display: flex; align-items: center; justify-content: center; }
