@@ -18,8 +18,10 @@ export const chat = reactive({
   liveTools: {},          // toolCallId -> {name, text, done, isError, exitCode}
 })
 
+const wsQueue = [] // 未连接期间的发送缓冲（防 terminal_create 等被静默丢弃）
 export function wsSend(obj) {
-  if (ws && ws.readyState === 1) ws.send(JSON.stringify(obj))
+  if (ws && ws.readyState === 1) { try { ws.send(JSON.stringify(obj)) } catch {} }
+  else wsQueue.push(obj)
 }
 
 // ── 终端桥：terminalId -> {write, onExit, onList}（Terminal.vue 注册）──
@@ -48,6 +50,9 @@ export function connect() {
   ws.onopen = () => {
     chat.status = 'open'
     wsSend({ type: 'hello', clientId })
+    // hello 是第一个包；排队消息在其后送达
+    const q = wsQueue.splice(0)
+    for (const m of q) wsSend(m)
   }
   ws.onmessage = (ev) => {
     let m

@@ -73,6 +73,8 @@ public class MainActivity extends Activity {
         root.addView(splash, new FrameLayout.LayoutParams(
                 ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT));
 
+        final android.app.ActionBar ab = getActionBar();
+        if (ab != null) ab.hide();
         setContentView(root);
         waitThenReload();
     }
@@ -107,6 +109,19 @@ public class MainActivity extends Activity {
         }
         @JavascriptInterface public void stopVoice() {
             ui.post(() -> pageVoice(false));
+        }
+        /** 显式唤起软键盘（xterm textarea 聚焦后 JS focus 拉不起 IME，需原生 showSoftInput） */
+        @JavascriptInterface public void showKeyboard() {
+            ui.post(() -> {
+                try {
+                    web.requestFocus();
+                    web.evaluateJavascript(
+                        "(document.querySelector('.xterm-helper-textarea')||{focus(){}}).focus();'F'", null);
+                    android.view.inputmethod.InputMethodManager imm =
+                        (android.view.inputmethod.InputMethodManager) getSystemService(INPUT_METHOD_SERVICE);
+                    imm.toggleSoftInput(0, 0); // 只用toggle：开↔关。showSoftInput+toggle连调会开了又关
+                } catch (Exception e) { Log.w("PiBridge", "showKeyboard: " + e); }
+            });
         }
     }
 

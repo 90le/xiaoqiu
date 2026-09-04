@@ -227,7 +227,7 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
       <div class="crow">
         <button class="cb tap" @click="pickFile">📎</button>
         <input ref="fileEl" type="file" hidden @change="onFile" />
-        <textarea v-model="input" rows="1" placeholder="打字或按住 🎙 说话 · Enter 发送" @keydown.enter.exact.prevent="send"></textarea>
+        <textarea v-model="input" rows="1" placeholder="发消息…" @keydown.enter.exact.prevent="send"></textarea>
         <button class="cb mic tap" :class="{ rec: recording }"
           @touchstart.prevent="micDown" @touchend.prevent="micUp" @mousedown="micDown" @mouseup="micUp">🎙</button>
         <button class="cb send tap" :disabled="!input.trim()" @click="send">➤</button>
@@ -282,8 +282,8 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
 .et { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
 .mrow { margin: 12px 0; }
 .urow { display: flex; justify-content: flex-end; }
-.ub { max-width: 85%; background: rgba(139,92,246,.2); border: 1px solid rgba(139,92,246,.3);
-  padding: 10px 14px; border-radius: 16px 16px 4px 16px; }
+.ub { max-width: 85%; background: linear-gradient(135deg, rgba(139,92,246,.42), rgba(139,92,246,.28));
+  border: 1px solid rgba(139,92,246,.35); padding: 10px 14px; border-radius: 16px 16px 4px 16px; }
 .ut { white-space: pre-wrap; font-size: 14.5px; line-height: 1.6; }
 .uimg { max-width: 180px; border-radius: 10px; margin-bottom: 6px; }
 .ameta { font-size: 10px; color: #666b76; margin: 0 0 3px 4px; }
@@ -346,7 +346,9 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
 .att-thumb { width: 22px; height: 22px; object-fit: cover; border-radius: 5px; }
 .crow { display: flex; gap: 8px; align-items: flex-end; }
 .crow textarea { flex: 1; background: #1a1d26; border: 1px solid #2c303b; color: #dcddde;
-  border-radius: 14px; padding: 11px 13px; font-size: 14.5px; font-family: inherit; resize: none; max-height: 110px; }
+  border-radius: 14px; padding: 12px 13px; font-size: 14.5px; font-family: inherit; resize: none;
+  height: 46px; min-height: 46px; max-height: 110px; overflow-y: auto; }
+input[type="checkbox"] { accent-color: #8b5cf6; }
 .cb { width: 42px; height: 42px; border-radius: 50%; border: 1px solid #2c303b; background: #1a1d26;
   color: #dcddde; font-size: 16px; flex-shrink: 0; }
 .cb.mic.rec { background: #e05555; border-color: #e05555; animation: pulse 1s infinite; }
