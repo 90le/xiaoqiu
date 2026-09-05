@@ -680,7 +680,7 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
         <!-- 用户 -->
         <div v-else-if="m.role === 'user'" class="mrow urow">
           <div class="ub">
-            <div v-if="m.attImgs?.length || m.attFiles?.length" class="arow" :class="{ one: m.attImgs?.length === 1 && !m.attFiles?.length }">
+            <div v-if="m.attImgs?.length || m.attFiles?.length" class="a2row" :class="{ one: m.attImgs?.length === 1 && !m.attFiles?.length }">
               <img v-for="(u, ii) in (m.attImgs || [])" :key="'ag' + ii" :src="u" class="a2thumb tap" @click="viewImg(u)" />
               <div v-for="(f, fi) in (m.attFiles || [])" :key="'af' + fi" class="a2chip tap" @click="viewFile(f)">
                 <span class="a2ico">{{ f.details?.type === 'folder' ? '📁' : (f.details?.mode === 'bridged' ? '🔤' : '📄') }}</span>
@@ -699,7 +699,6 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
 
         <!-- 助手 -->
         <div v-else-if="m.role === 'assistant'" class="mrow arow">
-          <div class="ameta">{{ fmtTs(m.timestamp) }}<template v-if="m.model"> · {{ m.model }}</template></div>
           <div class="ab">
             <template v-for="(b, bi) in (m.content || [])" :key="bi">
               <!-- 思考：折叠块 -->
@@ -729,6 +728,7 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
               <!-- 正文：markdown -->
               <div v-else-if="b.type === 'text' && b.text" class="md" v-html="md(b.text)"></div>
             </template>
+            <div class="ameta">{{ fmtTs(m.timestamp) }}<template v-if="m.model"> · {{ m.model }}</template></div>
           </div>
         </div>
       </template>
@@ -925,10 +925,10 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
   background: #242a34; border: 1px solid #3a4150; color: #dfe4ec; font-size: 18px; box-shadow: 0 4px 14px rgba(0,0,0,.4); }
 
 /* 附件横滚行（微信/ChatGPT 模式）：小方图+小胶囊统一流，多了横滑 */
-.arow { display: flex; align-items: center; gap: 4px; overflow-x: auto; margin-bottom: 6px; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
-.arow::-webkit-scrollbar { display: none; }
+.a2row { display: flex; align-items: center; gap: 4px; overflow-x: auto; margin-bottom: 6px; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
+.a2row::-webkit-scrollbar { display: none; }
 .a2thumb { width: 56px; height: 56px; object-fit: cover; border-radius: 9px; flex-shrink: 0; background: #0e1015; border: 1px solid rgba(255,255,255,.07); scroll-snap-align: start; }
-.arow.one .a2thumb { width: 118px; height: 118px; }
+.a2row.one .a2thumb { width: 118px; height: 118px; }
 .a2chip { display: inline-flex; align-items: center; gap: 5px; background: rgba(12,14,20,.5); border: 1px solid rgba(255,255,255,.08); border-radius: 9px; padding: 6px 9px; flex-shrink: 0; scroll-snap-align: start; }
 .a2ico { font-size: 14px; }
 .a2name { font-size: 11px; color: #eef1f6; max-width: 28vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
@@ -1064,7 +1064,7 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
   border: 1px solid rgba(139,92,246,.35); padding: 10px 14px; border-radius: 16px 16px 4px 16px; }
 .ut { white-space: pre-wrap; font-size: 14.5px; line-height: 1.6; }
 .uimg { max-width: 180px; border-radius: 10px; margin-bottom: 6px; }
-.ameta { font-size: 10px; color: #666b76; margin: 0 0 3px 4px; }
+.ameta { font-size: 9.5px; color: #5d6472; margin-top: 8px; padding-top: 6px; border-top: 1px solid rgba(255,255,255,.05); letter-spacing: .3px; }
 .ab { max-width: 92%; }
 .ab.live .caret { color: #a78bfa; animation: blink 1s step-start infinite; }
 @keyframes blink { 50% { opacity: 0; } }
