@@ -23,22 +23,23 @@ const dpadOff = ref(localStorage.getItem('xq_dpad_off') === '1')  // 悬浮方�
 // D-pad 任意位置拖动（位置持久化；球态：拖=移位 点=展开）
 const dpadPos = ref(null)
 try { dpadPos.value = JSON.parse(localStorage.getItem('xq_dpad_pos') || 'null') } catch {}
+const dbgPos = ref('读档中')
+try { dbgPos.value = '档=' + (localStorage.getItem('xq_dpad_pos') || 'null') } catch {}
+const _save0 = saveDpadPos
+saveDpadPos = function () { _save0(); try { dbgPos.value = '存=' + (localStorage.getItem('xq_dpad_pos') || 'null') } catch {} }
 const dpadStyle = computed(() => {
   const p = dpadPos.value
   return p ? { left: p.x + 'px', top: p.y + 'px', right: 'auto', bottom: 'auto' } : {}
 })
 function saveDpadPos() { try { localStorage.setItem('xq_dpad_pos', JSON.stringify(dpadPos.value)) } catch {} }
 let dragInfo = null
-// 挂载时把越界存档钳回舞台可视区（自动救回"点不到的球"）
+// 越界救护：只在存档真跑出【窗口】可视区时才钳回（不按舞台矩形——键盘条/软键盘
+// 状态会让舞台矩形变化，把好位置误"纠正"；窗口矩形恒定，误伤为零）
 function sanitizeDpad() {
   const p = dpadPos.value
   if (!p) return
-  const st = stage.value?.getBoundingClientRect?.()
-  if (!st || !st.width) return
-  const fixed = {
-    x: Math.max(st.left + 2, Math.min(st.right - 50, p.x)),
-    y: Math.max(st.top + 2, Math.min(st.bottom - 50, p.y)),
-  }
+  const W = window.innerWidth, H = window.innerHeight
+  const fixed = { x: Math.max(2, Math.min(W - 50, p.x)), y: Math.max(2, Math.min(H - 50, p.y)) }
   if (fixed.x !== p.x || fixed.y !== p.y) { dpadPos.value = fixed; saveDpadPos() }
 }
 function dragStart(e) {
@@ -59,15 +60,21 @@ function dragMove(e) {
   const y = Math.max(sr.top + 2, Math.min(sr.bottom - dragInfo.h - 2, dragInfo.oy + dy))
   dpadPos.value = { x, y }
 }
+function collapsePad() {
+  if (ballAnchor) { dpadPos.value = ballAnchor; ballAnchor = null } // 回展开前的真实球位
+  dpadOff.value = true; saveDpad(true)
+}
 function dragEnd() {
-  if (dragInfo?.moved) saveDpadPos()
+  if (dragInfo?.moved) { ballAnchor = null; saveDpadPos() } // 用户手动拖=新意图，锚点作废
   dragInfo = null
 }
 function fabEnd() {
   if (dragInfo && !dragInfo.moved) { dpadOff.value = false; saveDpad(false); clampForPad() } // 点=展开
   dragInfo = null
 }
-// 展开后按 pad 实际尺寸钳回舞台（球可贴边，pad 大不能出界）
+// 展开后按 pad 实际尺寸钳回舞台（球可贴边，pad 大不能出界）。
+// 只做视觉钳位：真实球位存档不覆写，收起（⌄）时回到原位。
+let ballAnchor = null // 展开前的真实球位
 function clampForPad() {
   nextTick(() => {
     const st = stage.value?.getBoundingClientRect?.()
@@ -75,11 +82,13 @@ function clampForPad() {
     if (!st || !st.width || !p) return
     const el = document.querySelector('.termwrap .dpad')
     const w = el?.offsetWidth || 160, h = el?.offsetHeight || 230
-    const fixed = {
-      x: Math.max(st.left + 2, Math.min(st.right - w - 2, p.x)),
-      y: Math.max(st.top + 2, Math.min(st.bottom - h - 2, p.y)),
-    }
-    if (fixed.x !== p.x || fixed.y !== p.y) { dpadPos.value = fixed; saveDpadPos() }
+    if (p.x + w > st.right - 2 || p.y + h > st.bottom - 2 || p.x < st.left || p.y < st.top) {
+      ballAnchor = { x: p.x, y: p.y }
+      dpadPos.value = {
+        x: Math.max(st.left + 2, Math.min(st.right - w - 2, p.x)),
+        y: Math.max(st.top + 2, Math.min(st.bottom - h - 2, p.y)),
+      }
+    } else ballAnchor = null
   })
 }
 
@@ -362,6 +371,8 @@ onUnmounted(() => {
           @touchstart.stop.prevent="hTouchStart(h.side, $event)" @touchmove.stop.prevent="hTouchMove(h.side, $event)" @touchend.stop="selEndDrag"></div>
       </template>
     </div>
+    <!-- dpad 存档仪表（调试，下轮撤） -->
+    <div class="dpdbg">{{ dbgPos }}</div>
     <!-- 选区工具条 -->
     <div v-if="sel.on && sel.bar" class="selbar" :style="{ left: sel.bar.x + 'px', top: sel.bar.y + 'px' }">
       <span v-if="sel.busy" class="selbusy">{{ sel.busy }}</span>
@@ -429,7 +440,7 @@ onUnmounted(() => {
     </button>
     <div v-else class="dpad" :style="dpadStyle">
       <div class="dpdrag" @touchstart.passive="dragStart" @touchmove="dragMove" @touchend="dragEnd">⠿⠿</div>
-      <button class="dp-x tap" @touchstart.prevent="dpadOff = true; saveDpad(true)">⌄</button>
+      <button class="dp-x tap" @touchstart.prevent="collapsePad">⌄</button>
       <button class="dp tap" @touchstart.prevent="raw('\x1b[A')">↑</button>
       <div class="dpb">
         <button class="dp tap" @touchstart.prevent="raw('\x1b[D')">←</button>
@@ -464,6 +475,8 @@ onUnmounted(() => {
 <style scoped>
 .termwrap { position: fixed; inset: 0; background: #0d0e12; display: flex; flex-direction: column; z-index: 10; overflow: hidden; }
 .tabs { display: flex; align-items: center; gap: 5px; padding: 6px 8px; background: #14161c; border-bottom: 1px solid #23262e; }
+.dpdbg { position: fixed; right: 6px; bottom: 118px; z-index: 46; font: 10px ui-monospace, monospace; color: #3ecf72; background: rgba(0,0,0,.7); padding: 3px 7px; border-radius: 6px; pointer-events: none; max-width: 46vw; overflow: hidden; }
+
 /* ══ 选区复制 ══ */
 .selr { position: absolute; background: rgba(139, 92, 246, .32); border-radius: 2px; pointer-events: none; z-index: 5; }
 .selh { position: absolute; width: 22px; height: 22px; border-radius: 50% 50% 50% 4px; background: #8b5cf6; border: 2.5px solid #fff; z-index: 7; box-shadow: 0 2px 8px rgba(0,0,0,.45); transform: rotate(-45deg); }
