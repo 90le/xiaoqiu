@@ -62,7 +62,6 @@ export function createSession(cwd) {
   // v2：无条件跟踪 + 双向差分（增长发增量 / 缩短发退格），2 秒空闲重置。
   let lastComp = '', lastCompAt = 0
   term.onData((d) => {
-    try { window.__imeProbe && window.__imeProbe(d) } catch {}
     const now = Date.now()
     if (now - lastCompAt > 2000) lastComp = '' // 停顿超 2s：按新输入上下文处理
     let send = d

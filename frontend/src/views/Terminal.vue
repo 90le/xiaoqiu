@@ -20,6 +20,40 @@ const keysMode = ref('bar')     // bar（收缩：核心键） | full（展开�
 // 编程符号（输入法难打的）——展开态横滚行
 const kbSyms = ['`', '~', '|', '-', '/', '\\', ':', ';', '\'', '"', '[', ']', '{', '}', '<', '>', '(', ')', '$', '#', '%', '&', '*', '+', '=', '_', '!', '?', '@', '^', '.']
 const dpadOff = ref(localStorage.getItem('xq_dpad_off') === '1')  // 悬浮方向键
+// D-pad 任意位置拖动（位置持久化；球态：拖=移位 点=展开）
+const dpadPos = ref(null)
+try { dpadPos.value = JSON.parse(localStorage.getItem('xq_dpad_pos') || 'null') } catch {}
+const dpadStyle = computed(() => {
+  const p = dpadPos.value
+  return p ? { left: p.x + 'px', top: p.y + 'px', right: 'auto', bottom: 'auto' } : {}
+})
+function saveDpadPos() { try { localStorage.setItem('xq_dpad_pos', JSON.stringify(dpadPos.value)) } catch {} }
+let dragInfo = null
+function dragStart(e) {
+  const t = e.touches ? e.touches[0] : e
+  const r = e.currentTarget.getBoundingClientRect()
+  dragInfo = { sx: t.clientX, sy: t.clientY, ox: r.left, oy: r.top, w: r.width, h: r.height, moved: false }
+}
+function dragMove(e) {
+  if (!dragInfo) return
+  e.preventDefault()
+  const t = e.touches ? e.touches[0] : e
+  const dx = t.clientX - dragInfo.sx, dy = t.clientY - dragInfo.sy
+  if (Math.abs(dx) + Math.abs(dy) > 6) dragInfo.moved = true
+  if (!dragInfo.moved) return
+  const x = Math.max(4, Math.min(window.innerWidth - dragInfo.w - 4, dragInfo.ox + dx))
+  const y = Math.max(4, Math.min(window.innerHeight - dragInfo.h - 4, dragInfo.oy + dy))
+  dpadPos.value = { x, y }
+}
+function dragEnd() {
+  if (dragInfo?.moved) saveDpadPos()
+  dragInfo = null
+}
+function fabEnd() {
+  if (dragInfo && !dragInfo.moved) { dpadOff.value = false; saveDpad(false) } // 点=展开
+  else saveDpadPos() // 拖=移位（已实时更新）
+  dragInfo = null
+}
 
 function saveDpad(off) { try { localStorage.setItem('xq_dpad_off', off ? '1' : '0') } catch {} }
 async function pasteClip() {
@@ -38,21 +72,6 @@ const sessions = computed(() => tstore.order.map(id => tstore.sessions[id]).filt
 
 function openShellDrawer() { window.dispatchEvent(new Event('xq-open-drawer')) }
 function showKb() { try { window.XiaoqiuBridge && window.XiaoqiuBridge.showKeyboard() } catch {} }
-// 输入探针：⌨ 长按开关；记录 onData 原始字节序列（\x1b 可视化）
-const probeOn = ref(true)
-const probeLines = ref([])
-let probeTapT = 0
-function probeToggle() {
-  const now = Date.now()
-  if (now - probeTapT < 500) { probeOn.value = !probeOn.value; probeLines.value = [] }
-  probeTapT = now
-}
-window.__imeProbe = (d) => {
-  if (!probeOn.value) return
-  const vis = JSON.stringify(d).slice(1, -1)
-  probeLines.value.push(vis.length > 18 ? vis.slice(0, 18) + '…' : vis)
-  if (probeLines.value.length > 6) probeLines.value.shift()
-}
 function activate(id) {
   const s = tstore.sessions[id]
   if (!s) return
@@ -138,8 +157,6 @@ onUnmounted(() => {
       <button class="tb newb tap" @click="newTerm">＋</button>
     </header>
 
-    <!-- 输入探针（调试）：显示 onData 原始串——定位 IME 重发 -->
-    <div class="imeprobe" v-if="probeOn">{{ probeLines.join(' · ') }}</div>
     <!-- 终端舞台：pane 由会话池借入 -->
     <div ref="stage" class="stage"></div>
 
@@ -168,7 +185,7 @@ onUnmounted(() => {
       <!-- 常态：两行编程高频 -->
       <div class="kwrap">
         <div class="kscroll">
-          <button class="vk kb tap" @click="showKb" @touchstart="probeToggle" @mousedown="probeToggle">⌨</button>
+          <button class="vk kb tap" @click="showKb">⌨</button>
           <button class="vk mod tap" :class="{ on: ctrlOn }" @click="press('CTRL')">CTRL</button>
           <button class="vk mod tap" :class="{ on: altOn }" @click="press('ALT')">ALT</button>
           <button class="vk mod tap" :class="{ on: shiftOn }" @click="press('SHIFT')">SHIFT</button>
@@ -193,9 +210,13 @@ onUnmounted(() => {
       </div>
     </div>
 
-        <!-- 悬浮方向键 D-pad v2（上移：终端区垂直中部，含回车/粘贴） -->
-    <button v-if="dpadOff" class="dpad-fab tap" title="方向键" @touchstart.prevent="dpadOff = false; saveDpad(false)">✥</button>
-    <div v-else class="dpad">
+        <!-- 悬浮方向键 D-pad v3：可拖动任意位置（⠿拖柄 / 球态拖=移 点=开） -->
+    <button v-if="dpadOff" class="dpad-fab" :style="dpadStyle" title="方向键（拖=移位 点=展开）"
+      @touchstart="dragStart" @touchmove="dragMove" @touchend="fabEnd">
+      ✥
+    </button>
+    <div v-else class="dpad" :style="dpadStyle">
+      <div class="dpdrag" @touchstart.passive="dragStart" @touchmove="dragMove" @touchend="dragEnd">⠿⠿</div>
       <button class="dp-x tap" @touchstart.prevent="dpadOff = true; saveDpad(true)">⌄</button>
       <button class="dp tap" @touchstart.prevent="raw('\x1b[A')">↑</button>
       <div class="dpb">
@@ -253,9 +274,8 @@ onUnmounted(() => {
 .kwrap.extra { animation: kslide .16s ease; margin-bottom: 5px; }
 .vk.tog { color: #a78bfa; }
 .vk.tog.on { background: #2b2440; }
-.imeprobe { position: absolute; top: 4px; right: 8px; z-index: 16; max-width: 70%; font: 10px ui-monospace, monospace; color: #3ecf72; background: rgba(0,0,0,.75); padding: 3px 8px; border-radius: 6px; pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-
 /* 悬浮 D-pad（终端区右缘竖排锚定） */
+.dpdrag { width: 100%; height: 16px; display: flex; align-items: center; justify-content: center; color: #565b66; font-size: 11px; letter-spacing: 3px; }
 .dpad { position: absolute; right: 10px; bottom: 22%; z-index: 15; display: flex; flex-direction: column; align-items: center; gap: 5px;
   background: rgba(20, 22, 28, .82); backdrop-filter: blur(8px); border: 1px solid #323848; border-radius: 14px; padding: 6px; }
 .dpad .dp { width: 44px; height: 40px; background: #1a1d26; color: #c6c9d0; border: 1px solid #2c303b; border-radius: 9px; font-size: 16px; }
