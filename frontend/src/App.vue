@@ -41,9 +41,12 @@ window.__xiaoqiuTask = (t, speak) => {
   const say = (text) => { try { fetch('/api/tts_speak', { method: 'POST', headers: H, body: JSON.stringify({ text }) }) } catch {} }
   console.log('[WAKE] task 注入: ' + t)
   const ok = api.prompt(t) // 发送进对话页当前活动会话
+  console.log('[WAKE] prompt 结果: ' + ok)
   if (!ok) { say('小丘的连接断了，打开小丘再试一次'); return } // 发送失败必须有声反馈
   if (!speak) return
-  const stop = watch(() => chat.streaming, (v, ov) => {
+  // 正确信号：chat.state.streamingMessage（流中非空，结束置空）——chat.streaming 不存在（前两轮静默的真凶）
+  const stop = watch(() => !!chat.state?.streamingMessage, (v, ov) => {
+    console.log('[WAKE] 流状态: ' + ov + '→' + v)
     if (v || !ov) return
     stop()
     setTimeout(async () => {
@@ -53,6 +56,8 @@ window.__xiaoqiuTask = (t, speak) => {
         for (let i = msgs.length - 1; i >= 0; i--) if (msgs[i]?.role === 'assistant') { last = msgs[i]; break }
         let text = (last?.content || []).map(b => (b.type === 'text' ? b.text : '')).join('').trim()
         if (!text) return
+        console.log('[WAKE] 提取回复: ' + text.length + ' 字')
+        if (!text) { console.log('[WAKE] 回复为空，结束'); return }
         let out = text
         if (text.length > 90) {
           try {

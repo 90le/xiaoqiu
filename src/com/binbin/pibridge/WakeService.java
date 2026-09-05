@@ -233,7 +233,7 @@ public class WakeService extends Service {
             for (String w0 : wakes) {
                 if (norm.startsWith(w0)) { carry = said.substring(w0.length()); break; }
             }
-            Tools.speakLocal(WAKE_REPLIES[new java.util.Random().nextInt(WAKE_REPLIES.length)]);
+            Tools.speakFast(WAKE_REPLIES[new java.util.Random().nextInt(WAKE_REPLIES.length)]);
             waitSpeak(1600);
 
             // ② 连续对话循环
@@ -243,18 +243,18 @@ public class WakeService extends Service {
                 if (heard.isEmpty()) {
                     File wav = WavUtil.recordAutoStop(this, 12, 6000); // 6秒无人声→null→收尾（用户定：5-8秒）
                     if (wav == null) {
-                        Tools.speakLocal(BYE_TIMEOUT[new java.util.Random().nextInt(BYE_TIMEOUT.length)]);
+                        Tools.speakFast(BYE_TIMEOUT[new java.util.Random().nextInt(BYE_TIMEOUT.length)]);
                         break;
                     }
                     heard = transcribe(wav);
                     if (heard == null || heard.isEmpty()) { // 噪声/无文本：重听（仍受3秒规则约束）
-                        if (++noiseRounds >= 3) { Tools.speakLocal("没听清，需要我做什么直接说"); noiseRounds = 0; }
+                        if (++noiseRounds >= 3) { Tools.speakFast("没听清，需要我做什么直接说"); noiseRounds = 0; }
                         continue;
                     }
                 }
                 noiseRounds = 0;
                 if (heard.matches(".*(结束对话|结束|说完了|退下|没事了|不用了|再见).*")) {
-                    Tools.speakLocal(BYE_BYE[new java.util.Random().nextInt(BYE_BYE.length)]);
+                    Tools.speakFast(BYE_BYE[new java.util.Random().nextInt(BYE_BYE.length)]);
                     break;
                 }
                 boolean opened = execCommand(heard);
@@ -336,7 +336,7 @@ public class WakeService extends Service {
             bi.putExtra("q", heard);
             sendBroadcast(bi);
             Log.i("PiBridge", "🔔 任务已广播: " + heard);
-            Tools.speakLocal("好嘞，这就办");
+            Tools.speakFast("好嘞，这就办");
             waitSpeak(1500);
             return true;
         } catch (Exception e) { Log.w("PiBridge", "execCommand: " + e); return false; }

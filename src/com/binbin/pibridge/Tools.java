@@ -246,6 +246,85 @@ public class Tools {
         }, "cloud-tts").start();
     }
 
+    /** 云 TTS 合成（不播放）：返回去提示音的 wav 字节，失败 null。非主线程 */
+    static byte[] synthCloud(String text) {
+        try {
+            String key = fastKey();
+            if (key == null) return null;
+            javax.net.ssl.HttpsURLConnection c = (javax.net.ssl.HttpsURLConnection)
+                    new java.net.URL("https://open.bigmodel.cn/api/paas/v4/audio/speech").openConnection();
+            c.setRequestMethod("POST"); c.setConnectTimeout(8000); c.setReadTimeout(25000); c.setDoOutput(true);
+            c.setRequestProperty("Authorization", "Bearer " + key);
+            c.setRequestProperty("Content-Type", "application/json");
+            String voice = loadCfg().optString("tts_voice", "tongtong");
+            JSONObject body = new JSONObject().put("model", "glm-tts").put("input", text)
+                    .put("voice", voice).put("response_format", "wav");
+            java.io.OutputStream os = c.getOutputStream();
+            os.write(body.toString().getBytes("UTF-8")); os.close();
+            if (c.getResponseCode() != 200) return null;
+            java.io.ByteArrayOutputStream ab = new java.io.ByteArrayOutputStream();
+            java.io.InputStream is = c.getInputStream();
+            byte[] b = new byte[8192]; int n; while ((n = is.read(b)) > 0) ab.write(b, 0, n);
+            is.close();
+            return trimLeadingBeep(ab.toByteArray());
+        } catch (Exception e) { return null; }
+    }
+
+    // ══ 唤醒回应词预生成：云端合成一次，本地秒播（用户设计：零合成延迟）═══
+    public static final String[] FAST_PHRASES = {
+            "在！", "我在！", "诶！", "嗯！",
+            "好嘞，这就办", "好嘞", "嗯，我先退下", "我先歇着啦",
+            "没听清，需要我做什么直接说", "小丘的连接断了，打开小丘再试一次"
+    };
+    static java.io.File fastFile(String p) {
+        return new java.io.File(ctx.getFilesDir(), "wake-sounds/" + (p.hashCode() & 0x7fffffff) + ".wav");
+    }
+    /** 预生成缺失的回应音频（服务启动后台跑一次；换音色后可删目录重生成） */
+    public static void pregenFastSounds() {
+        new Thread(() -> {
+            for (String p : FAST_PHRASES) {
+                try {
+                    java.io.File f = fastFile(p);
+                    if (f.isFile()) continue;
+                    byte[] w = synthCloud(p);
+                    if (w == null) continue;
+                    f.getParentFile().mkdirs();
+                    java.io.FileOutputStream fo = new java.io.FileOutputStream(f);
+                    fo.write(w); fo.close();
+                    Log.i("PiBridge", "预生成回应: " + p + " " + w.length + "B");
+                } catch (Exception ignore) {}
+            }
+        }, "pregen-tts").start();
+    }
+    /** 秒播预生成回应；无缓存则本地TTS顶上+后台补缓存 */
+    public static void speakFast(String phrase) {
+        try {
+            java.io.File f = fastFile(phrase);
+            if (f.isFile()) {
+                ttsSpeaking = true;
+                MediaPlayer mp = new MediaPlayer();
+                mp.setAudioAttributes(new android.media.AudioAttributes.Builder()
+                        .setUsage(android.media.AudioAttributes.USAGE_MEDIA)
+                        .setContentType(android.media.AudioAttributes.CONTENT_TYPE_SPEECH).build());
+                mp.setDataSource(f.getAbsolutePath());
+                mp.setOnCompletionListener(m -> { m.release(); ttsSpeaking = false; fireSpeakDone(); });
+                mp.setOnErrorListener((m, what, extra) -> { m.release(); ttsSpeaking = false; fireSpeakDone(); return true; });
+                mp.prepare(); mp.start();
+                return;
+            }
+        } catch (Exception e) { Log.w("PiBridge", "speakFast: " + e); }
+        speakLocal(phrase); // 兜底
+        new Thread(() -> { // 补缓存
+            byte[] w = synthCloud(phrase);
+            if (w != null) try {
+                java.io.File f = fastFile(phrase);
+                f.getParentFile().mkdirs();
+                java.io.FileOutputStream fo = new java.io.FileOutputStream(f);
+                fo.write(w); fo.close();
+            } catch (Exception ignore) {}
+        }).start();
+    }
+
     /** 云 TTS：智谱 GLM-TTS（童童音色）；失败返回 false 由调用方回退。注意：只能在非主线程调用 */
     static boolean cloudSpeak(String text) {
         try {

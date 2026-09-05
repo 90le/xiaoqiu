@@ -53,6 +53,7 @@ public class BridgeService extends Service {
             if ("true".equals(Tools.loadCfg().optString("wake_on", "false"))) WakeService.start(this);
         }, "wake-restore").start();
         startNotifyAnnouncer(); // 通知实时播报（cfg notify_announce 门控）
+        Tools.pregenFastSounds(); // 唤醒回应词预生成（云端合成→本地秒播）
 
         // 唤醒命中动画广播（:kws 进程 → 主进程悬浮球特效）
         registerReceiver(new android.content.BroadcastReceiver() {
