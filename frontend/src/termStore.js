@@ -78,7 +78,7 @@ export function createSession(cwd) {
     lastCompAt = now
     if (send) wsSend({ type: 'terminal_input', terminalId: id, data: send })
   })
-  tstore.sessions[id] = { id, title, cwd: cwd || '/data/data/com.pihost/files/home', el, term, fit, sendDims, unreg, alive: true, lastOut: Date.now(), exitCode: null }
+  tstore.sessions[id] = { id, title, cwd: cwd || '/data/data/com.pihost/files/home', el, term, fit, unreg, alive: true, lastOut: Date.now(), exitCode: null }
   tstore.order.push(id)
   // fit 后必须通知服务端改 PTY 尺寸（webui sendDims 同款）——否则 TUI 按 80 列重绘
   // 在手机实际 ~52 列屏上折行 → 光标掉行 → 楼梯式重复（pi TUI 整行重绘才显形）
@@ -89,6 +89,7 @@ export function createSession(cwd) {
       lastCols = term.cols; lastRows = term.rows
     } catch {}
   }
+  if (tstore.sessions[id]) tstore.sessions[id].sendDims = sendDims // 定义后挂载（避免 TDZ）
   const ro = new ResizeObserver(() => {
     if (el.offsetWidth > 0 && el.classList.contains('act')) {
       try { fit.fit() } catch { return }
