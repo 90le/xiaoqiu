@@ -84,9 +84,24 @@ function dragEnd() {
 }
 function fabEnd() {
   cancelReset()
-  if (!justReset && dragInfo && !dragInfo.moved) { dpadOff.value = false; saveDpad(false) } // 点=展开（长按复位不触发）
+  if (!justReset && dragInfo && !dragInfo.moved) { dpadOff.value = false; saveDpad(false); clampForPad() } // 点=展开（长按复位不触发）
   justReset = false
   dragInfo = null
+}
+// 展开后按 pad 实际尺寸钳回舞台（球可贴边，pad 大不能出界）
+function clampForPad() {
+  nextTick(() => {
+    const st = stage.value?.getBoundingClientRect?.()
+    const p = dpadPos.value
+    if (!st || !st.width || !p) return
+    const el = document.querySelector('.termwrap .dpad')
+    const w = el?.offsetWidth || 160, h = el?.offsetHeight || 230
+    const fixed = {
+      x: Math.max(st.left + 2, Math.min(st.right - w - 2, p.x)),
+      y: Math.max(st.top + 2, Math.min(st.bottom - h - 2, p.y)),
+    }
+    if (fixed.x !== p.x || fixed.y !== p.y) { dpadPos.value = fixed; saveDpadPos() }
+  })
 }
 
 function saveDpad(off) { try { localStorage.setItem('xq_dpad_off', off ? '1' : '0') } catch {} }
@@ -226,14 +241,6 @@ function selAll() {
   sel.b = { col: s.term.cols - 1, row: s.term.buffer.active.length - 1 }
   sel.bar = { x: clamp(window.innerWidth / 2 - 90, 8, window.innerWidth - 190), y: 120 }
 }
-async function selPaste() {
-  sel.busy = '读剪贴板…'
-  try {
-    const t = await navigator.clipboard.readText()
-    if (t) { raw(t); selClose() }
-    else sel.busy = '剪贴板为空'
-  } catch { sel.busy = '❌ 无权限，用 D-pad 📋'; setTimeout(selClose, 1500) }
-}
 // 舞台触摸：长按启动选词；已有选区时拖空白=调整终点
 function stageTouchStart(e) {
   const t = e.touches[0]
@@ -371,7 +378,6 @@ onUnmounted(() => {
       <template v-else>
         <button class="selbtn tap" @click="selCopy">复制</button>
         <button class="selbtn tap" @click="selAll">全选</button>
-        <button class="selbtn tap" @click="selPaste">粘贴</button>
         <button class="selbtn tap" @click="selClose">✕</button>
       </template>
     </div>
