@@ -121,13 +121,6 @@ const confirmKill = ref('')
 let killTimer = null
 function resetConfirm(id) { if (killTimer) clearTimeout(killTimer); killTimer = setTimeout(() => { if (confirmKill.value === id) confirmKill.value = '' }, 3000) }
 
-watch(activeId, id => {
-  scrollHook?.dispose?.()
-  const s = tstore.sessions[id]
-  if (!s) return
-  scrollHook = s.term.onScroll(() => updateScrolledUp(s))
-  updateScrolledUp(s)
-}, { immediate: true })
 const sessions = computed(() => tstore.order.map(id => tstore.sessions[id]).filter(s => s && !s.remote))
 // AI 命令终端：内嵌版 terminal_list 无 agentBash 标志（源码 info() 实证）——
 // ai-bash 终端特征：id='ai-bash' / title='AI bash'；命令标签带 command 字段
@@ -267,6 +260,13 @@ let scrollHook = null
 function updateScrolledUp(s) {
   try { const b = s.term.buffer.active; scrolledUp.value = b.ybase - b.viewportY > 1 } catch {}
 }
+watch(activeId, id => {
+  scrollHook?.dispose?.()
+  const s = tstore.sessions[id]
+  if (!s) return
+  scrollHook = s.term.onScroll(() => updateScrolledUp(s))
+  updateScrolledUp(s)
+}, { immediate: true }) // 声明后才执行 immediate 回调（TDZ 教训第三弹）
 function goBottom() {
   cancelFling()
   const s = selSession()
