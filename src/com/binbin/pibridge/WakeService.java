@@ -188,9 +188,16 @@ public class WakeService extends Service {
     }
 
 
-    /** 唤醒后：回应→采集指令→分流执行→回到监听 */
+    private static final String[] WAKE_REPLIES = {"在！", "我在！", "诶！", "嗯！"};
+    private static final String[] BYE_TIMEOUT = {"嗯，我先退下", "我先歇着啦"};
+    private static final String[] BYE_BYE = {"好嘞", "嗯呐"};
+
+    /** 唤醒后：秒回应（本地TTS+全屏流光）→ 连续对话循环（VAD断句→识别→执行→播报）
+     *  收尾：用户说"结束/说完了/退下" or 一轮3秒没人说话（用户指定规则） */
     private void wakeRound(String heardOriginal) {
+        sendBroadcast(new android.content.Intent("com.pihost.WAKE_GLOW_ON"));
         try {
+            // ① 秒回应：本地 TTS 零网络延迟
             String said = heardOriginal == null ? "" : heardOriginal.replaceAll("[，。！？,.!?、\\s]+", "");
             String norm = said.replace("秋", "丘").replace("邱", "丘");
             String[] wakes = {"小丘小丘", "你好小丘", "嘿小丘", "嗨小丘", "小丘"};
@@ -198,30 +205,92 @@ public class WakeService extends Service {
             for (String w0 : wakes) {
                 if (norm.startsWith(w0)) { carry = said.substring(w0.length()); break; }
             }
-            // 唤醒后总是续听（处理分块切开的长指令）：beep → 续录 → 拼接 → 执行
-            try { // 提示音：50ms 即响，比云TTS快3秒
-                android.media.ToneGenerator tg = new android.media.ToneGenerator(android.media.AudioManager.STREAM_MUSIC, 80);
-                tg.startTone(android.media.ToneGenerator.TONE_PROP_BEEP, 120);
-                Thread.sleep(150);
-            } catch (Exception ignore) {}
-            File wav = WavUtil.recordAutoStop(this, 15);
-            if (wav == null) return;
-            String heard = "";
-            try {
-                JSONObject env = Tools.call("stt_transcribe", new org.json.JSONObject().put("file", wav.getAbsolutePath()));
-                if (env != null && env.optBoolean("ok")) heard = env.optString("data", "").trim();
-            } catch (Exception ignore) {}
-            if (heard.isEmpty()) heard = carry;
-            else if (!carry.isEmpty()) heard = carry + heard; // 分块切开的指令拼接
-            if (heard.isEmpty()) return;
-            Log.i("PiBridge", "指令: " + heard);
-            execCommand(heard);
-        } catch (Exception e) { Log.w("PiBridge", "wakeRound: " + e); }
+            Tools.speakLocal(WAKE_REPLIES[new java.util.Random().nextInt(WAKE_REPLIES.length)]);
+            waitSpeak(1600);
+
+            // ② 连续对话循环
+            int noiseRounds = 0;
+            while (running) {
+                String heard = carry; carry = "";
+                if (heard.isEmpty()) {
+                    File wav = WavUtil.recordAutoStop(this, 12, 3000); // 3秒无人声→null→收尾
+                    if (wav == null) {
+                        Tools.speakLocal(BYE_TIMEOUT[new java.util.Random().nextInt(BYE_TIMEOUT.length)]);
+                        break;
+                    }
+                    heard = transcribe(wav);
+                    if (heard == null || heard.isEmpty()) { // 噪声/无文本：重听（仍受3秒规则约束）
+                        if (++noiseRounds >= 3) { Tools.speakLocal("没听清，需要我做什么直接说"); noiseRounds = 0; }
+                        continue;
+                    }
+                }
+                noiseRounds = 0;
+                if (heard.matches(".*(结束对话|结束|说完了|退下|没事了|不用了|再见).*")) {
+                    Tools.speakLocal(BYE_BYE[new java.util.Random().nextInt(BYE_BYE.length)]);
+                    break;
+                }
+                boolean opened = execCommand(heard);
+                if (opened) break; // 复杂任务转交屏幕会话结束
+                boolean cut = waitSpeak(25000); // 等播报完；被打断立即续听
+                if (cut) continue; // 打断：跳过3秒等待直接采下一条（0.6s预滚已接住话头）
+            }
+        } catch (Exception e) {
+            Log.w("PiBridge", "wakeRound: " + e);
+        } finally {
+            sendBroadcast(new android.content.Intent("com.pihost.WAKE_GLOW_OFF"));
+        }
     }
 
-    private void execCommand(String heard) {
+    /** 转写（本地/云端自动） */
+    private String transcribe(File wav) {
         try {
-            if (heard == null || heard.isEmpty()) return;
+            JSONObject env = Tools.call("stt_transcribe", new JSONObject().put("file", wav.getAbsolutePath()));
+            if (env != null && env.optBoolean("ok")) {
+                return env.optString("data", "").replaceAll("<\\|[^>]*\\|>", "").replace(" ", "").trim();
+            }
+        } catch (Exception ignore) {}
+        return "";
+    }
+
+    /** 等播报结束；期间监测用户开口→打断（停播返回 true）。 */
+    private boolean waitSpeak(long timeoutMs) {
+        long t0 = System.currentTimeMillis();
+        boolean gaveHead = false; // 回应开头 600ms 不算（防 TTS 扬声器回声）
+        int hot = 0;
+        android.media.AudioRecord bar = null;
+        short[] buf = new short[1600]; // 100ms
+        try {
+            int minBuf = android.media.AudioRecord.getMinBufferSize(16000, android.media.AudioFormat.CHANNEL_IN_MONO, android.media.AudioFormat.ENCODING_PCM_16BIT);
+            bar = new android.media.AudioRecord(android.media.MediaRecorder.AudioSource.MIC, 16000,
+                    android.media.AudioFormat.CHANNEL_IN_MONO, android.media.AudioFormat.ENCODING_PCM_16BIT, Math.max(minBuf, 16000 * 2));
+            bar.startRecording();
+        } catch (Exception e) { bar = null; }
+        try {
+            while (Tools.ttsSpeaking && System.currentTimeMillis() - t0 < timeoutMs) {
+                Thread.sleep(80);
+                long el = System.currentTimeMillis() - t0;
+                if (!gaveHead && el > 600) gaveHead = true;
+                if (bar != null && gaveHead) {
+                    int n = bar.read(buf, 0, buf.length);
+                    if (n > 0) {
+                        double sumSq = 0;
+                        for (int i = 0; i < n; i++) { double sv = buf[i]; sumSq += sv * sv; }
+                        double rms = Math.sqrt(sumSq / n);
+                        if (rms > 3200) { if (++hot >= 4) { Tools.stopTts(); return true; } } // 400ms 大声=打断
+                        else hot = 0;
+                    }
+                }
+            }
+        } catch (Exception ignore) {} finally {
+            try { if (bar != null) { bar.stop(); bar.release(); } } catch (Exception ignore) {}
+        }
+        return false;
+    }
+
+    /** 返回 true=已转交 App 屏幕（会话结束） */
+    private boolean execCommand(String heard) {
+        try {
+            if (heard == null || heard.isEmpty()) return false;
             if (heard.matches(".*(结束对话|停止聆听).*")) return;
             JSONObject fast = Tools.call("chat_fast", new org.json.JSONObject().put("q", heard));
             String answer = null;
@@ -231,13 +300,14 @@ public class WakeService extends Service {
             }
             if (answer != null && !answer.isEmpty()) {
                 Tools.call("tts_speak", new org.json.JSONObject().put("text", answer));
-                return;
+                return false; // 快答：语音会话继续
             }
             MainActivity.PENDING_TASK = heard;
             Intent i = new Intent(this, MainActivity.class);
             i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
             startActivity(i);
-        } catch (Exception e) { Log.w("PiBridge", "execCommand: " + e); }
+            return true; // 复杂任务：转交屏幕，语音会话结束
+        } catch (Exception e) { Log.w("PiBridge", "execCommand: " + e); return false; }
     }
 
     @Override public void onDestroy() {

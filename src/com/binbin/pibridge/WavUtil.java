@@ -159,7 +159,10 @@ public class WavUtil {
     }
 
     /** 连续对话录音：等说话→自动断句（静音1.2秒）→返回wav；6秒无人声返回null */
-    public static File recordAutoStop(Context c, int maxSec) throws Exception {
+    public static File recordAutoStop(Context c, int maxSec) throws Exception { return recordAutoStop(c, maxSec, 6000); }
+
+    /** noSpeechMs：等待人声的超时（超时返回 null=本轮没人说话）——唤醒会话用 3000（3秒静默收尾） */
+    public static File recordAutoStop(Context c, int maxSec, int noSpeechMs) throws Exception {
         int minBuf = AudioRecord.getMinBufferSize(RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
         AudioRecord ar = new AudioRecord(MediaRecorder.AudioSource.MIC, RATE,
                 AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
@@ -184,7 +187,7 @@ public class WavUtil {
                     while (pre.size() > 6) pre.removeFirst();
                     if (peak > 1500) { speechWin++; if (speechWin >= 2) { state = 1; for (byte[] p : pre) pcm.write(p, 0, p.length); pre.clear(); } }
                     else speechWin = 0;
-                    if (state == 0 && System.currentTimeMillis() - t0 > 6000) return null; // 6秒无人声
+                    if (state == 0 && System.currentTimeMillis() - t0 > noSpeechMs) return null; // 无人声超时=本轮没说话
                 } else {
                     pcm.write(bytes, 0, bytes.length);
                     if (peak < 800) { if (++silentAfter >= 12) break; } // 静音1.2秒=说完

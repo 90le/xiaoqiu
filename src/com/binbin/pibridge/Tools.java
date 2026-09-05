@@ -94,6 +94,15 @@ public class Tools {
     }
 
     private static MediaPlayer cloudPlayer;
+    /** 立即停播（用户打断） */
+    public static void stopTts() {
+        new Handler(Looper.getMainLooper()).post(new Runnable() { public void run() {
+            try { if (miReady) miTts.stopSpeaking(); } catch (Exception ignore) {}
+            try { if (tts != null) tts.stop(); } catch (Exception ignore) {}
+            try { if (cloudPlayer != null) { cloudPlayer.stop(); cloudPlayer.release(); cloudPlayer = null; } } catch (Exception ignore) {}
+            ttsSpeaking = false;
+        }});
+    }
     /** 朗读完成回调（连续对话推进用），主线程投递 */
     public static volatile Runnable onSpeakDone;
     static void fireSpeakDone() {

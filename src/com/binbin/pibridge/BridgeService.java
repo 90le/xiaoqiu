@@ -60,6 +60,17 @@ public class BridgeService extends Service {
                 FloatBall.pulse(c);
             }
         }, new android.content.IntentFilter("com.pihost.WAKE_ANIM"));
+        // 唤醒会话流光特效（:kws → 主进程悬浮窗）
+        registerReceiver(new android.content.BroadcastReceiver() {
+            @Override public void onReceive(Context c, android.content.Intent i) {
+                WakeGlow.show(c);
+            }
+        }, new android.content.IntentFilter("com.pihost.WAKE_GLOW_ON"));
+        registerReceiver(new android.content.BroadcastReceiver() {
+            @Override public void onReceive(Context c, android.content.Intent i) {
+                WakeGlow.hide();
+            }
+        }, new android.content.IntentFilter("com.pihost.WAKE_GLOW_OFF"));
         // 环境引擎：首启自动装 pi 环境
         if (!EnvInstaller.isReady() && !EnvInstaller.isRunning()) {
             EnvInstaller.installAsync(new EnvInstaller.Cb() {
