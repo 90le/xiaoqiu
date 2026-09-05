@@ -57,6 +57,7 @@ const qTotal = computed(() => {
 })
 const st = computed(() => chat.state)
 const msgs = computed(() => st.value?.messages || [])
+const lastAid = computed(() => { const a = msgs.value.filter(x => x.role === 'assistant'); return a.length ? a[a.length - 1].id : '' })
 const streaming = computed(() => st.value?.isStreaming ? (st.value?.streamingMessage || { role: 'assistant', content: [] }) : null)
 // webui 同款：全部 7 档 + 中文标签；不支持的档位置灰禁用（而非隐藏——SDK 会钳制无效请求）
 const THINKING_ALL = [
@@ -523,12 +524,6 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
     <!-- ═══ 顶栏：历史 | 模型▾ | 思考▾ | 新对话 ═══ -->
     <header class="top">
       <button class="tb tap" title="工作台" @click="openShellDrawer">☰</button>
-      <button class="tb name tap" @click="menu = menu === 'model' ? '' : 'model'">
-        {{ st?.model?.name || '模型' }}{{ st?.model?.vision ? ' 👁' : '' }} <span class="car">▾</span>
-      </button>
-      <button class="tb tap" @click="menu = menu === 'think' ? '' : 'think'">
-        🧠{{ thinkLabel(st?.thinkingLevel) }} <span class="car">▾</span>
-      </button>
       <span class="sp"></span>
       <button v-if="chat.status !== 'open'" class="tb warn tap" @click="connect()">↻{{ chat.retryIn || 1 }}s</button>
       <button v-if="st?.isStreaming" class="tb stop tap" @click="doAbort">⏹</button>
@@ -619,9 +614,9 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
       <div class="dfoot"><button class="dfb tap" @touchstart.prevent="openBgTasks">↻ 刷新</button></div>
     </div>
 
-    <!-- 模型下拉 -->
+    <!-- 模型选择（底部 sheet） -->
     <div v-if="menu === 'model'" class="backdrop tap" @click="menu = ''"></div>
-    <div v-if="menu === 'model'" class="drop">
+    <div v-if="menu === 'model'" class="sheet msheet">
       <div class="dh">选择模型</div>
       <input v-model="modelFilter" class="msearch tap" placeholder="🔍 搜索模型…" />
       <div class="mscroll" ref="modelScrollEl">
@@ -636,18 +631,20 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
         <div v-else-if="!filteredModels.length" class="dh muted">无匹配模型</div>
       </div>
       <div class="dfoot">
-        <button class="dfb tap" @click="refreshModels">↻ 刷新清单</button>
+        <button class="dfb tap" @touchstart.prevent="refreshModels">↻ 刷新清单</button>
+        <button class="dfb tap" @touchstart.prevent="menu = ''">关闭</button>
       </div>
     </div>
 
-    <!-- 思考级下拉 -->
+    <!-- 思考强度（底部 sheet） -->
     <div v-if="menu === 'think'" class="backdrop tap" @click="menu = ''"></div>
-    <div v-if="menu === 'think'" class="drop small">
+    <div v-if="menu === 'think'" class="sheet msheet">
       <div class="dh">思考深度</div>
       <div v-for="l in levels" :key="l.v" class="di tap" :class="{ sel: l.v === st?.thinkingLevel, dis: !l.ok }"
         :title="l.ok ? '' : '当前模型不支持此档位'" @click="l.ok && api.setThinking(l.v); l.ok && (menu = '')">
         <b>{{ l.label }}</b><span v-if="l.v === st?.thinkingLevel" class="oks">✓</span>
       </div>
+      <button class="scancel tap" @touchstart.prevent="menu = ''">取消</button>
     </div>
 
     <!-- 服务端通知吐司 -->
@@ -728,7 +725,7 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
               <!-- 正文：markdown -->
               <div v-else-if="b.type === 'text' && b.text" class="md" v-html="md(b.text)"></div>
             </template>
-            <div class="ameta">{{ fmtTs(m.timestamp) }}<template v-if="m.model"> · {{ m.model }}</template></div>
+            <div v-if="m.id === lastAid" class="ameta">{{ fmtTs(m.timestamp) }}<template v-if="m.model"> · {{ m.model }}</template></div>
           </div>
         </div>
       </template>
@@ -847,12 +844,22 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
           <span class="sdesc2">{{ sc.description || '' }}<i v-if="sc.argumentHint" class="shint">{{ sc.argumentHint }}</i></span>
         </div>
       </div>
+      <input ref="fileEl" type="file" multiple hidden @change="onFile" />
+      <input ref="camEl" type="file" accept="image/*" capture="environment" hidden @change="onFile" />
+      <input ref="vidEl" type="file" accept="video/*" capture="environment" hidden @change="onFile" />
       <div class="crow">
-        <button class="cb tap" title="附件" @touchstart.prevent="menu = menu === 'attach' ? '' : 'attach'">📎</button>
-        <input ref="fileEl" type="file" multiple hidden @change="onFile" />
-        <input ref="camEl" type="file" accept="image/*" capture="environment" hidden @change="onFile" />
-        <input ref="vidEl" type="file" accept="video/*" capture="environment" hidden @change="onFile" />
         <textarea ref="taEl" v-model="input" rows="1" placeholder="发消息…" @paste="onPaste" @input="autoGrow"></textarea>
+      </div>
+      <!-- 工具条（webui composer-tools 整合）：附件/思考/模型 左 · 语音/排队/发送 右 -->
+      <div class="ctools">
+        <button class="chip tap" title="附件" @touchstart.prevent="menu = menu === 'attach' ? '' : 'attach'">📎</button>
+        <button class="chip tap" :class="{ on: st?.thinkingLevel && st?.thinkingLevel !== 'off' }" @touchstart.prevent="menu = menu === 'think' ? '' : 'think'">
+          🧠<span class="ctxt">{{ thinkLabel(st?.thinkingLevel) }}</span>
+        </button>
+        <button class="chip model tap" @touchstart.prevent="menu = menu === 'model' ? '' : 'model'">
+          {{ st?.model?.name || '模型' }}{{ st?.model?.vision ? ' 👁' : '' }} <span class="car">▾</span>
+        </button>
+        <span class="sp"></span>
         <button class="cb mic tap" :class="{ rec: recording }" title="按住说话"
           @touchstart.prevent="micDown" @touchend.prevent="micUp" @mousedown="micDown" @mouseup="micUp">
           <span v-if="recording" class="recdot"></span><template v-else>🎙</template>
@@ -958,6 +965,12 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
 .ivr { position: absolute; top: calc(14px + env(safe-area-inset-top)); left: 16px; width: 38px; height: 38px; border-radius: 50%; background: rgba(20,22,30,.8); border: 1px solid #3a4150; color: #dfe4ec; font-size: 15px; }
 .ivzoom { position: absolute; top: calc(60px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); font-size: 11px; color: #8a93a3; background: rgba(20,22,30,.7); padding: 3px 10px; border-radius: 10px; }
 .ivtip { color: #8a93a3; font-size: 12px; margin-top: 14px; }
+
+/* 模型/思考底部 sheet */
+.msheet { max-height: 62vh; display: flex; flex-direction: column; }
+.msheet .mscroll { max-height: 44vh; overflow-y: auto; overscroll-behavior: contain; padding: 0 6px; }
+.msheet .msearch { width: calc(100% - 12px); margin: 4px 6px 8px; }
+.msheet .dh { padding: 0 14px 4px; }
 
 /* 底部动作面板（附件等） */
 .sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 72; background: #1c2027; border-radius: 18px 18px 0 0; padding: 14px 14px calc(14px + env(safe-area-inset-bottom)); }
@@ -1189,13 +1202,24 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
 .pinput button { background: #8b5cf6; border: 0; color: #fff; border-radius: 8px; padding: 0 13px; font-size: 12px; }
 .pcomp { padding: 4px 2px; }
 .pci { font-size: 11.5px; color: #8b8f98; padding: 5px 6px; border-radius: 6px; font-family: ui-monospace, monospace; }
-/* 胶囊 composer：整块卡片，元素一体 */
-.crow { display: flex; gap: 6px; align-items: flex-end; background: #1a1d26; border: 1px solid #2c303b;
-  border-radius: 22px; padding: 7px 7px 7px 10px; }
+/* 胶囊 composer：输入行 + 工具条（webui composer-tools 模式） */
+.crow { display: flex; align-items: flex-end; background: #1a1d26; border: 1px solid #2c303b;
+  border-radius: 20px; padding: 2px 14px; margin-top: 8px; }
 .crow:focus-within { border-color: #4a5064; }
 .crow textarea { flex: 1; background: none; border: 0; color: #dcddde;
   font-size: 15px; font-family: inherit; resize: none; line-height: 22px;
-  height: 38px; min-height: 38px; max-height: 110px; overflow-y: auto; padding: 8px 2px; outline: none; }
+  height: 40px; min-height: 40px; max-height: 110px; overflow-y: auto; padding: 9px 0; outline: none; }
+.ctools { display: flex; align-items: center; gap: 7px; padding: 9px 2px 0; }
+.chip { display: inline-flex; align-items: center; gap: 4px; background: #242835; border: 0;
+  border-radius: 15px; padding: 7px 11px; font-size: 12px; color: #aeb6c4; max-width: 34vw; }
+.chip:active { background: #2c3145; }
+.chip.on { color: #c9b8f8; background: #2b2440; }
+.chip .ctxt { font-size: 11px; }
+.chip.model { color: #dfe4ec; }
+.chip.model b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.ctools .sp { flex: 1; }
+.ctools .cb { width: 36px; height: 36px; font-size: 14.5px; }
+.ctools .cb.send { width: 40px; height: 40px; }
 input[type="checkbox"] { accent-color: #8b5cf6; }
 .cb { width: 38px; height: 38px; border-radius: 50%; border: 0; background: #242835;
   color: #aeb6c4; font-size: 15.5px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
