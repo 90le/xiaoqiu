@@ -1,11 +1,10 @@
 <script setup>
-import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
+import { ref, reactive, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { chat, wsSend, connect } from '../useChat.js'
 import { tstore, poolAttach, poolDetach, createSession, attachSession, killSession, restartSession, renameSession } from '../termStore.js'
 import '@xterm/xterm/css/xterm.css'
 
 const stage = ref(null)
-const stageEl = stage.value // 拖动钳制用（挂载后有值）
 const activeId = ref('')
 const tabMenu = ref(null) // { id, title, x }
 let pressTimer = null
