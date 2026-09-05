@@ -210,9 +210,40 @@ function stripFileWrapper(m) {
     .replace(/^\n?<file path="[^"]*">\n?```\n?/, '').replace(/\n?```\n?<\/file>\n?$/, '')
     .replace(/^<file path="[^"]*" size="\d+"\s*\/>$/gm, '')
 }
-// 图片全屏灯箱
+// 图片全屏灯箱（手势版：双指缩放 / 单指拖动 / 双击 1x↔2.5x）
 const imgViewer = ref('')
-function viewImg(u) { imgViewer.value = u }
+function viewImg(u) { imgViewer.value = u; ivReset() }
+const iv = reactive({ s: 1, x: 0, y: 0, sd: 0, ss: 1, sx: 0, sy: 0, ox: 0, oy: 0, moved: false, lastTap: 0 })
+function ivReset() { iv.s = 1; iv.x = 0; iv.y = 0; iv.moved = false }
+function ivDist(t) { const dx = t[0].clientX - t[1].clientX, dy = t[0].clientY - t[1].clientY; return Math.hypot(dx, dy) }
+function ivStart(e) {
+  if (e.touches.length === 1) {
+    const t = e.touches[0]
+    iv.sx = t.clientX; iv.sy = t.clientY; iv.ox = iv.x; iv.oy = iv.y; iv.moved = false
+  } else if (e.touches.length === 2) {
+    iv.sd = ivDist(e.touches); iv.ss = iv.s
+  }
+}
+function ivMove(e) {
+  e.preventDefault() // 手势期间锁页面滚动
+  if (e.touches.length === 1) {
+    const t = e.touches[0], dx = t.clientX - iv.sx, dy = t.clientY - iv.sy
+    if (Math.abs(dx) + Math.abs(dy) > 6) iv.moved = true
+    iv.x = iv.ox + dx; iv.y = iv.oy + dy
+  } else if (e.touches.length === 2 && iv.sd > 0) {
+    iv.moved = true
+    iv.s = Math.min(8, Math.max(0.4, iv.ss * ivDist(e.touches) / iv.sd))
+  }
+}
+function ivEnd(e) {
+  if (e.touches.length > 0) return
+  if (!iv.moved && iv.s === 1) {
+    const now = Date.now()
+    if (now - iv.lastTap < 300) { iv.s = 2.5 } // 双击放大
+    iv.lastTap = now
+  }
+  if (iv.s < 1) { iv.s = 1; iv.x = 0; iv.y = 0 } // 回弹
+}
 // 文件灯箱：内容预览（内联文本剥 <file> 包装；仅引用给元信息）
 const fileViewer = ref(null)
 function viewFile(f) { fileViewer.value = f }
@@ -505,10 +536,13 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
       <button class="tb tap" title="更多" @click="menu = menu === 'more' ? '' : 'more'">⋯</button>
     </header>
 
-    <!-- 图片全屏灯箱 -->
-    <div v-if="imgViewer" class="imgviewer tap" @touchstart.prevent="imgViewer = ''">
-      <img :src="imgViewer" class="ivfull" />
-      <span class="ivtip">点按任意处关闭</span>
+    <!-- 图片全屏灯箱（双指缩放/拖动/双击放大） -->
+    <div v-if="imgViewer" class="imgviewer" @click.self="imgViewer = ''">
+      <img :src="imgViewer" class="ivfull" :style="{ transform: 'translate(' + iv.x + 'px,' + iv.y + 'px) scale(' + iv.s + ')' }"
+        @touchstart="ivStart" @touchmove.prevent="ivMove" @touchend="ivEnd" />
+      <button class="ivx tap" @touchstart.prevent="imgViewer = ''">✕</button>
+      <button class="ivr tap" @touchstart.prevent="ivReset">↺</button>
+      <span v-if="iv.s !== 1" class="ivzoom">{{ Math.round(iv.s * 100) }}%</span>
     </div>
 
     <!-- 文件灯箱：内容预览 -->
@@ -647,10 +681,8 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
         <div v-else-if="m.role === 'user'" class="mrow urow">
           <div class="ub">
             <div v-if="m.attImgs?.length || m.attFiles?.length" class="arow" :class="{ one: m.attImgs?.length === 1 && !m.attFiles?.length }">
-              <img v-for="(u, ii) in (m.attImgs || [])" :key="'ag' + ii" :src="u" class="a2thumb tap"
-                @touchstart.prevent="viewImg(u)" @click="viewImg(u)" />
-              <div v-for="(f, fi) in (m.attFiles || [])" :key="'af' + fi" class="a2chip tap"
-                @touchstart.prevent="viewFile(f)" @click="viewFile(f)">
+              <img v-for="(u, ii) in (m.attImgs || [])" :key="'ag' + ii" :src="u" class="a2thumb tap" @click="viewImg(u)" />
+              <div v-for="(f, fi) in (m.attFiles || [])" :key="'af' + fi" class="a2chip tap" @click="viewFile(f)">
                 <span class="a2ico">{{ f.details?.type === 'folder' ? '📁' : (f.details?.mode === 'bridged' ? '🔤' : '📄') }}</span>
                 <span class="a2name">{{ f.details?.name || f.details?.path || '附件' }}</span>
               </div>
@@ -921,7 +953,10 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
 .fvref { padding: 26px 18px; text-align: center; color: #8a93a3; font-size: 13px; }
 .fvpath { margin-top: 8px; color: #8ab4f8; font-size: 12px; word-break: break-all; }
 .imgviewer { position: fixed; inset: 0; z-index: 99; background: rgba(5, 6, 10, .96); display: flex; flex-direction: column; align-items: center; justify-content: center; }
-.ivfull { max-width: 96vw; max-height: 88vh; object-fit: contain; }
+.ivfull { max-width: 96vw; max-height: 88vh; object-fit: contain; transform-origin: center center; touch-action: none; transition: transform .08s linear; will-change: transform; }
+.ivx { position: absolute; top: calc(14px + env(safe-area-inset-top)); right: 16px; width: 38px; height: 38px; border-radius: 50%; background: rgba(20,22,30,.8); border: 1px solid #3a4150; color: #dfe4ec; font-size: 15px; }
+.ivr { position: absolute; top: calc(14px + env(safe-area-inset-top)); left: 16px; width: 38px; height: 38px; border-radius: 50%; background: rgba(20,22,30,.8); border: 1px solid #3a4150; color: #dfe4ec; font-size: 15px; }
+.ivzoom { position: absolute; top: calc(60px + env(safe-area-inset-top)); left: 50%; transform: translateX(-50%); font-size: 11px; color: #8a93a3; background: rgba(20,22,30,.7); padding: 3px 10px; border-radius: 10px; }
 .ivtip { color: #8a93a3; font-size: 12px; margin-top: 14px; }
 
 /* 底部动作面板（附件等） */
