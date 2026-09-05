@@ -97,7 +97,7 @@ public class Tools {
     /** 立即停播（用户打断） */
     public static void stopTts() {
         new Handler(Looper.getMainLooper()).post(new Runnable() { public void run() {
-            try { if (miReady) miTts.stopSpeaking(); } catch (Exception ignore) {}
+            try { if (miReady) miTts.stop(); } catch (Exception ignore) {}
             try { if (tts != null) tts.stop(); } catch (Exception ignore) {}
             try { if (cloudPlayer != null) { cloudPlayer.stop(); cloudPlayer.release(); cloudPlayer = null; } } catch (Exception ignore) {}
             ttsSpeaking = false;

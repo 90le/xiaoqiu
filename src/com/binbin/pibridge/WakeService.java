@@ -291,7 +291,7 @@ public class WakeService extends Service {
     private boolean execCommand(String heard) {
         try {
             if (heard == null || heard.isEmpty()) return false;
-            if (heard.matches(".*(结束对话|停止聆听).*")) return;
+            if (heard.matches(".*(结束对话|停止聆听).*")) return false;
             JSONObject fast = Tools.call("chat_fast", new org.json.JSONObject().put("q", heard));
             String answer = null;
             if (fast != null && fast.optBoolean("ok")) {
