@@ -33,44 +33,12 @@ function pick(h) {
   if (id) view.value = id
 }
 const openDrawerReq = () => { drawer.value = true }
-// 唤醒语音会话的任务通道（全局，任意视图可用，不切屏）：
-// 进 App 当前对话（api.prompt=活动会话）→ 简短确认 → 流结束口语化播报结果
-window.__xiaoqiuTask = (t, speak) => {
-  if (!t) return
-  const H = { 'Content-Type': 'application/json' }
-  const say = (text) => { try { fetch('/api/tts_speak', { method: 'POST', headers: H, body: JSON.stringify({ text }) }) } catch {} }
-  console.log('[WAKE] task 注入: ' + t)
-  const ok = api.prompt(t) // 发送进对话页当前活动会话
-  console.log('[WAKE] prompt 结果: ' + ok)
-  if (!ok) { say('小丘的连接断了，打开小丘再试一次'); return } // 发送失败必须有声反馈
-  if (!speak) return
-  // 正确信号：chat.state.streamingMessage（流中非空，结束置空）——chat.streaming 不存在（前两轮静默的真凶）
-  const stop = watch(() => !!chat.state?.streamingMessage, (v, ov) => {
-    console.log('[WAKE] 流状态: ' + ov + '→' + v)
-    if (v || !ov) return
-    stop()
-    setTimeout(async () => {
-      try {
-        const msgs = chat.state?.messages || []
-        let last = null
-        for (let i = msgs.length - 1; i >= 0; i--) if (msgs[i]?.role === 'assistant') { last = msgs[i]; break }
-        let text = (last?.content || []).map(b => (b.type === 'text' ? b.text : '')).join('').trim()
-        if (!text) return
-        console.log('[WAKE] 提取回复: ' + text.length + ' 字')
-        if (!text) { console.log('[WAKE] 回复为空，结束'); return }
-        let out = text
-        if (text.length > 90) {
-          try {
-            const r = await fetch('/api/ai_humanize', { method: 'POST', headers: H, body: JSON.stringify({ kind: 'reply', text: text.slice(0, 4000) }) })
-            const d = (await r.json())?.structuredContent
-            if (d?.ok && d?.data) out = String(d.data)
-          } catch {}
-        }
-        say(out.slice(0, 400))
-      } catch {}
-    }, 400)
-  })
-}
+// 统一语音会话引擎钩子（:kws/主进程注入）——两个入口同一状态机
+import * as VS from './voiceSession.js'
+window.__voiceTurn = (t, f) => VS.vsTurn(t, f)   // 一轮听写（VOICE_TURN）
+window.__ttsDone = (tk) => VS.vsTtsDone(tk)      // 播报完成（TTS_STATE off）
+window.__voiceEnd = () => VS.vsEnd()             // 会话收尾（SESSION_END）
+window.__xiaoqiuTask = (t) => VS.vsTurn(t, 'wake') // 悬浮球旧入口兼容（走引擎全套）
 
 onMounted(() => {
   window.addEventListener('xq-open-drawer', openDrawerReq)

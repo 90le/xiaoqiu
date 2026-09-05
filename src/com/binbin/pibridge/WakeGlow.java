@@ -51,13 +51,34 @@ public class WakeGlow {
         }});
     }
 
+    // 状态色语义：听=绿 思=蓝 执行=琥珀 说=紫
+    private static volatile String mode = "listen";
+    public static void setMode(String m) {
+        if (m == null) m = "listen";
+        mode = m;
+        // off 由 hide() 承担
+    }
+    private static int cHead(String m) {
+        if ("think".equals(m)) return 0x4a9eff;
+        if ("exec".equals(m)) return 0xe8853d;
+        if ("speak".equals(m)) return 0x8b5cf6;
+        return 0x3ecf72;
+    }
+    private static int cTail(String m) { return "exec".equals(m) ? 0x8b5cf6 : 0x8b5cf6; }
+    private static float speed(String m) {
+        if ("think".equals(m)) return 0.0015f;   // 思：慢呼吸
+        if ("speak".equals(m)) return 0.007f;    // 说：快跑
+        if ("exec".equals(m)) return 0.004f;     // 执行：中速对冲
+        return 0.004f;                            // 听：巡游
+    }
+
     /** 边缘流光视图：3 束光点沿四边跑 + 底色微光 */
     static class GlowView extends View {
         private float phase = 0f; // 0..1 跑马灯相位
         private final Choreographer choreo = Choreographer.getInstance();
         private final long t0 = android.os.SystemClock.elapsedRealtime();
         private final Runnable frame = new Runnable() { public void run() {
-            phase = (phase + 0.004f) % 1f;
+            phase = (phase + speed(mode)) % 1f;
             invalidate();
             if (getVisibility() == VISIBLE) postFrame();
         }};
@@ -74,11 +95,12 @@ public class WakeGlow {
             long el = android.os.SystemClock.elapsedRealtime() - t0;
             float in = Math.min(1f, el / 450f); // 淡入
 
+            int hc = cHead(mode);
             // 底层：整圈微光描边
             Paint rim = new Paint(Paint.ANTI_ALIAS_FLAG);
             rim.setStyle(Paint.Style.STROKE);
             rim.setStrokeWidth(6f);
-            rim.setColor(Color.argb((int)(90 * in), 64, 207, 114));
+            rim.setColor(Color.argb((int)(90 * in), (hc >> 16) & 255, (hc >> 8) & 255, hc & 255));
             android.graphics.RectF rr = new android.graphics.RectF(inset, inset, w - inset, h - inset);
             cv.drawRoundRect(rr, r, r, rim);
 
@@ -89,9 +111,9 @@ public class WakeGlow {
                     float p = ((head - tail * 0.011f) % 1f + 1f) % 1f;
                     float[] xy = periPoint(p, peri, w, h, inset, r);
                     float alpha = (1f - tail / 9f) * 235 * in;
-                    int cr = tail < 3 ? 0x3e : 0x8b; // 头绿尾紫
-                    int cg = tail < 3 ? 0xcf : 0x5c;
-                    int cb = tail < 3 ? 0x72 : 0xf6;
+                    int cr = tail < 3 ? (hc >> 16) & 255 : 0x8b; // 头=状态色 尾=紫
+                    int cg = tail < 3 ? (hc >> 8) & 255 : 0x5c;
+                    int cb = tail < 3 ? hc & 255 : 0xf6;
                     Paint pt = new Paint(Paint.ANTI_ALIAS_FLAG);
                     pt.setColor(Color.argb((int) alpha, cr, cg, cb));
                     float radius = 20f - tail * 1.5f;

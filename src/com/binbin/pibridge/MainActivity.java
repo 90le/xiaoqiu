@@ -32,6 +32,12 @@ public class MainActivity extends Activity {
     public static volatile String PENDING_TASK = null;    // 悬浮球：任务交接给对话页（要切屏）
     static volatile WebView sWeb = null;   // 唤醒静默任务注入用（不切屏）
 
+    /** 通用 JS 注入（广播→页面钩子；后台 WebView 也可执行） */
+    public static void injectJs(String js) {
+        final WebView w = sWeb;
+        if (w != null) try { w.evaluateJavascript(js, null); } catch (Exception ignore) {}
+    }
+
     /** 唤醒语音会话的复杂任务：注入当前对话（不打开界面、不切视图）——与对话页语音同逻辑 */
     public static void runWakeTask(String q) {
         final WebView w = sWeb;

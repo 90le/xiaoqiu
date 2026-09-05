@@ -72,6 +72,31 @@ public class BridgeService extends Service {
                 WakeGlow.hide();
             }
         }, new android.content.IntentFilter("com.pihost.WAKE_GLOW_OFF"));
+        // ╹ 统一语音引擎：:kws 事件 → 页面钩子注入
+        registerReceiver(new android.content.BroadcastReceiver() {
+            @Override public void onReceive(Context c, android.content.Intent i) {
+                String t = i.getStringExtra("text"), f = i.getStringExtra("from");
+                MainActivity.injectJs("window.__voiceTurn && window.__voiceTurn(" + org.json.JSONObject.quote(t == null ? "" : t) + "," + org.json.JSONObject.quote(f == null ? "" : f) + ")");
+            }
+        }, new android.content.IntentFilter("com.pihost.VOICE_TURN"));
+        registerReceiver(new android.content.BroadcastReceiver() {
+            @Override public void onReceive(Context c, android.content.Intent i) {
+                String r = i.getStringExtra("reason");
+                MainActivity.injectJs("window.__voiceEnd && window.__voiceEnd(" + org.json.JSONObject.quote(r == null ? "" : r) + ")");
+            }
+        }, new android.content.IntentFilter("com.pihost.SESSION_END"));
+        registerReceiver(new android.content.BroadcastReceiver() {
+            @Override public void onReceive(Context c, android.content.Intent i) {
+                String tk = i.getStringExtra("token");
+                MainActivity.injectJs("window.__ttsDone && window.__ttsDone(" + org.json.JSONObject.quote(tk == null ? "" : tk) + ")");
+            }
+        }, new android.content.IntentFilter("com.pihost.TTS_STATE"));
+        // 特效状态变色（引擎 → WakeGlow）
+        registerReceiver(new android.content.BroadcastReceiver() {
+            @Override public void onReceive(Context c, android.content.Intent i) {
+                WakeGlow.setMode(i.getStringExtra("mode"));
+            }
+        }, new android.content.IntentFilter("com.pihost.GLOW_MODE"));
         // 唤醒复杂任务：静默注入 App 当前对话（不打开界面）
         registerReceiver(new android.content.BroadcastReceiver() {
             @Override public void onReceive(Context c, android.content.Intent i) {

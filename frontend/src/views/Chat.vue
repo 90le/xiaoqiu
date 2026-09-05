@@ -2,6 +2,7 @@
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { marked } from 'marked'
 import { chat, api, connect, wsSend, startWatchdog } from '../useChat.js'
+import { vs, vsIgnite } from '../voiceSession.js'
 
 marked.setOptions({ breaks: true, gfm: true })
 
@@ -506,9 +507,14 @@ function micDown() {
   if (recording.value) return
   if (!window.XiaoqiuBridge) { voiceState.value = '桥未就绪'; return }
   recording.value = true; voiceState.value = '录音中…松手结束'
-  window.XiaoqiuBridge.startVoice()
+  vsIgnite('mic') // 统一引擎点火（与喊"小丘"完全同一会话循环）
+  voiceState.value = vs.state !== 'off' ? '🎙 待命中，请说…' : ''
 }
 function micUp() { if (recording.value) { recording.value = false; window.XiaoqiuBridge?.stopVoice() } }
+watch(() => vs.state, s => { // 引擎状态投影到旧 UI 位（P3 换成 vb 气泡统一）
+  if (s === 'off') { if (voiceState.value === '🎙 待命中，请说…') voiceState.value = '' }
+  else if (s === 'listening' && !voiceState.value) voiceState.value = '🎙 待命中，请说…'
+})
 window.__voiceResult = (t) => { voiceState.value = ''; if (t) voiceFlow(t) }
 window.__voiceStatus = (s) => {
   if (s === 'recording') { recording.value = true; voiceState.value = '🎙 录音中…' }

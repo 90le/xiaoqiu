@@ -1076,6 +1076,33 @@ public class Tools {
             return ok(arr);
         }});
 
+        def("voice_bus", "统一语音会话总线（页面引擎→原生广播）",
+            schema(props("action", prop("string", "done|session|speak|glow"),
+                    "cmd", prop("string", "session: start/stop"),
+                    "from", prop("string", "wake|mic"),
+                    "text", prop("string", "speak: 文本"),
+                    "token", prop("string", "speak: 完成回执对账"),
+                    "mode", prop("string", "glow: listen|think|exec|speak|off"))),
+            new H() { public JSONObject run(JSONObject a) throws Exception {
+                String act = a.optString("action");
+                android.content.Intent i;
+                if ("done".equals(act)) i = new android.content.Intent("com.pihost.VOICE_DONE");
+                else if ("session".equals(act)) {
+                    i = new android.content.Intent("com.pihost.SESSION_CMD");
+                    i.putExtra("cmd", a.optString("cmd", "start")).putExtra("from", a.optString("from", ""));
+                }
+                else if ("speak".equals(act)) {
+                    i = new android.content.Intent("com.pihost.VOICE_SPEAK");
+                    i.putExtra("text", a.optString("text", "")).putExtra("token", a.optString("token", ""));
+                }
+                else if ("glow".equals(act)) {
+                    i = new android.content.Intent("com.pihost.GLOW_MODE");
+                    i.putExtra("mode", a.optString("mode", "off"));
+                }
+                else return err("bad_action", "unknown: " + act);
+                ctx.sendBroadcast(i);
+                return ok(new JSONObject().put("sent", act));
+            }});
         def("chat_fast", "快脑（意图脑）：带上下文理解输入。闲聊→chat直接答；任务→task并输出优化后的prompt（修ASR错字/结合上下文补全指代/明确目标）交慢脑执行",
             schema(props("q", prop("string", "用户的话"),
                     "context", prop("string", "可选：最近对话上下文摘要（快脑据此理解指代和意图）")), "q"),
