@@ -20,32 +20,7 @@ const keysMode = ref('bar')     // bar（收缩：核心键） | full（展开�
 // 编程符号（输入法难打的）——展开态横滚行
 const kbSyms = ['`', '~', '|', '-', '/', '\\', ':', ';', '\'', '"', '[', ']', '{', '}', '<', '>', '(', ')', '$', '#', '%', '&', '*', '+', '=', '_', '!', '?', '@', '^', '.']
 const dpadOff = ref(localStorage.getItem('xq_dpad_off') === '1')  // 悬浮方向键
-// ── 自有打字通道（根治 pi TUI 输入重复：IME 挂这里，差分全自有）──
-const imeEl = ref(null)
-const imeFocus = ref(false)
-let imePrev = ''
-function focusIme() { setTimeout(() => { try { imeEl.value?.focus({ preventScroll: true }) } catch {} }, 60) }
-function onImeInput(e) {
-  const v = e.target.value || ''
-  if (v.length >= imePrev.length && v.startsWith(imePrev)) {
-    const d = v.slice(imePrev.length)
-    if (d) raw(d)
-  } else if (v.length < imePrev.length && imePrev.startsWith(v)) {
-    const n = imePrev.length - v.length
-    for (let i = 0; i < n; i++) raw('\x7f')
-  } else {
-    // 整体替换（中文提交等）：清行重发
-    raw('\x15')
-    if (v) raw(v)
-  }
-  imePrev = v
-  if (v.length > 100) { e.target.value = ''; imePrev = '' } // 防溢出（不影响组合，超长即清）
-}
-function onImeKey(e) {
-  const map = { Enter: '\r', ArrowUp: '\x1b[A', ArrowDown: '\x1b[B', ArrowLeft: '\x1b[D', ArrowRight: '\x1b[C', Tab: '\t', Escape: '\x1b', Home: '\x1b[H', End: '\x1b[F', PageUp: '\x1b[5~', PageDown: '\x1b[6~' }
-  if (map[e.key]) { e.preventDefault(); raw(map[e.key]); return }
-  if (e.key === 'Backspace') { e.preventDefault(); raw('\x7f'); return } // 值不动，直发；后续差分按值算
-}
+
 function saveDpad(off) { try { localStorage.setItem('xq_dpad_off', off ? '1' : '0') } catch {} }
 async function pasteClip() {
   try {
@@ -63,6 +38,21 @@ const sessions = computed(() => tstore.order.map(id => tstore.sessions[id]).filt
 
 function openShellDrawer() { window.dispatchEvent(new Event('xq-open-drawer')) }
 function showKb() { try { window.XiaoqiuBridge && window.XiaoqiuBridge.showKeyboard() } catch {} }
+// 输入探针：⌨ 长按开关；记录 onData 原始字节序列（\x1b 可视化）
+const probeOn = ref(true)
+const probeLines = ref([])
+let probeTapT = 0
+function probeToggle() {
+  const now = Date.now()
+  if (now - probeTapT < 500) { probeOn.value = !probeOn.value; probeLines.value = [] }
+  probeTapT = now
+}
+window.__imeProbe = (d) => {
+  if (!probeOn.value) return
+  const vis = JSON.stringify(d).slice(1, -1)
+  probeLines.value.push(vis.length > 18 ? vis.slice(0, 18) + '…' : vis)
+  if (probeLines.value.length > 6) probeLines.value.shift()
+}
 function activate(id) {
   const s = tstore.sessions[id]
   if (!s) return
@@ -73,7 +63,6 @@ function activate(id) {
   requestAnimationFrame(() => setTimeout(() => {
     try { s.fit.fit() } catch {}
     s.term.focus()
-    focusIme()
   }, 80))
 }
 
@@ -148,11 +137,10 @@ onUnmounted(() => {
       <button class="tb newb tap" @click="newTerm">＋</button>
     </header>
 
-    <!-- 终端舞台：pane 由会话池借入（点按=聚焦下方打字框） -->
-    <div ref="stage" class="stage" @pointerdown.passive="focusIme"></div>
-    <!-- 自有打字框：透明贴底，IME 挂这里；自有差分无赛跑 -->
-    <input ref="imeEl" class="imein" :class="{ on: imeFocus }" @input="onImeInput" @keydown="onImeKey"
-      @focus="imeFocus = true" @blur="imeFocus = false" @click.stop @touchstart.stop />
+    <!-- 输入探针（调试）：显示 onData 原始串——定位 IME 重发 -->
+    <div class="imeprobe" v-if="probeOn">{{ probeLines.join(' · ') }}</div>
+    <!-- 终端舞台：pane 由会话池借入 -->
+    <div ref="stage" class="stage"></div>
 
     <!-- 虚拟按键 v7：职责分离——打字归输入法，这里只放修饰/组合/功能/符号 -->
     <div class="vkeys">
@@ -179,7 +167,7 @@ onUnmounted(() => {
       <!-- 常态：两行编程高频 -->
       <div class="kwrap">
         <div class="kscroll">
-          <button class="vk kb tap" @click="focusIme(); showKb()">⌨</button>
+          <button class="vk kb tap" @click="showKb" @touchstart="probeToggle" @mousedown="probeToggle">⌨</button>
           <button class="vk mod tap" :class="{ on: ctrlOn }" @click="press('CTRL')">CTRL</button>
           <button class="vk mod tap" :class="{ on: altOn }" @click="press('ALT')">ALT</button>
           <button class="vk mod tap" :class="{ on: shiftOn }" @click="press('SHIFT')">SHIFT</button>
@@ -264,9 +252,7 @@ onUnmounted(() => {
 .kwrap.extra { animation: kslide .16s ease; margin-bottom: 5px; }
 .vk.tog { color: #a78bfa; }
 .vk.tog.on { background: #2b2440; }
-/* 自有打字框：透明贴底（IME 目标，不可见但可聚焦） */
-.imein { position: fixed; left: 0; right: 0; bottom: 0; height: 1px; opacity: .01; background: none; border: 0; color: transparent; font-size: 16px; z-index: 5; outline: none; caret-color: transparent; }
-.imein.on { box-shadow: 0 0 0 1px rgba(139,92,246,.5); }
+.imeprobe { position: absolute; top: 4px; right: 8px; z-index: 16; max-width: 70%; font: 10px ui-monospace, monospace; color: #3ecf72; background: rgba(0,0,0,.75); padding: 3px 8px; border-radius: 6px; pointer-events: none; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 
 /* 悬浮 D-pad（终端区右缘竖排锚定） */
 .dpad { position: absolute; right: 10px; bottom: 22%; z-index: 15; display: flex; flex-direction: column; align-items: center; gap: 5px;
