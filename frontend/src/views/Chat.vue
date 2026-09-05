@@ -154,6 +154,37 @@ function sesDeb() {
 let cwdT = null
 function cwdDeb() { if (cwdT) clearTimeout(cwdT); cwdT = setTimeout(() => newCwd.value && api.completePath(newCwd.value), 450) }
 const editId = ref('')
+// 附件卡片（customType:"file" aside）
+const openedAtts = ref(new Set())
+function toggleAtt(m) {
+  if (m.details?.mode === 'reference') return // 仅引用模式不展开（webui 同款）
+  const s = new Set(openedAtts.value)
+  s.has(m.id) ? s.delete(m.id) : s.add(m.id)
+  openedAtts.value = s
+}
+function imgOf(m) {
+  const b = (m.content || []).find(x => x.type === 'image')
+  if (!b) return ''
+  return b.dataUrl || (b.data ? 'data:' + (b.mimeType || 'image/png') + ';base64,' + b.data : '')
+}
+function fmtSize(n) { return !n ? '' : n < 1024 ? n + 'B' : n < 1048576 ? (n / 1024).toFixed(1) + 'KB' : (n / 1048576).toFixed(1) + 'MB' }
+function attModeLabel(m) {
+  const d = m.details || {}
+  if (imgOf(m)) return '图片'
+  if (d.mode === 'reference') return (d.type === 'folder' ? '目录引用' : '仅引用 · ' + fmtSize(d.size))
+  if (d.mode === 'bridged') return '视觉桥接'
+  if (d.mode === 'lines') return '内联 ' + (d.startLine || 1) + '-' + (d.endLine || d.lines || '?') + ' 行'
+  if (d.lines) return '内联 ' + d.lines + ' 行'
+  return '内联'
+}
+function stripFileWrapper(m) {
+  return (m.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n')
+    .replace(/^\n?<file path="[^"]*">\n?```\n?/, '').replace(/\n?```\n?<\/file>\n?$/, '')
+    .replace(/^<file path="[^"]*" size="\d+"\s*\/>$/gm, '')
+}
+// 图片全屏预览
+const imgViewer = ref('')
+function viewImg(u) { imgViewer.value = u }
 // pi 引擎询问面板（extension ui.select/confirm/input → dialog 推送）
 const dlg = reactive({ id: 0, kind: '', title: '', args: [], input: '', sel: 0, show: false })
 // ⋯ 更多菜单：更新检查（webui check_updates_all）+ 后台任务（bg_servers）
@@ -430,6 +461,12 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
       <button class="tb tap" title="更多" @click="menu = menu === 'more' ? '' : 'more'">⋯</button>
     </header>
 
+    <!-- 图片全屏预览 -->
+    <div v-if="imgViewer" class="imgviewer tap" @touchstart.prevent="imgViewer = ''">
+      <img :src="imgViewer" class="ivfull" />
+      <span class="ivtip">点按任意处关闭</span>
+    </div>
+
     <!-- 📎 附件动作面板 -->
     <div v-if="menu === 'attach'" class="backdrop tap" @click="menu = ''"></div>
     <div v-if="menu === 'attach'" class="sheet">
@@ -532,8 +569,23 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
       </div>
 
       <template v-for="m in msgs" :key="m.id">
+        <!-- 附件 aside 卡片（服务端 customType:"file"，随消息发送） -->
+        <div v-if="m.role === 'custom' && m.customType === 'file'" class="mrow frow">
+          <div class="attcard" :class="{ ref: m.details?.mode === 'reference' }">
+            <button class="ahead tap" @click="toggleAtt(m)">
+              <span class="aicon">{{ m.details?.type === 'folder' ? '📁' : imgOf(m) ? '🖼' : '📎' }}</span>
+              <span class="aname">{{ m.details?.name || m.details?.path || '附件' }}</span>
+              <span class="amode">{{ attModeLabel(m) }}</span>
+              <span v-if="m.details?.mode !== 'reference'" class="acar">{{ openedAtts.has(m.id) ? '▾' : '▸' }}</span>
+            </button>
+            <div v-if="openedAtts.has(m.id) && m.details?.mode !== 'reference'" class="abody">
+              <img v-if="imgOf(m)" :src="imgOf(m)" class="aimg tap" @click="viewImg(imgOf(m))" />
+              <pre v-else class="apre">{{ stripFileWrapper(m) }}</pre>
+            </div>
+          </div>
+        </div>
         <!-- 用户 -->
-        <div v-if="m.role === 'user'" class="mrow urow">
+        <div v-else-if="m.role === 'user'" class="mrow urow">
           <div class="ub">
             <img v-for="(b, bi) in (m.content||[]).filter(b => b.type === 'image' && b.dataUrl)" :key="bi" :src="b.dataUrl" class="uimg" />
             <div class="ut">{{ (m.content||[]).filter(b => b.type === 'text').map(b => b.text).join('\n') }}</div>
@@ -760,6 +812,22 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
 .bgdot { color: #7cc47f; font-size: 9px; }
 .bgage { font-style: normal; color: #6b7482; margin-left: 4px; font-size: 10px; }
 .updk.kill { background: #443030; }
+
+/* 附件卡片（AttachmentCard 对齐） */
+.frow { display: flex; }
+.attcard { max-width: 86%; background: #1d222b; border: 1px solid #323848; border-radius: 12px; overflow: hidden; }
+.attcard.ref { opacity: .8; }
+.ahead { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: none; border: 0; width: 100%; text-align: left; }
+.aicon { font-size: 16px; }
+.aname { font-size: 12.5px; color: #dfe4ec; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 34vw; }
+.amode { font-size: 10px; color: #8ab4f8; background: #232b3d; padding: 2px 7px; border-radius: 6px; flex-shrink: 0; }
+.acar { margin-left: auto; color: #6b7482; font-size: 11px; }
+.abody { border-top: 1px solid #2a2f3c; }
+.aimg { display: block; width: 100%; max-height: 320px; object-fit: contain; background: #0e1015; }
+.apre { margin: 0; padding: 10px 12px; font-size: 11px; line-height: 1.55; color: #b8c2d0; overflow-x: auto; max-height: 260px; white-space: pre-wrap; word-break: break-all; font-family: ui-monospace, monospace; }
+.imgviewer { position: fixed; inset: 0; z-index: 99; background: rgba(5, 6, 10, .96); display: flex; flex-direction: column; align-items: center; justify-content: center; }
+.ivfull { max-width: 96vw; max-height: 88vh; object-fit: contain; }
+.ivtip { color: #8a93a3; font-size: 12px; margin-top: 14px; }
 
 /* 底部动作面板（附件等） */
 .sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 72; background: #1c2027; border-radius: 18px 18px 0 0; padding: 14px 14px calc(14px + env(safe-area-inset-bottom)); }
