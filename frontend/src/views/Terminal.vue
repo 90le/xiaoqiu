@@ -5,6 +5,7 @@ import { tstore, poolAttach, poolDetach, createSession, attachSession, killSessi
 import '@xterm/xterm/css/xterm.css'
 
 const stage = ref(null)
+const stageEl = stage.value // 拖动钳制用（挂载后有值）
 const activeId = ref('')
 const tabMenu = ref(null) // { id, title, x }
 let pressTimer = null
@@ -41,8 +42,10 @@ function dragMove(e) {
   const dx = t.clientX - dragInfo.sx, dy = t.clientY - dragInfo.sy
   if (Math.abs(dx) + Math.abs(dy) > 6) dragInfo.moved = true
   if (!dragInfo.moved) return
-  const x = Math.max(4, Math.min(window.innerWidth - dragInfo.w - 4, dragInfo.ox + dx))
-  const y = Math.max(4, Math.min(window.innerHeight - dragInfo.h - 4, dragInfo.oy + dy))
+  // 钳制在终端舞台内（stage 矩形），不再用窗口矩形（会拖进键盘条/出屏）
+  const stageNow = stage.value; const sr = stageNow?.getBoundingClientRect() || { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight }
+  const x = Math.max(sr.left + 2, Math.min(sr.right - dragInfo.w - 2, dragInfo.ox + dx))
+  const y = Math.max(sr.top + 2, Math.min(sr.bottom - dragInfo.h - 2, dragInfo.oy + dy))
   dpadPos.value = { x, y }
 }
 function dragEnd() {
@@ -80,49 +83,151 @@ function openAi(t) {
 
 function openShellDrawer() { window.dispatchEvent(new Event('xq-open-drawer')) }
 function showKb() { try { window.XiaoqiuBridge && window.XiaoqiuBridge.showKeyboard() } catch {} }
-// 长按终端区 → 复制/粘贴（xterm 画布无原生文本选择，自建通道）
-let cpT = null, cpXY = null
-const cpMenu = ref(false)
-const cpBusy = ref('')
-function stagePress(e) {
-  const t = e.touches[0]
-  cpXY = { x: t.clientX, y: t.clientY }
-  cpT = setTimeout(() => { cpT = null; try { navigator.vibrate && navigator.vibrate(15) } catch {}; cpMenu.value = true }, 480)
+/* ══ 选区复制（浏览器式）：长按选词 → 双拖柄调整 → 复制 ══
+ * xterm 画布无原生选择，自绘：像素↔单元格换算 + 高亮框 + 起止拖柄 */
+const sel = reactive({ on: false, a: null, b: null, bar: null, busy: '' }) // a/b = {col,row} buffer 绝对
+let lpT = null, lpXY = null, selDrag = null, selScrollT = 0
+const clamp = (v, lo, hi) => Math.max(lo, Math.min(hi, v))
+function selSession() { return tstore.sessions[activeId.value] }
+function cellFromXY(x, y, s) {
+  const r = s.el.getBoundingClientRect()
+  const buf = s.term.buffer.active
+  return {
+    col: clamp(Math.floor((x - r.left) / r.width * s.term.cols), 0, s.term.cols - 1),
+    row: clamp(buf.viewportY + Math.floor((y - r.top) / r.height * s.term.rows), 0, buf.length - 1),
+  }
 }
-function stageMove(e) {
-  if (!cpXY || !cpT) return
-  const t = e.touches[0]
-  if (Math.abs(t.clientX - cpXY.x) + Math.abs(t.clientY - cpXY.y) > 12) { clearTimeout(cpT); cpT = null }
+function selEnds() { // 排序后的起止
+  if (!sel.a || !sel.b) return null
+  const ka = sel.a.row * 1000 + sel.a.col, kb = sel.b.row * 1000 + sel.b.col
+  return ka <= kb ? { s: sel.a, e: sel.b } : { s: sel.b, e: sel.a }
 }
-function stageUp() { if (cpT) { clearTimeout(cpT); cpT = null } }
-function copyScreen() {
-  const s = tstore.sessions[activeId.value]
-  if (!s) { cpMenu.value = false; return }
-  cpBusy.value = '读取屏面…'
-  try {
-    const buf = s.term.buffer.active
-    const y0 = buf.viewportY
-    const lines = []
-    for (let y = y0; y < y0 + s.term.rows; y++) {
-      const ln = buf.getLine(y)
-      lines.push(ln ? ln.translateToString(true) : '')
-    }
-    let text = lines.join('\n').replace(/\n{3,}/g, '\n\n').replace(/\s+$/g, '')
-    navigator.clipboard.writeText(text).then(() => { cpBusy.value = '✅ 已复制屏显 ' + lines.length + ' 行' }, () => { cpBusy.value = '❌ 复制失败' })
-  } catch { cpBusy.value = '❌ 读取失败' }
-  setTimeout(() => { cpBusy.value = ''; cpMenu.value = false }, 1400)
+const selRects = computed(() => { // 高亮框（viewport 像素坐标）
+  const s = selSession(), ends = selEnds()
+  if (!sel.on || !s || !ends) return []
+  const r = s.el.getBoundingClientRect(), buf = s.term.buffer.active, out = []
+  for (let row = ends.s.row; row <= ends.e.row; row++) {
+    const vis = row - buf.viewportY
+    if (vis < 0 || vis >= s.term.rows) continue
+    const x1 = row === ends.s.row ? ends.s.col / s.term.cols * r.width : 0
+    const x2 = row === ends.e.row ? (ends.e.col + 1) / s.term.cols * r.width : r.width
+    out.push({ left: x1, top: vis / s.term.rows * r.height, width: Math.max(4, x2 - x1), height: r.height / s.term.rows })
+  }
+  return out
+})
+const selHandles = computed(() => { // 起止拖柄（a 起点/b 终点各自渲染）
+  const s = selSession(), ends = selEnds()
+  if (!sel.on || !s || !ends) return []
+  const r = s.el.getBoundingClientRect(), buf = s.term.buffer.active
+  return [ends.s, ends.e].map((cell, i) => ({
+    key: i, side: i ? 'e' : 's',
+    left: (cell.col + (i ? 1 : 0)) / s.term.cols * r.width - 11,
+    top: (cell.row - buf.viewportY + 1) / s.term.rows * r.height - 22,
+  }))
+})
+function selText() {
+  const s = selSession(), ends = selEnds()
+  if (!s || !ends) return ''
+  const buf = s.term.buffer.active, lines = []
+  for (let row = ends.s.row; row <= ends.e.row; row++) {
+    const ln = buf.getLine(row)
+    if (!ln) continue
+    const str = ln.translateToString(true)
+    const from = row === ends.s.row ? ends.s.col : 0
+    const to = row === ends.e.row ? Math.min(ends.e.col + 1, str.length) : str.length
+    lines.push(str.slice(from, to).trimEnd())
+  }
+  return lines.join('\n').replace(/\n+$/, '')
 }
-async function pasteClip2() {
-  cpBusy.value = '读剪贴板…'
+function wordAt(cell, s) {
+  const ln = s.term.buffer.active.getLine(cell.row)
+  if (!ln) return null
+  const str = ln.translateToString(true)
+  if (cell.col >= str.length || /\s/.test(str[cell.col] || ' ')) return null
+  let l = cell.col, r = cell.col
+  while (l > 0 && !/\s/.test(str[l - 1])) l--
+  while (r < str.length - 1 && !/\s/.test(str[r + 1])) r++
+  return { col: l, row: cell.row, end: { col: r, row: cell.row } }
+}
+function selStart(x, y) {
+  const s = selSession()
+  if (!s) return
+  try { navigator.vibrate && navigator.vibrate(15) } catch {}
+  const cell = cellFromXY(x, y, s)
+  const w = wordAt(cell, s)
+  sel.on = true; sel.busy = ''
+  sel.a = w ? { col: w.col, row: w.row } : cell
+  sel.b = w ? w.end : cell
+  selDrag = 'b' // 之后拖动 = 调终点
+  placeBar(x, y)
+}
+function placeBar(x, y) {
+  sel.bar = { x: clamp(x - 90, 8, window.innerWidth - 190), y: clamp(y - 64, 54, window.innerHeight - 120) }
+}
+function selMove(x, y, ev) {
+  if (!selDrag) return
+  if (ev) ev.preventDefault()
+  const s = selSession()
+  if (!s) return
+  // 边缘自动滚动
+  const r = s.el.getBoundingClientRect()
+  const now = Date.now()
+  if (now - selScrollT > 50 && (y < r.top + 28 || y > r.bottom - 28)) {
+    s.term.scrollLines(y < r.top + 28 ? -1 : 1)
+    selScrollT = now
+  }
+  const cell = cellFromXY(x, y, s)
+  if (selDrag === 'a') sel.a = cell; else sel.b = cell
+}
+function selEndDrag() { selDrag = null }
+function selClose() { sel.on = false; sel.a = sel.b = null; sel.bar = null; sel.busy = '' }
+function selCopy() {
+  const t = selText()
+  if (!t) { sel.busy = '没选中内容'; setTimeout(selClose, 800); return }
+  navigator.clipboard.writeText(t).then(
+    () => { sel.busy = '✅ 已复制'; setTimeout(selClose, 700) },
+    () => { sel.busy = '❌ 复制失败'; setTimeout(selClose, 1200) })
+}
+function selAll() {
+  const s = selSession()
+  if (!s) return
+  sel.a = { col: 0, row: 0 }
+  sel.b = { col: s.term.cols - 1, row: s.term.buffer.active.length - 1 }
+  sel.bar = { x: clamp(window.innerWidth / 2 - 90, 8, window.innerWidth - 190), y: 120 }
+}
+async function selPaste() {
+  sel.busy = '读剪贴板…'
   try {
     const t = await navigator.clipboard.readText()
-    cpBusy.value = ''
-    cpMenu.value = false
-    if (t) raw(t)
-  } catch {
-    cpBusy.value = '❌ 无剪贴板权限，请用右下 D-pad 的 📋'
-    setTimeout(() => { cpBusy.value = ''; cpMenu.value = false }, 1800)
-  }
+    if (t) { raw(t); selClose() }
+    else sel.busy = '剪贴板为空'
+  } catch { sel.busy = '❌ 无权限，用 D-pad 📋'; setTimeout(selClose, 1500) }
+}
+// 舞台触摸：长按启动选词；已有选区时拖空白=调整终点
+function stageTouchStart(e) {
+  const t = e.touches[0]
+  lpXY = { x: t.clientX, y: t.clientY }
+  if (sel.on) { sel.b = cellFromXY(t.clientX, t.clientY, selSession()); selDrag = 'b'; placeBar(t.clientX, t.clientY); return }
+  lpT = setTimeout(() => { lpT = null; selStart(t.clientX, t.clientY) }, 460)
+}
+function stageTouchMove(e) {
+  const t = e.touches[0]
+  if (selDrag) { selMove(t.clientX, t.clientY, e); placeBar(t.clientX, t.clientY); return }
+  if (!lpXY || !lpT) return
+  if (Math.abs(t.clientX - lpXY.x) + Math.abs(t.clientY - lpXY.y) > 12) { clearTimeout(lpT); lpT = null }
+}
+function stageTouchEnd() { if (lpT) { clearTimeout(lpT); lpT = null }; selEndDrag() }
+// 拖柄触摸（.stop 防穿透舞台）
+function hTouchStart(side, e) {
+  const t = e.touches[0]
+  selDrag = side
+  try { navigator.vibrate && navigator.vibrate(10) } catch {}
+  placeBar(t.clientX, t.clientY)
+}
+function hTouchMove(side, e) {
+  const t = e.touches[0]
+  selMove(t.clientX, t.clientY, e)
+  placeBar(t.clientX, t.clientY)
 }
 function activate(id) {
   const s = tstore.sessions[id]
@@ -216,17 +321,26 @@ onUnmounted(() => {
       <button class="tb newb tap" @click="newTerm">＋</button>
     </header>
 
-    <!-- 终端舞台：pane 由会话池借入（长按=复制/粘贴） -->
-    <div ref="stage" class="stage" @touchstart.passive="stagePress" @touchmove.passive="stageMove" @touchend.passive="stageUp" @touchcancel.passive="stageUp"></div>
-    <!-- 长按菜单：复制屏显 / 粘贴 -->
-    <div v-if="cpMenu" class="cpmask" @click="cpMenu = false">
-      <div class="cpbox" @click.stop>
-        <div class="cprow tap" @click="copyScreen">{{ cpBusy || '📋 复制屏显内容' }}</div>
-        <div class="cprow tap" @click="pasteClip2">{{ cpBusy === '读剪贴板…' ? cpBusy : '📥 粘贴到终端' }}</div>
-        <div class="cprow cancel tap" @click="cpMenu = false">取消</div>
-      </div>
+    <!-- 终端舞台：pane 由会话池借入（长按=选词复制，拖柄=调范围） -->
+    <div ref="stage" class="stage" @touchstart="stageTouchStart" @touchmove="stageTouchMove" @touchend="stageTouchEnd" @touchcancel="stageTouchEnd">
+      <!-- 选区高亮 + 双拖柄 -->
+      <template v-if="sel.on">
+        <div v-for="(r, i) in selRects" :key="i" class="selr" :style="{ left: r.left + 'px', top: r.top + 'px', width: r.width + 'px', height: r.height + 'px' }"></div>
+        <div v-for="h in selHandles" :key="h.key" class="selh" :class="h.side"
+          :style="{ left: h.left + 'px', top: h.top + 'px' }"
+          @touchstart.stop.prevent="hTouchStart(h.side, $event)" @touchmove.stop.prevent="hTouchMove(h.side, $event)" @touchend.stop="selEndDrag"></div>
+      </template>
     </div>
-
+    <!-- 选区工具条 -->
+    <div v-if="sel.on && sel.bar" class="selbar" :style="{ left: sel.bar.x + 'px', top: sel.bar.y + 'px' }">
+      <span v-if="sel.busy" class="selbusy">{{ sel.busy }}</span>
+      <template v-else>
+        <button class="selbtn tap" @click="selCopy">复制</button>
+        <button class="selbtn tap" @click="selAll">全选</button>
+        <button class="selbtn tap" @click="selPaste">粘贴</button>
+        <button class="selbtn tap" @click="selClose">✕</button>
+      </template>
+    </div>
     <!-- 虚拟按键 v7：职责分离——打字归输入法，这里只放修饰/组合/功能/符号 -->
     <div class="vkeys">
       <!-- 展开态：两行横滚（编程符号 + 次级功能） -->
@@ -317,14 +431,20 @@ onUnmounted(() => {
 </style>
 
 <style scoped>
-.termwrap { position: fixed; inset: 0; background: #0d0e12; display: flex; flex-direction: column; z-index: 10; }
+.termwrap { position: fixed; inset: 0; background: #0d0e12; display: flex; flex-direction: column; z-index: 10; overflow: hidden; }
 .tabs { display: flex; align-items: center; gap: 5px; padding: 6px 8px; background: #14161c; border-bottom: 1px solid #23262e; }
-.cpmask { position: fixed; inset: 0; z-index: 40; background: rgba(8,10,14,.5); display: flex; align-items: center; justify-content: center; animation: fadeq .15s ease; }
-@keyframes fadeq { from { opacity: 0; } }
-.cpbox { background: #1b1e26; border: 1px solid #2a2e39; border-radius: 16px; width: 78%; max-width: 320px; overflow: hidden; }
-.cprow { padding: 15px 18px; font-size: 15px; color: #dcddde; border-bottom: 1px solid #262a34; text-align: center; }
-.cprow:last-child { border-bottom: 0; }
-.cprow.cancel { color: #8b8f98; font-size: 13px; padding: 11px; }
+/* ══ 选区复制 ══ */
+.selr { position: absolute; background: rgba(139, 92, 246, .32); border-radius: 2px; pointer-events: none; z-index: 5; }
+.selh { position: absolute; width: 22px; height: 22px; border-radius: 50% 50% 50% 4px; background: #8b5cf6; border: 2.5px solid #fff; z-index: 7; box-shadow: 0 2px 8px rgba(0,0,0,.45); transform: rotate(-45deg); }
+.selh.e { border-radius: 4px 50% 50% 50%; transform: rotate(135deg); }
+.selh:active { transform: rotate(-45deg) scale(1.25); }
+.selh.e:active { transform: rotate(135deg) scale(1.25); }
+.selbar { position: fixed; z-index: 45; display: flex; gap: 2px; background: #232633; border: 1px solid #3a4050; border-radius: 12px; padding: 3px; box-shadow: 0 8px 26px rgba(0,0,0,.5); animation: selin .14s ease; }
+@keyframes selin { from { opacity: 0; transform: translateY(6px); } }
+.selbtn { border: 0; background: none; color: #dcddde; font-size: 14px; font-weight: 600; padding: 8px 13px; border-radius: 9px; }
+.selbtn:active { background: #8b5cf6; color: #fff; }
+.selbusy { color: #a5d6a7; font-size: 13px; padding: 8px 13px; }
+
 .aisep { font-size: 12px; flex-shrink: 0; align-self: center; opacity: .75; margin: 0 2px; }
 .tab.ai { border-style: dashed; }
 .tab.ai.act { border-color: #3ecf72; background: rgba(62,207,114,.08); }
