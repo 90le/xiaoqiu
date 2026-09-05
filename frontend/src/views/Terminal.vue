@@ -41,6 +41,11 @@ function sanitizeDpad() {
   }
   if (fixed.x !== p.x || fixed.y !== p.y) { dpadPos.value = fixed; saveDpadPos() }
 }
+function dragStart(e) {
+  const t = e.touches ? e.touches[0] : e
+  const r = e.currentTarget.getBoundingClientRect()
+  dragInfo = { sx: t.clientX, sy: t.clientY, ox: r.left, oy: r.top, w: r.width, h: r.height, moved: false }
+}
 function dragMove(e) {
   if (!dragInfo) return
   e.preventDefault()
