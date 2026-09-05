@@ -1,7 +1,7 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { marked } from 'marked'
-import { chat, api, connect } from '../useChat.js'
+import { chat, api, connect, wsSend } from '../useChat.js'
 
 marked.setOptions({ breaks: true, gfm: true })
 
@@ -154,6 +154,31 @@ function sesDeb() {
 let cwdT = null
 function cwdDeb() { if (cwdT) clearTimeout(cwdT); cwdT = setTimeout(() => newCwd.value && api.completePath(newCwd.value), 450) }
 const editId = ref('')
+// pi 引擎询问面板（extension ui.select/confirm/input → dialog 推送）
+const dlg = reactive({ id: 0, kind: '', title: '', args: [], input: '', sel: 0, show: false })
+// ⋯ 更多菜单：更新检查（webui check_updates_all）+ 后台任务（bg_servers）
+const updatesAll = reactive({ loading: false, items: [] })
+watch(() => chat.updatesAll, (v) => { if (v) { updatesAll.items = v; updatesAll.loading = false } })
+function openUpdates(force) {
+  menu.value = 'updates'
+  updatesAll.loading = true; updatesAll.items = []
+  wsSend({ type: 'check_updates_all', force: force === true })
+}
+function openBgTasks() { menu.value = 'bgtasks'; wsSend({ type: 'list_bg_servers' }) }
+function killBg(s) { wsSend({ type: 'kill_background_server', port: s.port, taskId: s.taskId }); setTimeout(openBgTasks, 600) }
+function goSettings() { menu.value = ''; location.hash = '#settings' } // App.vue hash 路由 → 设置页
+watch(() => chat.dialog, (d) => {
+  if (!d) { dlg.show = false; return }
+  Object.assign(dlg, d, { input: '', sel: 0, show: true })
+})
+function dlgRespond(value) {
+  wsSend({ type: 'dialog_response', id: dlg.id, value })
+  dlg.show = false
+}
+function dlgSelect(i) {
+  const opts = dlg.args[0] || []
+  dlgRespond(typeof opts[i] === 'string' ? opts[i] : String(opts[i] ?? ''))
+}
 function startEdit(m) {
   editId.value = m.id
   input.value = (m.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n')
@@ -265,9 +290,12 @@ function buildAtts() {
     warn('当前模型不支持图片，请先切换视觉模型（🤖下拉选 👁 标记的）')
     return false
   }
+  // webui 附件格式：图片 imageData / 文件 fileData / 路径引用 path
   return attachments.value.map(a => a.path
     ? { path: a.path, mode: 'inline' }
-    : { data: a.base64, mimeType: a.mime })
+    : a.base64
+      ? { path: '', imageData: a.base64, mimeType: a.mime, name: a.name }
+      : { path: '', fileData: a.fileB64, mimeType: a.mime, name: a.name, size: a.size })
 }
 // webui submit(queue) 同款：queue=false → steer（插队：当前回合结束立即处理，跳过剩余工具调用）
 //                        queue=true  → followUp（排队：整个回复运行结束后才发送）
@@ -365,7 +393,40 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
       <button v-if="chat.status !== 'open'" class="tb warn tap" @click="connect()">↻ {{ chat.status === 'connecting' ? '连接中…' : '重连(' + (chat.retryIn || 1) + 's)' }}</button>
       <button v-if="st?.isStreaming" class="tb stop tap" @click="doAbort">⏹ 停止</button>
       <button class="tb tap" title="新对话" @click="api.newChat()">✚</button>
+      <button class="tb tap" title="更多" @click="menu = menu === 'more' ? '' : 'more'">⋯</button>
     </header>
+
+    <!-- ⋯ 更多菜单（webui TopBar 溢出菜单同款） -->
+    <div v-if="menu === 'more'" class="backdrop tap" @click="menu = ''"></div>
+    <div v-if="menu === 'more'" class="drop small moremenu">
+      <div class="di tap" @click="menu = 'sessions'; api.listSessions()">🔍 全局搜索会话</div>
+      <div class="di tap" @click="openUpdates">⬇ 检查更新</div>
+      <div class="di tap" @click="openBgTasks">▤ 后台任务</div>
+      <div class="di tap" @click="goSettings">⚙ 设置</div>
+    </div>
+
+    <!-- 检查更新弹窗 -->
+    <div v-if="menu === 'updates'" class="backdrop tap" @click="menu = ''"></div>
+    <div v-if="menu === 'updates'" class="drop small">
+      <div class="dh">组件更新检查</div>
+      <div v-if="updatesAll.loading" class="dh muted">检查中…</div>
+      <div v-for="(u, i) in updatesAll.items" :key="i" class="updrow">
+        <b>{{ u.name }}</b><span class="updm">{{ u.current }}{{ u.latest ? ' → ' + u.latest : '' }}</span>
+        <span class="updst" :class="u.error ? 'err' : u.upToDate ? 'ok' : 'avail'">{{ u.error ? '失败' : u.upToDate ? '✓ 最新' : '有更新' }}</span>
+      </div>
+      <div class="dfoot"><button class="dfb tap" @click="openUpdates(true)">↻ 重新检查</button></div>
+    </div>
+
+    <!-- 后台任务弹窗 -->
+    <div v-if="menu === 'bgtasks'" class="backdrop tap" @click="menu = ''"></div>
+    <div v-if="menu === 'bgtasks'" class="drop small">
+      <div class="dh">后台任务（AI 启动的服务器）</div>
+      <div v-for="(s, i) in chat.bgServers" :key="i" class="updrow">
+        <b>:{{ s.port }}</b><span class="updm">{{ s.name || s.taskId?.slice(0, 8) }}</span>
+        <button class="updk tap" @touchstart.prevent="killBg(s)">✕ 停止</button>
+      </div>
+      <div v-if="!chat.bgServers?.length" class="dh muted">当前没有后台任务</div>
+    </div>
 
     <!-- 模型下拉 -->
     <div v-if="menu === 'model'" class="backdrop tap" @click="menu = ''"></div>
@@ -529,6 +590,29 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
       </div>
     </transition>
 
+    <!-- 询问面板（pi 引擎 ui.select/confirm/input）——内联非模态，对话保持可见 -->
+    <div v-if="dlg.show" class="dlgin">
+      <div class="dlgh">
+        <span class="dlgb">🤖 请求确认</span>
+        <span v-if="dlg.title" class="dlgt">{{ dlg.title }}</span>
+        <button class="dlgx tap" @touchstart.prevent="dlgRespond(null)">✕</button>
+      </div>
+      <div v-if="dlg.kind === 'select'" class="dlgopts">
+        <button v-for="(o, i) in (dlg.args[0] || [])" :key="i" class="dlgopt tap"
+          @touchstart.prevent="dlgSelect(i)">{{ o }}</button>
+      </div>
+      <p v-else-if="dlg.kind === 'confirm'" class="dlgmsg">{{ dlg.args[0] }}</p>
+      <div v-if="dlg.kind === 'confirm'" class="dlgopts two">
+        <button class="dlgopt no tap" @touchstart.prevent="dlgRespond(false)">取消</button>
+        <button class="dlgopt ok tap" @touchstart.prevent="dlgRespond(true)">确认</button>
+      </div>
+      <div v-if="dlg.kind === 'input'" class="dlginrow">
+        <input v-model="dlg.input" class="dlgi" :placeholder="dlg.args[0] || '输入…'"
+          @keyup.enter="dlg.input.trim() && dlgRespond(dlg.input.trim())" />
+        <button class="dlgopt ok tap" @touchstart.prevent="dlg.input.trim() && dlgRespond(dlg.input.trim())">提交</button>
+      </div>
+    </div>
+
     <div class="composer">
       <div v-if="errN" class="errbn">⚠ {{ errN }}</div>
       <div v-if="editId" class="editbn">
@@ -609,6 +693,29 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
 </style>
 
 <style scoped>
+
+/* ⋯ 更多菜单/更新/后台任务 */
+.moremenu { min-width: 180px; }
+.updrow { display: flex; align-items: center; gap: 8px; padding: 9px 14px; font-size: 13px; border-bottom: 1px solid #23262e; }
+.updrow b { color: #dfe4ec; font-size: 12.5px; }
+.updm { color: #8a93a3; font-size: 11px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.updst.ok { color: #7cc47f; } .updst.avail { color: #e8b268; font-weight: 700; } .updst.err { color: #e07a6a; }
+.updk { margin-left: auto; background: #443030; border: 0; color: #e0b4a8; border-radius: 7px; font-size: 11px; padding: 4px 8px; }
+
+/* 询问面板（dialog-inline 语义） */
+.dlgin { margin: 0 10px 6px; background: #1c2027; border: 1px solid #3a4150; border-radius: 12px; padding: 10px 12px; }
+.dlgh { display: flex; align-items: center; gap: 8px; margin-bottom: 8px; }
+.dlgb { font-size: 11px; color: #8ab4f8; background: #232b3d; padding: 2px 8px; border-radius: 6px; flex-shrink: 0; }
+.dlgt { font-size: 12.5px; color: #dfe4ec; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.dlgx { margin-left: auto; background: none; border: 0; color: #8a93a3; font-size: 14px; padding: 2px 6px; }
+.dlgopts { display: flex; flex-direction: column; gap: 6px; }
+.dlgopts.two { flex-direction: row; }
+.dlgopt { background: #242a34; border: 1px solid #3a4150; color: #dfe4ec; font-size: 13px; padding: 10px; border-radius: 9px; text-align: left; }
+.dlgopt.ok { background: #2d4a2d; border-color: #3e6b3e; color: #a8e0a8; font-weight: 700; }
+.dlgopt.no { background: #443030; border-color: #6b3e3e; color: #e0b4a8; font-weight: 700; }
+.dlgmsg { font-size: 13px; color: #c8cfd9; margin: 2px 0 8px; }
+.dlginrow { display: flex; gap: 8px; }
+.dlgi { flex: 1; background: #171a20; border: 1px solid #3a3f4a; border-radius: 8px; color: #dfe4ec; padding: 9px 10px; font-size: 13px; outline: none; }
 
 /* 模型/思考下拉升级（webui 对齐） */
 .di.dis { opacity: .35; pointer-events: none; }

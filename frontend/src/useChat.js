@@ -26,6 +26,9 @@ export const chat = reactive({
   sessionSearch: null,
   notices: [],
   liveTools: {},          // toolCallId -> {name, text, done, isError, exitCode}
+  dialog: null,           // 活动询问（select/confirm/input）——pi 引擎 dialog 推送
+  bgServers: [],          // AI 启动的后台服务器
+  updatesAll: null,       // 全源更新检查结果（check_updates_all）
 })
 
 // webui scheduleResync：300ms 防抖的全量对账（snapshot_delta rev 断链 / message_delta 丢序共用）
@@ -150,6 +153,10 @@ export function connect() {
       case 'projects': chat.projects = (m.projects || []).sort((a, b) => (b.lastUsed || 0) - (a.lastUsed || 0)); break
       case 'path_completions': chat.pathCompletions = m.completions || []; break
       case 'session_search_results': chat.sessionSearch = m.results || []; break
+      case 'dialog': chat.dialog = { id: m.id, kind: m.kind, title: m.title, args: m.args }; break
+      case 'dialog_closed': chat.dialog = null; break
+      case 'update_status_all': chat.updatesAll = m.items || []; break
+      case 'bg_servers': chat.bgServers = m.servers || []; break
       default: break
     }
   }
