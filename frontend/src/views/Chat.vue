@@ -314,15 +314,27 @@ function submit(queue = false) {
   }
 }
 function pickFile() { fileEl.value?.click() }
+// webui handleFiles 同款：多选 → 栅格图片走视觉管线（非视觉模型拒绝）+ 其它文件 b64 直传
 function onFile(e) {
-  const f = e.target.files?.[0]
-  if (!f) return
-  if (f.type.startsWith('image/')) {
+  const files = Array.from(e.target.files || [])
+  e.target.value = '' // 允许重复选同一文件
+  const isImg = f => /^image\/(png|jpe?g|gif|webp|bmp)$/.test(f.type)
+  const imgs = files.filter(isImg), others = files.filter(f => !isImg(f))
+  if (imgs.length && st.value?.model && !st.value.model.vision) {
+    warn('当前模型不支持图片，已跳过 ' + imgs.length + ' 张图（可换 👁 视觉模型）')
+  } else {
+    for (const f of imgs) {
+      const r = new FileReader()
+      r.onload = () => attachments.value.push({ name: f.name, dataUrl: r.result, mime: f.type, base64: String(r.result).split(',')[1] })
+      r.readAsDataURL(f)
+    }
+  }
+  for (const f of others) {
+    if (f.size > 20 * 1024 * 1024) { warn(f.name + ' 超过 20MB 上限'); continue }
     const r = new FileReader()
-    r.onload = () => attachments.value.push({ name: f.name, dataUrl: r.result, mime: f.type, base64: String(r.result).split(',')[1] })
+    r.onload = () => attachments.value.push({ name: f.name, fileB64: String(r.result).split(',')[1], mime: f.type || 'application/octet-stream', size: f.size })
     r.readAsDataURL(f)
-  } else attachments.value.push({ name: f.name, path: (st.value?.cwd || '/sdcard') + '/' + f.name })
-  e.target.value = ''
+  }
 }
 function rmAtt(i) { attachments.value.splice(i, 1) }
 const taEl = ref(null)
@@ -637,7 +649,7 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
       </div>
       <div class="crow">
         <button class="cb tap" @click="pickFile">📎</button>
-        <input ref="fileEl" type="file" hidden @change="onFile" />
+        <input ref="fileEl" type="file" multiple hidden @change="onFile" />
         <textarea ref="taEl" v-model="input" rows="1" placeholder="发消息…" @paste="onPaste" @input="autoGrow"></textarea>
         <button class="cb mic tap" :class="{ rec: recording }" title="按住说话"
           @touchstart.prevent="micDown" @touchend.prevent="micUp" @mousedown="micDown" @mouseup="micUp">
