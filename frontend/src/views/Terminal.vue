@@ -31,19 +31,6 @@ if (!dpadPos.value) {
       if (v && !dpadPos.value) { try { dpadPos.value = JSON.parse(v) } catch {} }
     }).catch(() => {})
 }
-const dbgPos = ref('读档中')
-try {
-  dbgPos.value = '档=' + (localStorage.getItem('xq_dpad_pos') || 'null')
-  console.log('[DPAD] mount-load=' + dbgPos.value)
-  // localStorage 写读往返自检（真相仪器：NULL=WebView 存储坏了，ok=另有蹊跷）
-  try {
-    localStorage.setItem('xq_dpad_rt', 't' + Date.now())
-    const rt = localStorage.getItem('xq_dpad_rt')
-    console.log('[DPAD] roundtrip=' + (rt ? 'ok' : 'NULL——WebView存储写读不一致!'))
-  } catch (e) { console.log('[DPAD] roundtrip-throw=' + (e && e.message)) }
-} catch {}
-const _save0 = saveDpadPos
-saveDpadPos = function () { _save0(); try { dbgPos.value = '存=' + (localStorage.getItem('xq_dpad_pos') || 'null'); console.log('[DPAD] save->' + dbgPos.value) } catch {} }
 const dpadStyle = computed(() => {
   const p = dpadPos.value
   return p ? { left: p.x + 'px', top: p.y + 'px', right: 'auto', bottom: 'auto' } : {}
@@ -91,6 +78,7 @@ function dragEnd() {
 }
 function fabEnd() {
   if (dragInfo && !dragInfo.moved) { dpadOff.value = false; saveDpad(false); clampForPad() } // 点=展开
+  else if (dragInfo && dragInfo.moved) saveDpadPos() // 拖=存档（撤复位轮误删，位置"固定"的根因）
   dragInfo = null
 }
 // 展开后按 pad 实际尺寸钳回舞台（球可贴边，pad 大不能出界）。
@@ -392,8 +380,6 @@ onUnmounted(() => {
           @touchstart.stop.prevent="hTouchStart(h.side, $event)" @touchmove.stop.prevent="hTouchMove(h.side, $event)" @touchend.stop="selEndDrag"></div>
       </template>
     </div>
-    <!-- dpad 存档仪表（调试，下轮撤） -->
-    <div class="dpdbg">{{ dbgPos }}</div>
     <!-- 选区工具条 -->
     <div v-if="sel.on && sel.bar" class="selbar" :style="{ left: sel.bar.x + 'px', top: sel.bar.y + 'px' }">
       <span v-if="sel.busy" class="selbusy">{{ sel.busy }}</span>
@@ -496,8 +482,6 @@ onUnmounted(() => {
 <style scoped>
 .termwrap { position: fixed; inset: 0; background: #0d0e12; display: flex; flex-direction: column; z-index: 10; overflow: hidden; }
 .tabs { display: flex; align-items: center; gap: 5px; padding: 6px 8px; background: #14161c; border-bottom: 1px solid #23262e; }
-.dpdbg { position: fixed; right: 6px; bottom: 118px; z-index: 46; font: 10px ui-monospace, monospace; color: #3ecf72; background: rgba(0,0,0,.7); padding: 3px 7px; border-radius: 6px; pointer-events: none; max-width: 46vw; overflow: hidden; }
-
 /* ══ 选区复制 ══ */
 .selr { position: absolute; background: rgba(139, 92, 246, .32); border-radius: 2px; pointer-events: none; z-index: 5; }
 .selh { position: absolute; width: 22px; height: 22px; border-radius: 50% 50% 50% 4px; background: #8b5cf6; border: 2.5px solid #fff; z-index: 7; box-shadow: 0 2px 8px rgba(0,0,0,.45); transform: rotate(-45deg); }
