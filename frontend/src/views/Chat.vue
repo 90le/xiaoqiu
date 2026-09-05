@@ -1,7 +1,7 @@
 <script setup>
 import { ref, reactive, computed, watch, onMounted, onUnmounted, nextTick } from 'vue'
 import { marked } from 'marked'
-import { chat, api, connect, wsSend } from '../useChat.js'
+import { chat, api, connect, wsSend, startWatchdog } from '../useChat.js'
 
 marked.setOptions({ breaks: true, gfm: true })
 
