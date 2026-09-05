@@ -155,6 +155,17 @@ public class MainActivity extends Activity {
         @JavascriptInterface public void stopVoice() {
             ui.post(() -> pageVoice(false));
         }
+        /** 读系统剪贴板（WebView 的 navigator.clipboard.readText 无权限，走原生通道） */
+        @JavascriptInterface public String clipRead() {
+            try {
+                android.content.ClipboardManager cm =
+                    (android.content.ClipboardManager) getSystemService(CLIPBOARD_SERVICE);
+                if (cm == null || cm.getPrimaryClip() == null || cm.getPrimaryClip().getItemCount() == 0) return "";
+                CharSequence t = cm.getPrimaryClip().getItemAt(0).coerceToText(MainActivity.this);
+                return t == null ? "" : t.toString();
+            } catch (Exception e) { return ""; }
+        }
+
         /** 显式唤起软键盘（xterm textarea 聚焦后 JS focus 拉不起 IME，需原生 showSoftInput） */
         @JavascriptInterface public void showKeyboard() {
             ui.post(() -> {
