@@ -252,19 +252,39 @@ function selAll() {
   sel.bar = { x: clamp(window.innerWidth / 2 - 90, 8, window.innerWidth - 190), y: 120 }
 }
 // 舞台触摸：长按启动选词；已有选区时拖空白=调整终点
+// 手势三态：短按=无 / 竖滑=滚屏(接管,xterm触摸滚动不可靠) / 长按460ms=选词
+let scrInfo = null // { lastY, mode }
 function stageTouchStart(e) {
   const t = e.touches[0]
   lpXY = { x: t.clientX, y: t.clientY }
+  scrInfo = { lastY: t.clientY, mode: false }
   if (sel.on) { sel.b = cellFromXY(t.clientX, t.clientY, selSession()); selDrag = 'b'; placeBar(t.clientX, t.clientY); return }
   lpT = setTimeout(() => { lpT = null; selStart(t.clientX, t.clientY) }, 460)
 }
 function stageTouchMove(e) {
   const t = e.touches[0]
   if (selDrag) { selMove(t.clientX, t.clientY, e); placeBar(t.clientX, t.clientY); return }
-  if (!lpXY || !lpT) return
-  if (Math.abs(t.clientX - lpXY.x) + Math.abs(t.clientY - lpXY.y) > 12) { clearTimeout(lpT); lpT = null }
+  if (!lpXY) return
+  const dx = t.clientX - lpXY.x, dy = t.clientY - lpXY.y
+  // 进入滚屏态：竖向位移>14px 且纵向为主
+  if (scrInfo && !scrInfo.mode && Math.abs(dy) > 14 && Math.abs(dy) > Math.abs(dx) * 1.1) {
+    scrInfo.mode = true
+    if (lpT) { clearTimeout(lpT); lpT = null }
+  }
+  if (scrInfo && scrInfo.mode) {
+    e.preventDefault() // 接管后阻止默认（含 xterm 自带滚动）
+    const s = selSession()
+    if (s) {
+      const r = s.el.getBoundingClientRect()
+      const cellH = r.height / s.term.rows
+      const n = Math.round((t.clientY - scrInfo.lastY) / cellH)
+      if (n) { s.term.scrollLines(n); scrInfo.lastY += n * cellH } // 整数行滚动,余量留在lastY
+    }
+    return
+  }
+  if (lpT && Math.abs(dx) + Math.abs(dy) > 12) { clearTimeout(lpT); lpT = null }
 }
-function stageTouchEnd() { if (lpT) { clearTimeout(lpT); lpT = null }; selEndDrag() }
+function stageTouchEnd() { if (lpT) { clearTimeout(lpT); lpT = null }; selEndDrag(); scrInfo = null }
 // 拖柄触摸（.stop 防穿透舞台）
 function hTouchStart(side, e) {
   const t = e.touches[0]
