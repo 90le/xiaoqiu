@@ -20,3 +20,13 @@ label { display:block; font-size:13px; color:var(--muted); margin:12px 0 6px; }
 .ok { color:var(--hill); font-weight:600; }
 .fade-enter-active { transition:opacity .18s; }
 .fade-enter-from { opacity:0; }
+
+/* ═══ 全局基础件（各页共用）═══ */
+.sw { width:46px; height:28px; border-radius:99px; background:#d8d6cd; position:relative; transition:background .2s; flex-shrink:0; }
+.sw.on { background:var(--hill); }
+.sw .knob { position:absolute; top:3px; left:3px; width:22px; height:22px; border-radius:50%; background:#fff; transition:left .18s,width .18s; box-shadow:0 1px 3px rgba(0,0,0,.2); }
+.sw.on .knob { left:21px; }
+.sw:active .knob { width:25px; }
+.sw.on:active .knob { left:18px; }
+.tap { transition:transform .08s,opacity .12s; }
+.tap:active { transform:scale(.97); opacity:.75; }

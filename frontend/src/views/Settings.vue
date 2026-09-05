@@ -3,14 +3,14 @@ import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import QiuLogo from '../components/QiuLogo.vue'
 import { chat, api as engineApi, connect } from '../useChat.js'
 
-/* ═══════════ 子页导航（P1 壳） ═══════════ */
+/* ═══════════ 子页导航 ═══════════ */
 const page = ref(null)
 const pages = {
-  models: '🤖 模型大脑', prompt: '📝 提示词', skills: '🧩 技能与扩展',
-  termtools: '⌨ 终端工具', vision: '👁 视觉桥', voice: '🎙 语音与唤醒',
-  phone: '📱 手机与权限', about: 'ℹ️ 关于',
+  models: '模型大脑', prompt: '提示词', skills: '技能与扩展',
+  termtools: '终端工具', vision: '视觉桥', voice: '语音与唤醒',
+  phone: '手机与权限', about: '关于',
 }
-// 安卓返回手势：开子页压一条历史，popstate 关子页（否则手势直接退出设置页）
+// 安卓返回手势：开子页压一条历史，popstate 关子页
 let subPushed = false
 function openPage(p) {
   page.value = p
@@ -25,28 +25,26 @@ function back() {
   page.value = null; subPushed = false
 }
 
-/* ═══════════ 引擎设置摘要（首页分组右侧值） ═══════════ */
-const st = computed(() => chat.settings || {})
-const curModel = computed(() => {
-  const m = chat.state?.model
-  return m ? (m.label || m.id) : '—'
-})
+/* ═══════════ 首页分组 ═══════════ */
 const THINK = { off: '', minimal: ' · 思考极简', low: ' · 思考低', medium: ' · 思考中', high: ' · 思考高', xhigh: ' · 思考极高', max: ' · 思考最大' }
-const groups = computed(() => {
+const engineGroups = computed(() => {
   const s = chat.settings
+  const m = chat.state?.model
   return [
-    { id: 'models', icon: '🤖', title: '模型大脑', sum: curModel.value + (THINK[chat.state?.thinkingLevel] || '') },
-    { id: 'prompt', icon: '📝', title: '提示词', sum: s ? (s.promptMode === 'replace' ? '替换模式' : '追加模式') : '系统提示词 · 项目指令' },
-    { id: 'skills', icon: '🧩', title: '技能与扩展', sum: s ? `${(s.skills || []).length} 技能 · ${(s.extensions || []).length} 扩展` : '技能/扩展/插件管理' },
-    { id: 'termtools', icon: '⌨', title: '终端工具', sum: s ? `工具${s.terminalToolsEnabled !== false ? '开' : '关'} · bash${s.terminalBash ? '开' : '关'}` : '工具开关 · bash 接管' },
-    { id: 'vision', icon: '👁', title: '视觉桥', sum: s ? (s.visionBridgeEnabled === false ? '关闭' : (s.visionBridgeModel || '默认')) : '图片理解通道' },
-    { id: 'voice', icon: '🎙', title: '语音与唤醒', sum: '识别 · 播报 · 音色 · 唤醒词' },
-    { id: 'phone', icon: '📱', title: '手机与权限', sum: '无障碍 · 悬浮窗 · 文件权限' },
-    { id: 'about', icon: 'ℹ️', title: '关于', sum: '小丘 1.0.0 · pi 引擎' },
+    { id: 'models', icon: '🤖', t: '模型大脑', sum: m ? (m.label || m.id) : '—' },
+    { id: 'prompt', icon: '📝', t: '提示词', sum: s ? (s.promptMode === 'replace' ? '替换模式' : '追加模式') : '系统提示词 · 全局指令' },
+    { id: 'skills', icon: '🧩', t: '技能与扩展', sum: s ? `${(s.skills || []).length} 技能 · ${(s.extensions || []).length} 扩展` : '开关 · 说明 · 重载' },
+    { id: 'termtools', icon: '⌨', t: '终端工具', sum: s ? `工具${s.terminalToolsEnabled !== false ? '开' : '关'} · bash${s.terminalBash ? '开' : '关'}` : '工具开关 · bash 接管' },
+    { id: 'vision', icon: '👁', t: '视觉桥', sum: s ? (s.visionBridgeEnabled === false ? '关闭' : (s.visionBridgeModel || '默认')) : '图片理解通道' },
   ]
 })
+const qiuGroups = [
+  { id: 'voice', icon: '🎙', t: '语音与唤醒', sum: '识别 · 播报 · 音色 · 唤醒词' },
+  { id: 'phone', icon: '📱', t: '手机与权限', sum: '无障碍 · 悬浮窗 · 文件权限' },
+  { id: 'about', icon: '🏔', t: '关于', sum: '小丘 1.0.0 · pi 引擎' },
+]
 
-/* ═══════════ App 侧能力（/api/*，原页迁移） ═══════════ */
+/* ═══════════ App 侧能力（/api/*） ═══════════ */
 async function appapi(name, args) {
   try {
     const r = await fetch('/api/' + name, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(args || {}) })
@@ -130,12 +128,12 @@ function openPerm(type) {
   fetch('/api/open_permission_settings', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ type }) })
 }
 const permRows = [
-  { k: 'accessibility', label: '无障碍（屏幕读取）', type: 'a11y' },
-  { k: 'overlay', label: '悬浮窗（悬浮球）', type: 'overlay' },
-  { k: 'allFiles', label: '所有文件（环境引擎）', type: 'allfiles' },
+  { k: 'accessibility', label: '无障碍（屏幕读取）', type: 'a11y', hint: '读屏幕 · 代替你点按' },
+  { k: 'overlay', label: '悬浮窗（悬浮球）', type: 'overlay', hint: '任意界面快速唤出' },
+  { k: 'allFiles', label: '所有文件（环境引擎）', type: 'allfiles', hint: '引擎读写存储' },
 ]
 
-/* ── 旧版密钥（P3 模型管理上线后下线） ── */
+/* ── 旧版密钥（P3 下线） ── */
 const legacyOpen = ref(false)
 const provider = ref('zai-coding-cn')
 const key = ref('')
@@ -148,14 +146,12 @@ async function saveKey() {
   keyMsg.value = d.ok ? d.data : (d.error ? d.error.message : '失败')
 }
 
-/* ═══════════ P2：提示词子页 ═══════════ */
+/* ═══════════ 提示词子页 ═══════════ */
 const pmSeg = ref('sys')                       // sys=系统提示词 agents=全局指令
 const promptMode = ref('append')
 const promptDraft = ref('')
-const promptSaved = ref(true)
 const effOpen = ref(false)
 let promptSynced = false
-// settings 首次到达 → 草稿同步（保存回执后由 settings_state 再同步）
 function syncPromptDraft() {
   const s = chat.settings
   if (!s || promptSynced) return
@@ -163,39 +159,71 @@ function syncPromptDraft() {
   promptMode.value = s.promptMode || 'append'
   promptDraft.value = s.customSystemPrompt || ''
 }
-function promptDirty() { const s = chat.settings; return !s || promptMode.value !== (s.promptMode || 'append') || promptDraft.value !== (s.customSystemPrompt || '') }
+function resetPrompt() { promptSynced = false; syncPromptDraft() }
+const promptDirty = computed(() => {
+  const s = chat.settings
+  if (!s) return false
+  return promptMode.value !== (s.promptMode || 'append') || promptDraft.value !== (s.customSystemPrompt || '')
+})
 function fillDefault() { if (chat.settings?.defaultSystemPrompt) promptDraft.value = chat.settings.defaultSystemPrompt }
-async function savePrompt() {
-  promptSaved.value = false
+function savePrompt() {
   engineApi.setSettings({ promptMode: promptMode.value, customSystemPrompt: promptDraft.value })
-  setTimeout(() => { promptSaved.value = true; promptSynced = false; syncPromptDraft() }, 600)
+  promptSynced = false
+  setTimeout(syncPromptDraft, 600)
 }
-// 全局指令 AGENTS.md（引擎工作区相对路径）
+function copyEff() {
+  try { navigator.clipboard.writeText(chat.settings?.effectiveSystemPrompt || ''); promptCopied.value = true; setTimeout(() => promptCopied.value = false, 1500) } catch {}
+}
+const promptCopied = ref(false)
+
+/* 全局指令 AGENTS.md */
 const AG_PATH = '.pi/agent/AGENTS.md'
 const agDraft = ref('')
 const agState = ref(0) // 0未载 1载入中 2已载 3读取失败
-const agSaved = ref(true)
 async function loadAgents() {
   agState.value = 1
   try {
     const m = await engineApi.readFile(AG_PATH)
     agDraft.value = m && !m.binary ? m.text : ''
+    agLoadedText.value = agDraft.value
     agState.value = 2
   } catch { agState.value = 3 }
 }
-function saveAgents() {
-  if (agDraft.value.trim() === '') return
-  engineApi.writeFile(AG_PATH, agDraft.value)
-  agSaved.value = false
-  setTimeout(() => agSaved.value = true, 800)
+const agDirty = computed(() => agState.value === 2 && agDraft.value !== agLoadedText.value)
+const agLoadedText = ref('')
+function saveAgents() { engineApi.writeFile(AG_PATH, agDraft.value) }
+function resetAgents() { agDraft.value = agLoadedText.value }
+function agTemplate() {
+  agDraft.value = `# 小丘全局指令
+
+## 身份
+你是小丘，跑在用户手机上的随身工作台。
+
+## 工作习惯
+- 全程使用中文
+- 动手前先说计划，重大操作先确认
+- 文件改动走 ~/工程档案
+
+## 常驻规则
+- （补充你的规则…）
+`
 }
 function pmSegGo(s) {
-  pmSeg.value = s
+  pmSeg.value = s // 两段草稿各自独立保存，切换不丢失
   if (s === 'agents' && agState.value === 0) loadAgents()
 }
 
-/* ═══════════ P2：技能与扩展子页 ═══════════ */
-const skillView = ref(null) // { name, text }
+/* ═══════════ 技能与扩展子页 ═══════════ */
+const skq = ref('')
+const skillView = ref(null)
+const skillsFiltered = computed(() => {
+  const q = skq.value.trim().toLowerCase()
+  return (chat.settings?.skills || []).filter(s => !q || s.name.toLowerCase().includes(q) || (s.description || '').toLowerCase().includes(q))
+})
+const extsFiltered = computed(() => {
+  const q = skq.value.trim().toLowerCase()
+  return (chat.settings?.extensions || []).filter(e => !q || e.name.toLowerCase().includes(q) || (e.id || '').toLowerCase().includes(q))
+})
 function toggleList(listName, item, key) {
   const s = chat.settings
   if (!s) return
@@ -206,28 +234,40 @@ function toggleList(listName, item, key) {
 function toggleSkill(s) { toggleList('disabledSkills', s, 'name') }
 function toggleExt(e) { toggleList('disabledExtensions', e, 'id') }
 async function viewSkill(s) {
-  skillView.value = { name: s.name, text: '加载中…' }
+  skillView.value = { name: s.name, desc: s.description, text: '加载中…', enabled: s.enabled, mode: 'load' }
   try {
     const m = await engineApi.readFile('.pi/agent/skills/' + s.name + '/SKILL.md')
-    skillView.value = { name: s.name, text: m && !m.binary ? m.text : '（二进制或读取失败）' }
-  } catch { skillView.value = { name: s.name, text: '读取失败' } }
+    skillView.value.text = m && !m.binary ? m.text : '（二进制或读取失败）'
+    skillView.value.mode = 'ok'
+  } catch { skillView.value.text = '读取失败'; skillView.value.mode = 'err' }
 }
-function reloadExts() { engineApi.reloadExtensions(); skillMsg.value = '已请求重载，稍候刷新'; setTimeout(() => skillMsg.value = '', 2000) }
+function skillViewToggle() {
+  const sv = skillView.value
+  if (!sv) return
+  toggleSkill({ name: sv.name, enabled: sv.enabled })
+  sv.enabled = !sv.enabled
+}
 const skillMsg = ref('')
+function reloadExts() { engineApi.reloadExtensions(); skillMsg.value = '已请求重载…'; setTimeout(() => skillMsg.value = '', 2000) }
+function chipColor(name) {
+  const cs = ['#3E7C59', '#E8853D', '#7A5CA8', '#3D6BE8', '#B85C3E', '#3E7C8A']
+  let h = 0
+  for (const ch of name) h = (h * 31 + ch.charCodeAt(0)) % 997
+  return cs[h % cs.length]
+}
 
 /* ═══════════ 启动 ═══════════ */
 watch(() => chat.settings, syncPromptDraft)
 onMounted(() => {
   syncPromptDraft()
   window.addEventListener('popstate', onPop)
-  // ws 未连则连（设置页可能先于对话页打开）
   if (chat.status !== 'open' && chat.status !== 'connecting') connect()
   if (chat.status === 'open') engineApi.getSettings()
   loadPerm(); loadCfg()
 })
 onUnmounted(() => {
   window.removeEventListener('popstate', onPop)
-  if (subPushed) { try { history.back() } catch {} } // 离开设置页时清理子页历史
+  if (subPushed) { try { history.back() } catch {} }
 })
 async function loadCfg() {
   const d = await appapi('cfg_get')
@@ -246,18 +286,34 @@ async function loadCfg() {
 </script>
 
 <template>
-  <!-- ═══════════ 首页：分组列表 ═══════════ -->
+  <!-- ═══════════ 首页 ═══════════ -->
   <div v-show="!page">
-    <div style="display:flex;align-items:center;gap:8px;margin:6px 4px 2px;">
-      <QiuLogo :size="34" /><span class="h1" style="margin:0;">设置</span>
+    <div class="homehead">
+      <QiuLogo :size="36" />
+      <div>
+        <div class="homehead-t">设置</div>
+        <div class="homehead-s">你说，我来办。</div>
+      </div>
     </div>
-    <div class="sub">你说，我来办。</div>
 
+    <div class="secl">引 擎</div>
     <div class="grp-card">
-      <div v-for="g in groups" :key="g.id" class="grp tap" @click="openPage(g.id)">
+      <div v-for="g in engineGroups" :key="g.id" class="grp tap" @click="openPage(g.id)">
         <span class="grp-ic">{{ g.icon }}</span>
         <span class="grp-txt">
-          <span class="grp-t">{{ g.title }}</span>
+          <span class="grp-t">{{ g.t }}</span>
+          <span class="grp-s">{{ g.sum }}</span>
+        </span>
+        <span class="grp-ar">›</span>
+      </div>
+    </div>
+
+    <div class="secl">小 丘</div>
+    <div class="grp-card">
+      <div v-for="g in qiuGroups" :key="g.id" class="grp tap" @click="openPage(g.id)">
+        <span class="grp-ic">{{ g.icon }}</span>
+        <span class="grp-txt">
+          <span class="grp-t">{{ g.t }}</span>
           <span class="grp-s">{{ g.sum }}</span>
         </span>
         <span class="grp-ar">›</span>
@@ -288,206 +344,263 @@ async function loadCfg() {
     <div style="height:20px;"></div>
   </div>
 
-  <!-- ═══════════ 子页覆盖层（滑入，‹ 返回） ═══════════ -->
+  <!-- ═══════════ 子页覆盖层 ═══════════ -->
   <div v-if="page" class="subp">
     <div class="subbar">
       <button class="backb tap" @click="back">‹</button>
-      <span class="subbar-t">{{ pages[page] }}</span>
+      <span class="subbar-t">{{ pages[page] }}<span v-if="pmSeg === 'sys' && page === 'prompt' && promptDirty" class="dot"></span><span v-if="pmSeg === 'agents' && page === 'prompt' && agDirty" class="dot"></span></span>
+      <span class="subbar-r">
+        <button v-if="page === 'skills'" class="minib tap" @click="engineApi.getSettings()">↻</button>
+      </span>
     </div>
 
-    <!-- ── 🎙 语音与唤醒（迁移完成） ── -->
-    <template v-if="page === 'voice'">
-      <div class="sec">语音识别</div>
-      <div class="card">
-        <div class="row">
-          <div class="row-txt">
-            <div class="row-title">识别引擎</div>
-            <div class="row-desc">本地即时免费 · 云端更准但需额度与网络</div>
-          </div>
-          <select v-model="sttEngine" class="slim" @change="pickStt">
-            <option value="local">本地 SenseVoice</option>
-            <option value="cloud">云端 GLM-ASR</option>
-          </select>
-        </div>
-        <div class="pill-line">
-          <span class="pill ok-pill">SenseVoice 已就绪</span>
-          <span class="pill dim-pill">离线 · 永久免费 · 隐私不出手机</span>
-        </div>
-      </div>
-
-      <div class="sec">语音播报</div>
-      <div class="card">
-        <div class="row">
-          <div class="row-txt">
-            <div class="row-title">播报引擎</div>
-            <div class="row-desc">智能优先 = 云端可用则用云端，否则小米本地</div>
-          </div>
-          <select v-model="ttsEngine" class="slim" @change="pickEngine">
-            <option value="auto">智能优先（推荐）</option>
-            <option value="cloud">仅云端</option>
-            <option value="xiaomi">小米本地</option>
-          </select>
-        </div>
-        <div class="row" style="margin-top:10px;">
-          <div class="row-txt">
-            <div class="row-title">云端音色</div>
-            <div class="row-desc">GLM-TTS · 需智谱额度</div>
-          </div>
-          <select v-model="ttsVoice" class="slim" @change="pickVoice">
-            <option v-for="v in voices" :key="v.id" :value="v.id">{{ v.name }}</option>
-            <option v-if="cloneId" :value="cloneId">🎵 我的复刻音色</option>
-          </select>
-        </div>
-        <div class="row" style="margin-top:10px;">
-          <div class="row-txt">
-            <div class="row-title">复刻音色 ID</div>
-            <div class="row-desc">智谱开放平台「语音复刻」上传录音后获得</div>
-          </div>
-          <button class="mini-btn" @click="saveClone">保存</button>
-        </div>
-        <input v-model="cloneId" type="text" placeholder="粘贴复刻 voice_id（选填）" style="font-size:12px;">
-        <div class="row" style="margin-top:10px;">
-          <div class="row-txt">
-            <div class="row-title">口语化改写</div>
-            <div class="row-desc">长回复先改写成自然口语再朗读（推荐开）</div>
-          </div>
-          <div :class="['sw', { on: voiceRewrite }]" @click="toggleRewrite"><div class="knob"></div></div>
-        </div>
-        <div class="btn-line">
-          <button class="mini-btn" @click="testVoice(ttsEngine === 'xiaomi' ? 'xiaomi' : 'cloud')">{{ testing === 'cloud' ? '播放中…' : '🔊 试听当前配置' }}</button>
-          <button class="mini-btn" @click="testVoice('xiaomi')">🔊 试听小米本地</button>
-        </div>
-        <div v-if="voiceMsg" :class="['msg', voiceOk ? 'ok' : 'bad']">{{ voiceMsg }}</div>
-      </div>
-
-      <div class="sec">全局唤醒词</div>
-      <div class="card">
-        <div class="row">
-          <div class="row-txt">
-            <div class="row-title">「小丘」随时唤醒
-              <span :class="['pill', wakeOn ? 'ok-pill' : 'dim-pill']">{{ wakeOn ? '待命中' : '已关闭' }}</span>
-            </div>
-            <div class="row-desc">任意界面/息屏喊「小丘」→ 回应后直接下指令<br>支持：小丘 · 小丘小丘 · 你好小丘 · 嘿小丘 · 嗨小丘</div>
-          </div>
-          <div :class="['sw', { on: wakeOn }]" @click="toggleWake"><div class="knob"></div></div>
-        </div>
-        <div v-if="wakeMsg" class="msg ok" style="text-align:left;">{{ wakeMsg }}</div>
-        <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6;">
-          ⚠ 唤醒监听会持续使用麦克风与少量电量，不用时可关闭。<br>
-          ⚠ 需要在系统设置中允许小丘「自启动」与「后台运行」。
-        </div>
-      </div>
-    </template>
-
-    <!-- ── 📱 手机与权限（迁移完成） ── -->
-    <template v-else-if="page === 'phone'">
-      <div class="sec">权限中心</div>
-      <div class="card">
-        <template v-if="perm">
-          <div v-for="r in permRows" :key="r.k" class="kv">
-            <span>{{ r.label }}</span>
-            <span :class="{ ok: perm[r.k] }" style="cursor:pointer;" @click="r.type && openPerm(r.type)">{{ perm[r.k] ? '✅ 已授权' : '❌ 去授权' }}</span>
-          </div>
-        </template>
-        <div v-else class="muted">加载中…</div>
-      </div>
-
-      <div class="sec">悬浮球</div>
-      <div class="card" style="display:flex;justify-content:space-between;align-items:center;">
-        <div>
-          <div style="font-weight:600;font-size:14px;">悬浮球</div>
-          <div style="font-size:12px;color:var(--muted);margin-top:2px;">单击开小丘 · <b>双击开语音对话</b> · 拖动贴边<br>对话时球变色＋旁有文字提示</div>
-        </div>
-        <button class="btn" style="width:auto;padding:10px 16px;" @click="toggleBall(); loadPerm()">切换</button>
-      </div>
-    </template>
-
-    <!-- ── ℹ️ 关于 ── -->
-    <template v-else-if="page === 'about'">
-      <div class="card">
-        <div class="kv"><span>版本</span><span>1.0.0-dev</span></div>
-        <div class="kv"><span>执行引擎</span><span>pi coding-agent</span></div>
-        <div class="kv"><span>快脑</span><span>GLM-5.3-flash</span></div>
-        <div class="kv"><span>语音识别</span><span>SenseVoice / GLM-ASR</span></div>
-        <div class="kv"><span>语音合成</span><span>GLM-TTS / 小米</span></div>
-        <div class="kv"><span>内置工具</span><span>55 项</span></div>
-      </div>
-      <div class="muted" style="text-align:center;font-size:12px;margin-top:8px;">小丘 · 山间工作台 · GPL v3</div>
-    </template>
-
-    <!-- ── 📝 提示词（P2）── -->
-    <template v-else-if="page === 'prompt'">
+    <!-- ── 📝 提示词 ── -->
+    <template v-if="page === 'prompt'">
       <div class="segbar">
         <button :class="['segb', 'tap', { on: pmSeg === 'sys' }]" @click="pmSegGo('sys')">系统提示词</button>
-        <button :class="['segb', 'tap', { on: pmSeg === 'agents' }]" @click="pmSegGo('agents')">全局指令 AGENTS.md</button>
+        <button :class="['segb', 'tap', { on: pmSeg === 'agents' }]" @click="pmSegGo('agents')">全局指令</button>
       </div>
 
       <template v-if="pmSeg === 'sys'">
-        <div class="segbar">
-          <button :class="['segb', 'tap', { on: promptMode === 'append' }]" @click="promptMode = 'append'">追加模式</button>
-          <button :class="['segb', 'tap', { on: promptMode === 'replace' }]" @click="promptMode = 'replace'">替换模式</button>
-        </div>
-        <div class="card">
-          <div class="hint">{{ promptMode === 'append' ? '自定义内容追加在默认系统提示词之后（推荐，保持基础能力）' : '⚠ 整体替换默认系统提示词（高级，可能影响工具使用）' }}</div>
-          <textarea v-model="promptDraft" rows="7" :placeholder="promptMode === 'append' ? '例：回复保持简洁；优先使用中文…' : '替换后的完整系统提示词'"></textarea>
-          <div class="btn-line">
-            <button v-if="promptMode === 'replace'" class="mini-btn tap" @click="fillDefault">填入默认提示词</button>
-            <button class="mini-btn tap" @click="effOpen = !effOpen">{{ effOpen ? '收起生效预览' : '查看当前生效' }}</button>
+        <!-- 模式选择卡 -->
+        <div class="modecard tap" :class="{ on: promptMode === 'append' }" @click="promptMode = 'append'">
+          <div class="mode-ic">➕</div>
+          <div class="mode-txt">
+            <div class="mode-t">追加模式 <span class="pill ok-pill">推荐</span></div>
+            <div class="mode-d">你的内容接在默认系统提示词之后，基础能力不受影响</div>
           </div>
-          <div v-if="effOpen" class="effbox">{{ chat.settings?.effectiveSystemPrompt || '（连接后显示）' }}</div>
-          <button class="btn tap" :disabled="!promptDirty()" :style="{ opacity: promptDirty() ? 1 : .45 }" @click="savePrompt">{{ promptSaved ? '保存并生效' : '已保存 ✓' }}</button>
+          <span class="radio" :class="{ on: promptMode === 'append' }"></span>
+        </div>
+        <div class="modecard tap" :class="{ on: promptMode === 'replace' }" @click="promptMode = 'replace'">
+          <div class="mode-ic">♻️</div>
+          <div class="mode-txt">
+            <div class="mode-t">替换模式 <span class="pill dim-pill">高级</span></div>
+            <div class="mode-d">整体替换默认提示词，完全自定义（可能影响工具使用）</div>
+          </div>
+          <span class="radio" :class="{ on: promptMode === 'replace' }"></span>
+        </div>
+
+        <!-- 编辑器 -->
+        <div class="card">
+          <div class="edhead">
+            <span class="edlabel">{{ promptMode === 'append' ? '追加内容' : '完整系统提示词' }}</span>
+            <span class="edcount">{{ promptDraft.length }} 字</span>
+          </div>
+          <textarea v-model="promptDraft" class="edbox" rows="9"
+            :placeholder="promptMode === 'append' ? '例：回复保持简洁；优先使用中文；手机环境注意省电…' : '替换后的完整系统提示词（建议先「填入默认」再改）'"></textarea>
+          <div class="btn-line">
+            <button v-if="promptMode === 'replace'" class="mini-btn tap" @click="fillDefault">📄 填入默认</button>
+            <button class="mini-btn tap" @click="effOpen = !effOpen">{{ effOpen ? '▴ 收起生效预览' : '👁 查看当前生效' }}</button>
+          </div>
+          <div v-if="effOpen" class="effbox">
+            <div class="effbox-t">
+              <span>当前生效提示词（默认＋你的修改）</span>
+              <button class="minib tap" @click="copyEff">{{ promptCopied ? '✓' : '复制' }}</button>
+            </div>
+            <div class="effbox-b">{{ chat.settings?.effectiveSystemPrompt || '（连接后显示）' }}</div>
+          </div>
         </div>
       </template>
 
       <template v-else>
         <div class="card">
-          <div class="hint">全局指令文件（对所有会话生效）：身份设定、工作习惯、常驻规则。修改即时保存引擎侧。</div>
-          <div v-if="agState === 1" class="muted">加载中…</div>
+          <div class="hint">📋 全局指令文件（AGENTS.md）——对所有会话生效：身份设定、工作习惯、常驻规则。</div>
+          <div v-if="agState === 1" class="muted" style="padding:20px 0;text-align:center;">加载中…</div>
           <div v-else-if="agState === 3" class="msg bad">读取失败（引擎未就绪？）</div>
           <template v-else>
-            <textarea v-model="agDraft" rows="12" style="font-family:ui-monospace,monospace;font-size:12px;" placeholder="（文件为空，写下你的全局指令…）"></textarea>
-            <button class="btn tap" style="margin-top:10px;" @click="saveAgents">{{ agSaved ? '保存' : '已保存 ✓' }}</button>
+            <div class="edhead">
+              <span class="edlabel">.pi/agent/AGENTS.md</span>
+              <span class="edcount">{{ agDraft.length }} 字</span>
+            </div>
+            <textarea v-model="agDraft" class="edbox mono" rows="14" placeholder="（文件为空）"></textarea>
+            <div class="btn-line" v-if="!agDraft.trim()">
+              <button class="mini-btn tap" @click="agTemplate">✨ 插入模板骨架</button>
+            </div>
           </template>
         </div>
       </template>
+
+      <!-- 底部悬浮保存条（有改动才出现） -->
+      <div v-if="pmSeg === 'sys' && promptDirty" class="savebar">
+        <button class="savebar-g tap" @click="resetPrompt">放弃修改</button>
+        <button class="savebar-p tap" @click="savePrompt">💾 保存并生效</button>
+      </div>
+      <div v-else-if="pmSeg === 'agents' && agDirty" class="savebar">
+        <button class="savebar-g tap" @click="resetAgents">放弃修改</button>
+        <button class="savebar-p tap" @click="saveAgents">💾 保存</button>
+      </div>
     </template>
 
-    <!-- ── 🧩 技能与扩展（P2）── -->
+    <!-- ── 🧩 技能与扩展 ── -->
     <template v-else-if="page === 'skills'">
-      <div class="sec">技能（{{ (chat.settings?.skills || []).length }}）
-        <span class="muted" style="font-weight:400;font-size:12px;"> · 点名称看说明</span>
-      </div>
-      <div class="card" style="padding:0;overflow:hidden;">
-        <div v-for="s in chat.settings?.skills || []" :key="s.name" class="srow">
-          <div class="srow-txt tap" @click="viewSkill(s)">
-            <div class="srow-t">{{ s.name }}</div>
-            <div class="srow-d">{{ s.description || '（无描述）' }}</div>
-          </div>
-          <div :class="['sw', { on: s.enabled }]" @click="toggleSkill(s)"><div class="knob"></div></div>
-        </div>
-        <div v-if="chat.settings && !(chat.settings.skills || []).length" class="muted" style="padding:16px;">暂无技能</div>
-        <div v-if="!chat.settings" class="muted" style="padding:16px;">连接引擎中…</div>
+      <div class="searchbox">
+        <span class="search-ic">🔍</span>
+        <input v-model="skq" placeholder="搜索技能 / 扩展" class="search-in">
+        <button v-if="skq" class="search-x tap" @click="skq = ''">✕</button>
       </div>
 
-      <div class="sec">扩展（{{ (chat.settings?.extensions || []).length }}）</div>
-      <div class="card" style="padding:0;overflow:hidden;">
-        <div v-for="e in chat.settings?.extensions || []" :key="e.id" class="srow">
+      <div class="secl">技能 <em>{{ skillsFiltered.length }}/{{ (chat.settings?.skills || []).length }} · 已开 {{ skillsFiltered.filter(s => s.enabled).length }}</em>
+        <span class="secl-r"></span>
+      </div>
+      <div class="grp-card">
+        <div v-for="s in skillsFiltered" :key="s.name" class="srow">
+          <div class="srow-txt tap" @click="viewSkill(s)">
+            <div class="srow-l">
+              <span class="srow-chip" :style="{ background: chipColor(s.name) }">{{ s.name.slice(0, 1).toUpperCase() }}</span>
+              <span class="srow-t">{{ s.name }}</span>
+            </div>
+            <div class="srow-d">{{ s.description || '（无描述）' }}</div>
+          </div>
+          <div :class="['sw', 'tap', { on: s.enabled }]" @click="toggleSkill(s)"><div class="knob"></div></div>
+        </div>
+        <div v-if="chat.settings && !skillsFiltered.length" class="empty">没有匹配「{{ skq }}」的技能</div>
+        <div v-if="!chat.settings" class="empty">连接引擎中…</div>
+      </div>
+
+      <div class="secl">扩展 <em>{{ extsFiltered.length }}/{{ (chat.settings?.extensions || []).length }}</em>
+        <span class="secl-r"><button class="minib tap" @click="reloadExts">↻ 重载</button></span>
+      </div>
+      <div class="grp-card">
+        <div v-for="e in extsFiltered" :key="e.id" class="srow">
           <div class="srow-txt">
-            <div class="srow-t">{{ e.name }}</div>
+            <div class="srow-l">
+              <span class="srow-chip" :style="{ background: chipColor(e.name || e.id) }">⚡</span>
+              <span class="srow-t">{{ e.name }}</span>
+            </div>
             <div class="srow-d">{{ e.id }}</div>
           </div>
-          <div :class="['sw', { on: e.enabled }]" @click="toggleExt(e)"><div class="knob"></div></div>
+          <div :class="['sw', 'tap', { on: e.enabled }]" @click="toggleExt(e)"><div class="knob"></div></div>
         </div>
-        <div v-if="chat.settings && !(chat.settings.extensions || []).length" class="muted" style="padding:16px;">暂无扩展</div>
-      </div>
-      <div class="btn-line" style="margin-top:4px;">
-        <button class="mini-btn tap" @click="reloadExts">↻ 重载扩展</button>
-        <button class="mini-btn tap" @click="engineApi.getSettings()">↻ 刷新</button>
+        <div v-if="chat.settings && !extsFiltered.length" class="empty">暂无扩展</div>
       </div>
       <div v-if="skillMsg" class="msg ok" style="margin-top:8px;">{{ skillMsg }}</div>
     </template>
 
-    <!-- ── 建设中占位（P3-P4 依次点亮） ── -->
+    <!-- ── 🎙 语音与唤醒 ── -->
+    <template v-else-if="page === 'voice'">
+      <div class="secl">语音识别</div>
+      <div class="grp-card">
+        <div class="srow">
+          <div class="srow-txt">
+            <div class="srow-l"><span class="srow-chip" style="background:#3E7C8A;">👂</span><span class="srow-t">识别引擎</span></div>
+            <div class="srow-d">本地即时免费 · 云端更准需额度</div>
+          </div>
+          <select v-model="sttEngine" class="slim" @change="pickStt">
+            <option value="local">本地</option>
+            <option value="cloud">云端</option>
+          </select>
+        </div>
+      </div>
+
+      <div class="secl">语音播报</div>
+      <div class="grp-card">
+        <div class="srow">
+          <div class="srow-txt">
+            <div class="srow-l"><span class="srow-chip" style="background:#B85C3E;">🔊</span><span class="srow-t">播报引擎</span></div>
+            <div class="srow-d">智能优先 = 云端可用用云端，否则小米本地</div>
+          </div>
+          <select v-model="ttsEngine" class="slim" @change="pickEngine">
+            <option value="auto">智能</option>
+            <option value="cloud">云端</option>
+            <option value="xiaomi">本地</option>
+          </select>
+        </div>
+        <div class="srow">
+          <div class="srow-txt">
+            <div class="srow-l"><span class="srow-chip" style="background:#7A5CA8;">🎵</span><span class="srow-t">云端音色</span></div>
+            <div class="srow-d">GLM-TTS · 需智谱额度</div>
+          </div>
+          <select v-model="ttsVoice" class="slim" @change="pickVoice">
+            <option v-for="v in voices" :key="v.id" :value="v.id">{{ v.name.split('（')[0] }}</option>
+            <option v-if="cloneId" :value="cloneId">🎵 复刻音色</option>
+          </select>
+        </div>
+        <div class="srow" style="flex-direction:column;align-items:stretch;gap:8px;">
+          <div class="srow-l"><span class="srow-chip" style="background:#3D6BE8;">🎤</span><span class="srow-t">复刻音色 ID <em class="mini-hint">语音复刻上传录音后获得</em></span></div>
+          <div style="display:flex;gap:8px;">
+            <input v-model="cloneId" type="text" placeholder="粘贴 voice_id（选填）" style="font-size:12px;">
+            <button class="mini-btn tap" @click="saveClone">保存</button>
+          </div>
+        </div>
+        <div class="srow">
+          <div class="srow-txt">
+            <div class="srow-l"><span class="srow-chip" style="background:#E8853D;">💬</span><span class="srow-t">口语化改写</span></div>
+            <div class="srow-d">长回复先改写成自然口语再朗读</div>
+          </div>
+          <div :class="['sw', 'tap', { on: voiceRewrite }]" @click="toggleRewrite"><div class="knob"></div></div>
+        </div>
+        <div class="srow-act">
+          <button class="mini-btn tap" @click="testVoice(ttsEngine === 'xiaomi' ? 'xiaomi' : 'cloud')">{{ testing ? '播放中…' : '🔊 试听' }}</button>
+          <button class="mini-btn tap" @click="testVoice('xiaomi')">🔊 小米本地</button>
+        </div>
+        <div v-if="voiceMsg" :class="['msg', voiceOk ? 'ok' : 'bad']" style="margin-top:8px;">{{ voiceMsg }}</div>
+      </div>
+
+      <div class="secl">全局唤醒</div>
+      <div class="grp-card">
+        <div class="srow">
+          <div class="srow-txt">
+            <div class="srow-l">
+              <span class="srow-chip" style="background:#3E7C59;">喊</span><span class="srow-t">「小丘」随时唤醒</span>
+              <span :class="['pill', wakeOn ? 'ok-pill' : 'dim-pill']">{{ wakeOn ? '待命中' : '已关闭' }}</span>
+            </div>
+            <div class="srow-d" style="white-space:normal;">任意界面/息屏喊「小丘」→ 回应后直接下指令</div>
+          </div>
+          <div :class="['sw', 'tap', { on: wakeOn }]" @click="toggleWake"><div class="knob"></div></div>
+        </div>
+        <div v-if="wakeMsg" class="msg ok" style="margin-top:8px;">{{ wakeMsg }}</div>
+        <div class="footnote">⚠ 持续使用麦克风与少量电量 · 需允许「自启动」与「后台运行」</div>
+      </div>
+    </template>
+
+    <!-- ── 📱 手机与权限 ── -->
+    <template v-else-if="page === 'phone'">
+      <div class="secl">权限中心</div>
+      <div class="grp-card">
+        <div v-for="r in permRows" :key="r.k" class="srow">
+          <div class="srow-txt">
+            <div class="srow-t">{{ r.label }}</div>
+            <div class="srow-d">{{ r.hint }}</div>
+          </div>
+          <button :class="['minib', 'tap', perm && perm[r.k] ? 'minib-ok' : 'minib-bad']" @click="r.type && openPerm(r.type)">
+            {{ perm ? (perm[r.k] ? '✓ 已授权' : '去授权') : '…' }}
+          </button>
+        </div>
+      </div>
+
+      <div class="secl">悬浮球</div>
+      <div class="grp-card">
+        <div class="srow">
+          <div class="srow-txt">
+            <div class="srow-t">悬浮球</div>
+            <div class="srow-d" style="white-space:normal;">单击开小丘 · <b>双击开语音对话</b> · 拖动贴边</div>
+          </div>
+          <button class="minib tap" @click="toggleBall(); loadPerm()">切换</button>
+        </div>
+      </div>
+    </template>
+
+    <!-- ── ℹ️ 关于 ── -->
+    <template v-else-if="page === 'about'">
+      <div class="grp-card" style="padding:18px 16px;">
+        <div style="display:flex;align-items:center;gap:12px;">
+          <QiuLogo :size="44" />
+          <div>
+            <div style="font-weight:700;font-size:17px;">小丘</div>
+            <div class="muted" style="font-size:12px;">山间工作台 · 1.0.0-dev</div>
+          </div>
+        </div>
+      </div>
+      <div class="grp-card">
+        <div class="kv"><span>执行引擎</span><b>pi coding-agent</b></div>
+        <div class="kv"><span>快脑</span><b>GLM-5.3-flash</b></div>
+        <div class="kv"><span>语音识别</span><b>SenseVoice / GLM-ASR</b></div>
+        <div class="kv"><span>语音合成</span><b>GLM-TTS / 小米</b></div>
+        <div class="kv"><span>开源协议</span><b>GPL v3</b></div>
+      </div>
+    </template>
+
+    <!-- ── 建设中占位（P3-P4） ── -->
     <template v-else>
       <div class="card" style="text-align:center;padding:34px 16px;">
         <div style="font-size:36px;">🚧</div>
@@ -502,58 +615,135 @@ async function loadCfg() {
     <div style="height:24px;"></div>
   </div>
 
-  <!-- 技能说明查看（底部弹层，只读） -->
+  <!-- 技能说明弹层 -->
   <div v-if="skillView" class="skview" @click="skillView = null">
     <div class="skview-b" @click.stop>
-      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
-        <b style="font-size:15px;">{{ skillView.name }}</b>
-        <button class="mini-btn tap" @click="skillView = null">✕</button>
+      <div class="skview-h">
+        <span class="srow-chip big" :style="{ background: chipColor(skillView.name) }">{{ skillView.name.slice(0, 1).toUpperCase() }}</span>
+        <div class="skview-tt">
+          <b>{{ skillView.name }}</b>
+          <div class="muted" style="font-size:11px;">{{ skillView.desc || '技能说明' }}</div>
+        </div>
+        <div :class="['sw', 'tap', { on: skillView.enabled }]" @click="skillViewToggle"><div class="knob"></div></div>
+        <button class="minib tap" @click="skillView = null">✕</button>
       </div>
-      <div style="flex:1;overflow-y:auto;background:var(--bg);border-radius:10px;padding:12px;font:12px ui-monospace,monospace;white-space:pre-wrap;line-height:1.65;">{{ skillView.text }}</div>
+      <div class="skview-c">{{ skillView.text }}</div>
+      <div class="skview-f">只读 · 编辑功能后续开放</div>
     </div>
   </div>
 </template>
 
 <style scoped>
-/* 分组卡片：iOS 设置风格 */
-.grp-card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; box-shadow: var(--shadow); margin-bottom: 14px; }
-.grp { display: flex; align-items: center; gap: 12px; padding: 13px 14px; border-bottom: 1px solid var(--line); }
-.grp:last-child { border-bottom: 0; }
-.grp:active { background: var(--bg); }
-.grp-ic { font-size: 20px; width: 26px; text-align: center; }
-.grp-txt { flex: 1; min-width: 0; display: flex; flex-direction: column; }
-.grp-t { font-size: 15px; font-weight: 600; }
-.grp-s { font-size: 12px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.grp-ar { color: var(--muted); font-size: 18px; }
+/* ═══ 首页 ═══ */
+.homehead { display:flex; align-items:center; gap:12px; margin:10px 4px 14px; }
+.homehead-t { font-size:22px; font-weight:800; letter-spacing:.5px; }
+.homehead-s { font-size:12px; color:var(--muted); }
+.secl { margin:16px 4px 7px; font-size:12px; font-weight:700; color:var(--muted); letter-spacing:2px; display:flex; align-items:center; gap:6px; }
+.secl em { font-style:normal; font-weight:400; letter-spacing:0; font-size:11px; opacity:.85; }
+.secl-r { margin-left:auto; }
 
-/* 旧版密钥折叠 */
-.lgcy-h { display: flex; justify-content: space-between; align-items: center; padding: 13px 14px; font-size: 14px; font-weight: 600; }
-.lgcy-h em { font-style: normal; font-size: 11px; color: var(--muted); font-weight: 400; }
-.lgcy-b { padding: 0 14px 14px; }
+.grp-card { background:var(--card); border:1px solid var(--line); border-radius:18px; overflow:hidden; box-shadow:var(--shadow); margin-bottom:2px; }
+.grp { display:flex; align-items:center; gap:12px; padding:13px 14px; border-bottom:1px solid var(--line); background:#fff; }
+.grp:last-child { border-bottom:0; }
+.grp:active { background:var(--bg); }
+.grp-ic { font-size:19px; width:38px; height:38px; display:flex; align-items:center; justify-content:center; background:var(--hill-soft); border-radius:11px; }
+.grp-txt { flex:1; min-width:0; display:flex; flex-direction:column; }
+.grp-t { font-size:15px; font-weight:700; }
+.grp-s { font-size:12px; color:var(--muted); margin-top:2px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.grp-ar { color:#B9B4A6; font-size:20px; font-weight:300; }
 
-/* 分段切换条 */
-.segbar { display: flex; gap: 6px; margin-bottom: 10px; }
-.segb { flex: 1; border: 1px solid var(--line); background: var(--card); color: var(--muted); border-radius: 12px; padding: 9px 4px; font-size: 13px; font-weight: 600; transition: all .15s; }
-.segb.on { background: var(--hill); border-color: var(--hill); color: #fff; }
-.hint { font-size: 12px; color: var(--muted); line-height: 1.6; margin-bottom: 8px; }
-.effbox { background: var(--bg); border: 1px dashed var(--line); border-radius: 10px; padding: 10px; font: 11px ui-monospace, monospace; white-space: pre-wrap; max-height: 220px; overflow-y: auto; margin-bottom: 10px; color: var(--muted); }
-/* 技能/扩展行 */
-.srow { display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-bottom: 1px solid var(--line); }
-.srow:last-child { border-bottom: 0; }
-.srow-txt { flex: 1; min-width: 0; }
-.srow-t { font-size: 14px; font-weight: 600; }
-.srow-d { font-size: 12px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-/* 技能查看弹层 */
-.skview { position: fixed; inset: 0; z-index: 70; background: rgba(20,26,18,.55); display: flex; align-items: flex-end; animation: fadein .15s ease; }
-.skview-b { background: var(--card); border-radius: 18px 18px 0 0; width: 100%; max-height: 78vh; display: flex; flex-direction: column; padding: 14px 14px 20px; animation: upin .2s ease; }
-@keyframes fadein { from { opacity: 0; } }
-@keyframes upin { from { transform: translateY(40px); } }
+.lgcy-h { display:flex; justify-content:space-between; align-items:center; padding:13px 14px; font-size:14px; font-weight:600; }
+.lgcy-h em { font-style:normal; font-size:11px; color:var(--muted); font-weight:400; }
+.lgcy-b { padding:0 14px 14px; }
 
-/* 子页覆盖层：右滑入全屏 */
-.subp { position: fixed; inset: 0; z-index: 60; background: var(--bg); overflow-y: auto; padding: 0 12px; animation: slidein .22s ease; }
-@keyframes slidein { from { transform: translateX(100%); } to { transform: none; } }
-.subbar { position: sticky; top: 0; z-index: 2; display: flex; align-items: center; gap: 6px; padding: 10px 2px; background: var(--bg); border-bottom: 1px solid var(--line); margin-bottom: 10px; }
-.backb { border: 0; background: none; font-size: 26px; color: var(--ink); padding: 2px 10px 2px 2px; line-height: 1; }
-.backb:active { opacity: .5; }
-.subbar-t { font-size: 17px; font-weight: 700; }
+/* ═══ 子页壳 ═══ */
+.subp { position:fixed; inset:0; z-index:60; background:var(--bg); overflow-y:auto; padding:0 12px 60px; animation:slidein .22s ease; }
+@keyframes slidein { from { transform:translateX(100%); } to { transform:none; } }
+.subbar { position:sticky; top:0; z-index:2; display:flex; align-items:center; gap:4px; padding:8px 2px; background:var(--bg); border-bottom:1px solid var(--line); margin-bottom:8px; min-height:46px; }
+.backb { border:0; background:var(--card); color:var(--ink); font-size:20px; font-weight:700; width:34px; height:34px; border-radius:11px; border:1px solid var(--line); }
+.subbar-t { font-size:17px; font-weight:800; margin:0 auto; display:flex; align-items:center; gap:6px; }
+.subbar-r { min-width:34px; display:flex; justify-content:flex-end; }
+.dot { width:8px; height:8px; border-radius:50%; background:var(--dawn); display:inline-block; }
+
+/* ═══ 通用小组件 ═══ */
+.mini-btn { border:1px solid var(--line); background:var(--card); border-radius:10px; padding:7px 13px; font-size:12px; font-weight:600; color:var(--ink); }
+.mini-btn:active { background:var(--hill); border-color:var(--hill); color:#fff; }
+.minib { border:1px solid var(--line); background:var(--card); border-radius:9px; padding:5px 10px; font-size:12px; font-weight:600; color:var(--ink); }
+.minib-ok { background:var(--hill-soft); border-color:var(--hill); color:var(--hill); }
+.minib-bad { background:var(--dawn); border-color:var(--dawn); color:#fff; }
+.msg { margin-top:10px; font-size:13px; text-align:center; min-height:18px; }
+.msg.ok { color:var(--hill); } .msg.bad { color:var(--bad); }
+.pill { font-size:10px; padding:2px 8px; border-radius:99px; font-weight:700; }
+.ok-pill { background:var(--hill-soft); color:var(--hill); }
+.dim-pill { background:#EFEDE6; color:var(--muted); }
+.muted { color:var(--muted); }
+.kv { display:flex; justify-content:space-between; font-size:13px; padding:10px 14px; border-bottom:1px solid var(--line); }
+.kv:last-child { border:0; }
+.kv b { font-weight:600; }
+.slim { max-width:150px; font-size:13px; padding:8px 10px; }
+.empty { padding:22px 16px; text-align:center; font-size:13px; color:var(--muted); }
+.hint { font-size:12px; color:var(--muted); line-height:1.65; margin-bottom:8px; }
+.footnote { font-size:11px; color:var(--muted); padding:10px 14px 12px; line-height:1.6; border-top:1px dashed var(--line); }
+.card { background:var(--card); border:1px solid var(--line); border-radius:18px; padding:14px; margin-bottom:12px; box-shadow:var(--shadow); }
+.btn { border:0; border-radius:14px; background:var(--hill); color:#fff; font-size:15px; font-weight:700; padding:12px; width:100%; }
+.btn:active { opacity:.85; }
+label { display:block; font-size:13px; color:var(--muted); margin:12px 0 6px; }
+
+/* ═══ 提示词页 ═══ */
+.segbar { display:flex; gap:8px; margin:4px 0 12px; }
+.segb { flex:1; border:1px solid var(--line); background:var(--card); color:var(--muted); border-radius:13px; padding:10px 4px; font-size:14px; font-weight:700; transition:all .15s; }
+.segb.on { background:var(--hill); border-color:var(--hill); color:#fff; box-shadow:0 3px 10px rgba(62,124,89,.3); }
+
+.modecard { display:flex; align-items:center; gap:12px; background:var(--card); border:2px solid var(--line); border-radius:16px; padding:13px 14px; margin-bottom:10px; transition:all .15s; }
+.modecard.on { border-color:var(--hill); background:#F4FAF6; }
+.mode-ic { font-size:22px; }
+.mode-txt { flex:1; }
+.mode-t { font-size:15px; font-weight:700; display:flex; align-items:center; gap:6px; }
+.mode-d { font-size:12px; color:var(--muted); margin-top:3px; line-height:1.5; }
+.radio { width:20px; height:20px; border-radius:50%; border:2px solid var(--line); flex-shrink:0; transition:all .15s; }
+.radio.on { border-color:var(--hill); background:var(--hill); box-shadow:inset 0 0 0 4px #fff; }
+
+.edhead { display:flex; justify-content:space-between; align-items:center; margin-bottom:8px; }
+.edlabel { font-size:13px; font-weight:700; color:var(--muted); }
+.edcount { font-size:11px; color:var(--muted); background:var(--bg); border-radius:8px; padding:2px 8px; }
+.edbox { width:100%; border:1px solid var(--line); border-radius:12px; background:var(--bg); padding:12px; font-size:14px; line-height:1.7; resize:vertical; min-height:150px; font-family:inherit; }
+.edbox.mono { font:13px ui-monospace,monospace; }
+.btn-line { display:flex; gap:8px; margin-top:10px; flex-wrap:wrap; }
+
+.effbox { background:var(--bg); border:1px dashed var(--line); border-radius:12px; margin-top:10px; overflow:hidden; }
+.effbox-t { display:flex; justify-content:space-between; align-items:center; padding:8px 12px; font-size:11px; color:var(--muted); border-bottom:1px dashed var(--line); }
+.effbox-b { padding:10px 12px; font:11px ui-monospace,monospace; white-space:pre-wrap; max-height:220px; overflow-y:auto; color:var(--muted); line-height:1.6; }
+
+.savebar { position:fixed; left:12px; right:12px; bottom:calc(14px + env(safe-area-inset-bottom)); z-index:65; display:flex; gap:10px; animation:upin .25s ease; }
+.savebar-g { flex:1; border:1px solid var(--line); background:var(--card); border-radius:14px; padding:13px; font-size:14px; font-weight:600; color:var(--muted); }
+.savebar-p { flex:2; border:0; background:var(--hill); color:#fff; border-radius:14px; padding:13px; font-size:15px; font-weight:700; box-shadow:0 4px 14px rgba(62,124,89,.35); }
+@keyframes upin { from { transform:translateY(70px); opacity:0; } }
+
+/* ═══ 技能页 ═══ */
+.searchbox { display:flex; align-items:center; gap:8px; background:var(--card); border:1px solid var(--line); border-radius:13px; padding:0 12px; margin:2px 0 4px; box-shadow:var(--shadow); }
+.search-ic { font-size:13px; }
+.search-in { border:0; background:none; padding:11px 0; font-size:14px; flex:1; }
+.search-in:focus { border:0; }
+.search-x { border:0; background:#EFEDE6; border-radius:50%; width:20px; height:20px; font-size:11px; color:var(--muted); }
+
+.srow { display:flex; align-items:center; gap:10px; padding:11px 14px; border-bottom:1px solid var(--line); }
+.srow:last-child { border-bottom:0; }
+.srow-txt { flex:1; min-width:0; }
+.srow-l { display:flex; align-items:center; gap:8px; }
+.srow-t { font-size:14px; font-weight:700; }
+.srow-chip { width:26px; height:26px; border-radius:8px; color:#fff; font-size:13px; font-weight:800; display:inline-flex; align-items:center; justify-content:center; flex-shrink:0; }
+.srow-chip.big { width:34px; height:34px; border-radius:10px; font-size:16px; }
+.srow-d { font-size:12px; color:var(--muted); margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+.srow-act { display:flex; gap:8px; padding:10px 14px 12px; border-top:1px dashed var(--line); }
+.mini-hint { font-style:normal; font-size:11px; color:var(--muted); font-weight:400; }
+
+/* 技能弹层 */
+.skview { position:fixed; inset:0; z-index:70; background:rgba(24,30,20,.5); display:flex; align-items:flex-end; animation:fadein .15s ease; }
+.skview-b { background:var(--card); border-radius:20px 20px 0 0; width:100%; max-height:80vh; display:flex; flex-direction:column; padding:14px 14px 10px; animation:upin .2s ease; }
+.skview-h { display:flex; align-items:center; gap:10px; padding-bottom:10px; border-bottom:1px solid var(--line); }
+.skview-tt { flex:1; min-width:0; }
+.skview-tt b { font-size:15px; }
+.skview-c { flex:1; overflow-y:auto; background:var(--bg); border-radius:12px; padding:12px 14px; margin:10px 0; font:12px ui-monospace,monospace; white-space:pre-wrap; line-height:1.7; max-height:60vh; }
+.skview-f { text-align:center; font-size:11px; color:var(--muted); padding:4px 0 8px; }
+@keyframes fadein { from { opacity:0; } }
 </style>
