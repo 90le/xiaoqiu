@@ -156,6 +156,29 @@ function cwdDeb() { if (cwdT) clearTimeout(cwdT); cwdT = setTimeout(() => newCwd
 const editId = ref('')
 // 附件卡片（customType:"file" aside）
 const openedAtts = ref(new Set())
+// 附件归属：custom aside 合并进紧随其后的用户消息（ChatGPT/LobeChat 模式：气泡内直显）
+const renderMsgs = computed(() => {
+  const out = []
+  let pending = []
+  for (const m of msgs.value) {
+    if (m.role === 'custom' && m.customType === 'file') { pending.push(m); continue }
+    if (m.role === 'user') {
+      const imgs = [], files = []
+      for (const a of pending) {
+        const u = imgOf(a)
+        if (u) imgs.push(u)
+        else files.push(a)
+      }
+      out.push({ ...m, attImgs: imgs, attFiles: files })
+      pending = []
+      continue
+    }
+    if (pending.length) { out.push({ id: m.id + '-orphan-atts', role: 'orphanAtts', atts: pending }); pending = [] }
+    out.push(m)
+  }
+  if (pending.length) out.push({ id: 'tail-atts', role: 'orphanAtts', atts: pending })
+  return out
+})
 function toggleAtt(m) {
   if (m.details?.mode === 'reference') return // 仅引用模式不展开（webui 同款）
   const s = new Set(openedAtts.value)
@@ -568,25 +591,29 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
         <div class="muted">操作手机 · 跑命令 · 写代码 · 查记忆</div>
       </div>
 
-      <template v-for="m in msgs" :key="m.id">
-        <!-- 附件 aside 卡片（服务端 customType:"file"，随消息发送） -->
-        <div v-if="m.role === 'custom' && m.customType === 'file'" class="mrow frow">
-          <div class="attcard" :class="{ ref: m.details?.mode === 'reference' }">
-            <button class="ahead tap" @click="toggleAtt(m)">
-              <span class="aicon">{{ m.details?.type === 'folder' ? '📁' : imgOf(m) ? '🖼' : '📎' }}</span>
-              <span class="aname">{{ m.details?.name || m.details?.path || '附件' }}</span>
-              <span class="amode">{{ attModeLabel(m) }}</span>
-              <span v-if="m.details?.mode !== 'reference'" class="acar">{{ openedAtts.has(m.id) ? '▾' : '▸' }}</span>
-            </button>
-            <div v-if="openedAtts.has(m.id) && m.details?.mode !== 'reference'" class="abody">
-              <img v-if="imgOf(m)" :src="imgOf(m)" class="aimg tap" @click="viewImg(imgOf(m))" />
-              <pre v-else class="apre">{{ stripFileWrapper(m) }}</pre>
+      <template v-for="m in renderMsgs" :key="m.id">
+        <!-- 孤儿附件（aside 后无用户消息——异常兜底，右侧胶囊） -->
+        <div v-if="m.role === 'orphanAtts'" class="mrow urow">
+          <div class="ub slim">
+            <div v-for="(f, fi) in m.atts" :key="'oa' + fi" class="achip">
+              <span class="acico">{{ imgOf(f) ? '🖼' : '📄' }}</span>
+              <span class="acname">{{ f.details?.name || '附件' }}</span>
             </div>
           </div>
         </div>
         <!-- 用户 -->
         <div v-else-if="m.role === 'user'" class="mrow urow">
           <div class="ub">
+            <div v-if="m.attImgs?.length" class="agrid">
+              <img v-for="(u, ii) in m.attImgs" :key="'ag' + ii" :src="u" class="athumb tap" @click="viewImg(u)" />
+            </div>
+            <div v-if="m.attFiles?.length" class="achips">
+              <div v-for="(f, fi) in m.attFiles" :key="'af' + fi" class="achip">
+                <span class="acico">{{ f.details?.type === 'folder' ? '📁' : (f.details?.mode === 'bridged' ? '🔤' : '📄') }}</span>
+                <span class="acname">{{ f.details?.name || f.details?.path || '附件' }}</span>
+                <span class="acsize">{{ fmtSize(f.details?.size) }}</span>
+              </div>
+            </div>
             <img v-for="(b, bi) in (m.content||[]).filter(b => b.type === 'image' && b.dataUrl)" :key="bi" :src="b.dataUrl" class="uimg" />
             <div class="ut">{{ (m.content||[]).filter(b => b.type === 'text').map(b => b.text).join('\n') }}</div>
           </div>
@@ -813,18 +840,15 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
 .bgage { font-style: normal; color: #6b7482; margin-left: 4px; font-size: 10px; }
 .updk.kill { background: #443030; }
 
-/* 附件卡片（AttachmentCard 对齐） */
-.frow { display: flex; }
-.attcard { max-width: 86%; background: #1d222b; border: 1px solid #323848; border-radius: 12px; overflow: hidden; }
-.attcard.ref { opacity: .8; }
-.ahead { display: flex; align-items: center; gap: 8px; padding: 10px 12px; background: none; border: 0; width: 100%; text-align: left; }
-.aicon { font-size: 16px; }
-.aname { font-size: 12.5px; color: #dfe4ec; font-weight: 600; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 34vw; }
-.amode { font-size: 10px; color: #8ab4f8; background: #232b3d; padding: 2px 7px; border-radius: 6px; flex-shrink: 0; }
-.acar { margin-left: auto; color: #6b7482; font-size: 11px; }
-.abody { border-top: 1px solid #2a2f3c; }
-.aimg { display: block; width: 100%; max-height: 320px; object-fit: contain; background: #0e1015; }
-.apre { margin: 0; padding: 10px 12px; font-size: 11px; line-height: 1.55; color: #b8c2d0; overflow-x: auto; max-height: 260px; white-space: pre-wrap; word-break: break-all; font-family: ui-monospace, monospace; }
+/* 气泡内附件（ChatGPT/LobeChat 模式：直显不折叠） */
+.agrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; margin-bottom: 8px; }
+.athumb { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; background: #0e1015; }
+.achips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
+.achip { display: inline-flex; align-items: center; gap: 6px; background: rgba(12, 14, 20, .5); border: 1px solid rgba(255,255,255,.08); border-radius: 10px; padding: 7px 11px; max-width: 100%; }
+.acico { font-size: 15px; }
+.acname { font-size: 12px; color: #eef1f6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40vw; }
+.acsize { font-size: 10px; color: rgba(255,255,255,.45); flex-shrink: 0; }
+.ub.slim { padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
 .imgviewer { position: fixed; inset: 0; z-index: 99; background: rgba(5, 6, 10, .96); display: flex; flex-direction: column; align-items: center; justify-content: center; }
 .ivfull { max-width: 96vw; max-height: 88vh; object-fit: contain; }
 .ivtip { color: #8a93a3; font-size: 12px; margin-top: 14px; }
