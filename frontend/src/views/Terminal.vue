@@ -121,6 +121,13 @@ const confirmKill = ref('')
 let killTimer = null
 function resetConfirm(id) { if (killTimer) clearTimeout(killTimer); killTimer = setTimeout(() => { if (confirmKill.value === id) confirmKill.value = '' }, 3000) }
 
+watch(activeId, id => {
+  scrollHook?.dispose?.()
+  const s = tstore.sessions[id]
+  if (!s) return
+  scrollHook = s.term.onScroll(() => updateScrolledUp(s))
+  updateScrolledUp(s)
+}, { immediate: true })
 const sessions = computed(() => tstore.order.map(id => tstore.sessions[id]).filter(s => s && !s.remote))
 // AI 命令终端：内嵌版 terminal_list 无 agentBash 标志（源码 info() 实证）——
 // ai-bash 终端特征：id='ai-bash' / title='AI bash'；命令标签带 command 字段
@@ -252,12 +259,43 @@ function selAll() {
   sel.bar = { x: clamp(window.innerWidth / 2 - 90, 8, window.innerWidth - 190), y: 120 }
 }
 // 舞台触摸：长按启动选词；已有选区时拖空白=调整终点
-// 手势三态：短按=无 / 竖滑=滚屏(接管,xterm触摸滚动不可靠) / 长按460ms=选词
-let scrInfo = null // { lastY, mode }
+// 手势三态：短按=无 / 竖滑=滚屏(接管+惯性) / 长按460ms=选词
+let scrInfo = null // { lastY, mode, prevY, prevT, vel }
+let flingRaf = null, flingAcc = 0
+const scrolledUp = ref(false)
+let scrollHook = null
+function updateScrolledUp(s) {
+  try { const b = s.term.buffer.active; scrolledUp.value = b.ybase - b.viewportY > 1 } catch {}
+}
+function goBottom() {
+  cancelFling()
+  const s = selSession()
+  if (s) { try { s.term.scrollToBottom() } catch {}; updateScrolledUp(s) }
+}
+function cancelFling() { if (flingRaf) { cancelAnimationFrame(flingRaf); flingRaf = null } flingAcc = 0 }
+function startFling(velPxMs) { // vel: px/ms
+  cancelFling()
+  let v = velPxMs, lastT = performance.now()
+  const step = (now) => {
+    const dt = Math.min(48, now - lastT); lastT = now
+    v *= Math.pow(0.9985, dt) // 摩擦衰减
+    const s = selSession()
+    if (!s || Math.abs(v) < 0.02) { flingRaf = null; return }
+    const r = s.el.getBoundingClientRect()
+    const cellH = r.height / s.term.rows
+    flingAcc += v * dt / cellH
+    const n = Math.trunc(flingAcc); flingAcc -= n
+    if (n) s.term.scrollLines(n)
+    updateScrolledUp(s)
+    flingRaf = requestAnimationFrame(step)
+  }
+  flingRaf = requestAnimationFrame(step)
+}
 function stageTouchStart(e) {
+  cancelFling() // 新触摸立即停惯性
   const t = e.touches[0]
   lpXY = { x: t.clientX, y: t.clientY }
-  scrInfo = { lastY: t.clientY, mode: false }
+  scrInfo = { lastY: t.clientY, mode: false, prevY: t.clientY, prevT: performance.now(), vel: 0 }
   if (sel.on) { sel.b = cellFromXY(t.clientX, t.clientY, selSession()); selDrag = 'b'; placeBar(t.clientX, t.clientY); return }
   lpT = setTimeout(() => { lpT = null; selStart(t.clientX, t.clientY) }, 460)
 }
@@ -278,13 +316,20 @@ function stageTouchMove(e) {
       const r = s.el.getBoundingClientRect()
       const cellH = r.height / s.term.rows
       const n = Math.round((t.clientY - scrInfo.lastY) / cellH)
-      if (n) { s.term.scrollLines(n); scrInfo.lastY += n * cellH } // 整数行滚动,余量留在lastY
+      if (n) { s.term.scrollLines(n); scrInfo.lastY += n * cellH; updateScrolledUp(s) }
+      const now = performance.now(), dt = now - scrInfo.prevT
+      if (dt > 4) { scrInfo.vel = scrInfo.vel * 0.72 + ((t.clientY - scrInfo.prevY) / dt) * 0.28; scrInfo.prevY = t.clientY; scrInfo.prevT = now }
     }
     return
   }
   if (lpT && Math.abs(dx) + Math.abs(dy) > 12) { clearTimeout(lpT); lpT = null }
 }
-function stageTouchEnd() { if (lpT) { clearTimeout(lpT); lpT = null }; selEndDrag(); scrInfo = null }
+function stageTouchEnd() {
+  if (lpT) { clearTimeout(lpT); lpT = null }
+  selEndDrag()
+  if (scrInfo && scrInfo.mode && Math.abs(scrInfo.vel) > 0.35) startFling(scrInfo.vel) // 甩动惯性
+  scrInfo = null
+}
 // 拖柄触摸（.stop 防穿透舞台）
 function hTouchStart(side, e) {
   const t = e.touches[0]
@@ -400,6 +445,8 @@ onUnmounted(() => {
           @touchstart.stop.prevent="hTouchStart(h.side, $event)" @touchmove.stop.prevent="hTouchMove(h.side, $event)" @touchend.stop="selEndDrag"></div>
       </template>
     </div>
+    <!-- 回到底部（滚离时出现） -->
+    <button v-if="scrolledUp" class="tobottom tap" @touchstart.prevent="goBottom">↓ 最新</button>
     <!-- 选区工具条 -->
     <div v-if="sel.on && sel.bar" class="selbar" :style="{ left: sel.bar.x + 'px', top: sel.bar.y + 'px' }">
       <span v-if="sel.busy" class="selbusy">{{ sel.busy }}</span>
@@ -502,6 +549,8 @@ onUnmounted(() => {
 <style scoped>
 .termwrap { position: fixed; inset: 0; background: #0d0e12; display: flex; flex-direction: column; z-index: 10; overflow: hidden; }
 .tabs { display: flex; align-items: center; gap: 5px; padding: 6px 8px; background: #14161c; border-bottom: 1px solid #23262e; }
+.tobottom { position: fixed; left: 50%; transform: translateX(-50%); bottom: 126px; z-index: 30; background: rgba(30,33,42,.94); color: #a78bfa; border: 1px solid #3a3560; border-radius: 99px; font-size: 12.5px; font-weight: 700; padding: 8px 18px; box-shadow: 0 6px 18px rgba(0,0,0,.4); animation: selin .16s ease; }
+
 /* ══ 选区复制 ══ */
 .selr { position: absolute; background: rgba(139, 92, 246, .32); border-radius: 2px; pointer-events: none; z-index: 5; }
 .selh { position: absolute; width: 22px; height: 22px; border-radius: 50% 50% 50% 4px; background: #8b5cf6; border: 2.5px solid #fff; z-index: 7; box-shadow: 0 2px 8px rgba(0,0,0,.45); transform: rotate(-45deg); }
