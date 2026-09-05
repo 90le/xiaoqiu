@@ -203,27 +203,32 @@ public class WakeService extends Service {
             File chunkWav = new File(getCacheDir(), "wake-utt.wav");
             com.binbin.pibridge.WavUtil.writeWav(chunkWav, pcm, sr, 1, 16);
             String txt = "";
-            // 短句（<3.5s，多为唤醒词）：云端 GLM-ASR 优先——更快更准（"小丘"不再转成"小舅"）
+            String localTxt = "";
+            boolean fromCloud = false;
+            // 短句（<3.5s，多为唤醒词）：云端 GLM-ASR 优先——更快更准
             if (seg.length < sr * 35 / 10) {
                 try { txt = Tools.cloudStt(chunkWav); } catch (Exception ignore) { txt = null; }
                 if (txt == null) txt = "";
+                fromCloud = !txt.isEmpty();
                 Log.d("PiBridge", "唤醒转写(云): " + txt);
             }
-            if (txt.isEmpty()) {
+            if (!fromCloud) {
                 try {
                     JSONObject env = Tools.call("stt_transcribe", new JSONObject().put("file", chunkWav.getAbsolutePath()));
-                    if (env != null && env.optBoolean("ok")) txt = env.optString("data", "");
+                    if (env != null && env.optBoolean("ok")) { txt = env.optString("data", ""); localTxt = txt; }
                 } catch (Exception ignore) {}
             }
             txt = txt.replaceAll("<\\|[^>]*\\|>", "").replace(" ", "").trim();
             Log.d("PiBridge", "唤醒转写: " + txt);
             if (txt.isEmpty() || txt.startsWith("(")) return;
-            String norm = wakeNorm(txt);
-            boolean hit = false;
-            for (String w2 : new String[]{"小丘", "小丘丘", "你好小丘", "嘿小丘", "嗨小丘", "丘丘"}) {
-                if (norm.contains(w2)) { hit = true; break; }
-            }
+            boolean hit = wakeHit(txt);
+            if (!hit && !localTxt.isEmpty()) hit = wakeHit(localTxt); // 云端没中→本地转写再判（口音关键兜底）
             if (!hit) return;
+            Log.d("PiBridge", "唤醒命中源: " + (fromCloud ? "云" : "本"));
+            if (Tools.ttsSpeaking || System.currentTimeMillis() - lastSpokenAt < 1800 || isEcho(txt)) {
+                Log.i("PiBridge", "🛡 回声/保护窗拦截: " + txt); // 自己说话的回声不唤醒（根治自循环）
+                return;
+            }
             Log.i("PiBridge", "🔔 唤醒命中: " + txt);
             sendBroadcast(new android.content.Intent("com.pihost.WAKE_ANIM"));
             if (ar != null) { ar.stop(); ar.release(); ar = null; }
@@ -244,9 +249,19 @@ public class WakeService extends Service {
     }
 
 
+    private static boolean wakeHit(String raw) {
+        String norm = wakeNorm(raw == null ? "" : raw);
+        for (String w2 : new String[]{"小丘", "小丘丘", "你好小丘", "嘿小丘", "嗨小丘", "丘丘"}) {
+            if (norm.contains(w2)) return true;
+        }
+        return false;
+    }
+
     /** 唤醒词同音归一化：只影响命中匹配与剥离，不改指令内容（实测误转样本：小舅） */
     private static String wakeNorm(String s) {
-        return s.replace("秋", "丘").replace("邱", "丘").replace("舅", "丘").replace("九", "丘").replace("球", "丘");
+        for (String h : new String[]{"秋", "邱", "舅", "九", "球", "求", "桥", "乔", "巧", "酒", "瞧", "邱", "囚", "丘"})
+            s = s.replace(h, "丘");
+        return s;
     }
 
     private static final String[] WAKE_REPLIES = {"在！", "我在！", "诶！", "嗯！"};
@@ -258,13 +273,27 @@ public class WakeService extends Service {
     private volatile boolean sessionStop = false;
     private volatile String[] pendingSpeak = null; // {text, token}
 
+    // ── 回声免疫（自唤醒根治）：本进程播过什么，麦克风听到相同内容=回声不算唤醒 ──
+    private volatile String lastSpokenText = "";
+    private volatile long lastSpokenAt = 0;
+    private static final String BS = new String(new char[]{92}); // 反斜杠常量（免转义地狱）
+    private void markSpoken(String t) { lastSpokenText = t == null ? "" : t; lastSpokenAt = System.currentTimeMillis(); }
+    /** 转写文本是否像自己刚说的话（含"小丘"的自播文本回声） */
+    private boolean isEcho(String txt) {
+        if (lastSpokenText.isEmpty()) return false;
+        if (System.currentTimeMillis() - lastSpokenAt > 25000) { lastSpokenText = ""; return false; } // 25s 记忆窗
+        String a = txt.replaceAll("[，。！？,.!?、" + BS + "s]+", "");
+        String b = lastSpokenText.replaceAll("[，。！？,.!?、" + BS + "s]+", "");
+        return a.equals(b) || (a.length() >= 4 && (b.contains(a) || a.contains(b)));
+    }
+
     /** 统一语音会话循环：录音(VAD)→交脑(VOICE_TURN)→等引擎(VOICE_DONE/VOICE_SPEAK)→续听。
      *  意图分流/prompt优化/结论播报全部在页面引擎；本进程只做 耳+嘴+打断。 */
     private void sessionLoop(String from, String carryIn) {
         sessionActive = true;
         sendBroadcast(new android.content.Intent("com.pihost.WAKE_GLOW_ON"));
         try {
-            Tools.speakFast(WAKE_REPLIES[new java.util.Random().nextInt(WAKE_REPLIES.length)]);
+            speakMarked(WAKE_REPLIES[new java.util.Random().nextInt(WAKE_REPLIES.length)]);
             waitLocalSpeak(1600);
             String carry = carryIn == null ? "" : carryIn;
             int noiseRounds = 0;
@@ -273,18 +302,18 @@ public class WakeService extends Service {
                 if (heard.isEmpty()) {
                     File wav = WavUtil.recordAutoStop(this, 12, 6000); // 6秒无人声→收尾
                     if (wav == null) {
-                        Tools.speakFast(BYE_TIMEOUT[new java.util.Random().nextInt(BYE_TIMEOUT.length)]);
+                        speakMarked(BYE_TIMEOUT[new java.util.Random().nextInt(BYE_TIMEOUT.length)]);
                         break;
                     }
                     heard = transcribe(wav);
                     if (heard == null || heard.isEmpty()) {
-                        if (++noiseRounds >= 3) { Tools.speakFast("没听清，需要我做什么直接说"); noiseRounds = 0; }
+                        if (++noiseRounds >= 3) { speakMarked("没听清，需要我做什么直接说"); noiseRounds = 0; }
                         continue;
                     }
                 }
                 noiseRounds = 0;
                 if (heard.matches(".*(结束对话|结束|说完了|退下|没事了|不用了|再见).*")) {
-                    Tools.speakFast(BYE_BYE[new java.util.Random().nextInt(BYE_BYE.length)]);
+                    speakMarked(BYE_BYE[new java.util.Random().nextInt(BYE_BYE.length)]);
                     break;
                 }
                 Log.i("PiBridge", "🔔 交脑: " + heard);
@@ -301,7 +330,7 @@ public class WakeService extends Service {
                 }
                 if (sessionStop || !running) break;
                 if (!turnDone) {
-                    Tools.speakFast("这单有点久，到小丘里看进度吧");
+                    speakMarked("这单有点久，进应用里看进度吧");
                     break;
                 }
             }
@@ -317,6 +346,7 @@ public class WakeService extends Service {
     /** 引理发来的播报：快缓存秒播/本地TTS顶上，完成后回执 TTS_STATE(off)+token → 引擎解锁。
      *  播报期间并发监听 RMS=打断（停播即解锁，本轮引擎流程自然收尾）。 */
     private void speakTurn(String text, String token) {
+        markSpoken(text); // 回声免疫登记
         try {
             File f = fastFileOf(text);
             if (f != null && f.isFile()) { playFastFile(f, token); return; }
@@ -331,24 +361,31 @@ public class WakeService extends Service {
     private void playFastFile(File f, String token) {
         try {
             android.media.MediaPlayer mp = android.media.MediaPlayer.create(this, android.net.Uri.fromFile(f));
-            if (mp == null) { Tools.speakLocal(""); sendBroadcast(new android.content.Intent("com.pihost.TTS_STATE").putExtra("on", false).putExtra("token", token)); return; }
+            if (mp == null) { sendBroadcast(new android.content.Intent("com.pihost.TTS_STATE").putExtra("on", false).putExtra("token", token)); return; }
             final String tk = token;
-            mp.setOnCompletionListener(m -> { m.release(); sendBroadcast(new android.content.Intent("com.pihost.TTS_STATE").putExtra("on", false).putExtra("token", tk)); });
+            Tools.ttsSpeaking = true; // 播放期间占位：主监听让位（防回声）——上一版漏置=自唤醒根因之一
+            mp.setOnCompletionListener(m -> { m.release(); Tools.ttsSpeaking = false; sendBroadcast(new android.content.Intent("com.pihost.TTS_STATE").putExtra("on", false).putExtra("token", tk)); });
             mp.start();
             long t0 = System.currentTimeMillis();
-            while (mp.isPlaying() && System.currentTimeMillis() - t0 < 60000) Thread.sleep(80); // 等播完（打断检测略：本地短句）
+            while (mp.isPlaying() && System.currentTimeMillis() - t0 < 60000) Thread.sleep(80);
         } catch (Exception e) {
+            Tools.ttsSpeaking = false;
             sendBroadcast(new android.content.Intent("com.pihost.TTS_STATE").putExtra("on", false).putExtra("token", token));
         }
     }
-    /** 等本地 TTS（speakLocal）播完的上限 */
+    /** 等本地 TTS 播完：先等"开始播"（首绑引擎可慢至秒级——直接等false会瞬间放行=无声跳过），再等播完 */
     private void waitLocalSpeak(long maxMs) {
         long t0 = System.currentTimeMillis();
+        while (!Tools.ttsSpeaking && System.currentTimeMillis() - t0 < 2500) { // 起播窗 2.5s
+            try { Thread.sleep(60); } catch (Exception ignore) {}
+        }
         while (Tools.ttsSpeaking && System.currentTimeMillis() - t0 < maxMs) {
             try { Thread.sleep(80); } catch (Exception ignore) {}
         }
     }
 
+    /** 固定语播报+回声登记 */
+    private void speakMarked(String t) { markSpoken(t); Tools.speakFast(t); }
     /** 转写（本地/云端自动） */
     private String transcribe(File wav) {
         try {

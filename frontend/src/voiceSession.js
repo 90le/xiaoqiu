@@ -30,12 +30,14 @@ function speak(text) {
   const t = String(text || '').slice(0, 400)
   if (!t) return Promise.resolve()
   const token = 'tk' + (++speakToken)
+  console.log('[VS] speak[' + token + ']: ' + t.slice(0, 20))
   return new Promise((resolve) => {
     speakResolver = { token, resolve }
     bus({ action: 'speak', text: t, token })
   })
 }
 export function vsTtsDone(token) {
+  console.log('[VS] ttsDone: ' + token)
   if (speakResolver && speakResolver.token === token) { const r = speakResolver; speakResolver = null; r.resolve() }
 }
 
@@ -60,6 +62,7 @@ export function vsEnd() {
 
 /* ── 一轮 ── */
 export async function vsTurn(text, from) {
+  console.log('[VS] turn: ' + text)
   vs.lastHeard = text; vs.turnN++
   vs.state = 'thinking'; glow('think')
   let data = null
@@ -69,6 +72,7 @@ export async function vsTurn(text, from) {
     const d = (await r.json())?.structuredContent
     if (d?.ok) data = d.data
   } catch {}
+  console.log('[VS] 意图: ' + (data ? data.type : 'null'))
   if (data && data.type === 'chat') { await reply(data.answer); return }
   await exec(data, (data && data.prompt) ? data.prompt : text)
 }
@@ -83,14 +87,17 @@ async function exec(data, prompt) {
   await speak((data && data.reply) || '好嘞，这就办') // 快脑动态确认（"我来查天气"）
   glow('exec')
   const ok = api.prompt(prompt) // 优化后指令 → 当前活动会话
+  console.log('[VS] prompt(' + ok + '): ' + prompt.slice(0, 30))
   if (!ok) { await speak('连接断了，打开小丘再试一次'); done(); return }
   await streamEnd()
+  console.log('[VS] 流结束')
   vs.state = 'conclusion'; glow('speak')
   const text = lastAssistantText()
   if (text) await speak(await humanize(text, 'reply')) // 结论式：不是朗诵
   done()
 }
 function done() {
+  console.log('[VS] done → 续听')
   vs.state = 'listening'; glow('listen')
   bus({ action: 'done' }) // :kws 续听
 }

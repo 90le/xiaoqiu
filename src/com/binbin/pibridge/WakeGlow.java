@@ -72,7 +72,15 @@ public class WakeGlow {
         return 0.004f;                            // 听：巡游
     }
 
-    /** 边缘流光视图：3 束光点沿四边跑 + 底色微光 */
+    private static String label(String m) {
+        if ("think".equals(m)) return "🤔 想想…";
+        if ("exec".equals(m)) return "⚙️ 执行中…";
+        if ("speak".equals(m)) return "💬 回答中";
+        if ("listen".equals(m)) return "🎤 请说";
+        return "";
+    }
+
+    /** 边缘流光视图：3 束光点沿四边跑 + 底色微光 + 顶部状态药丸 */
     static class GlowView extends View {
         private float phase = 0f; // 0..1 跑马灯相位
         private final Choreographer choreo = Choreographer.getInstance();
@@ -96,6 +104,24 @@ public class WakeGlow {
             float in = Math.min(1f, el / 450f); // 淡入
 
             int hc = cHead(mode);
+            // 顶部状态药丸（进行中/进度可视）
+            String lb = label(mode);
+            if (!lb.isEmpty()) {
+                Paint tp = new Paint(Paint.ANTI_ALIAS_FLAG);
+                tp.setColor(0xE6171A21);
+                float ts = 15f;
+                tp.setTextSize(ts);
+                tp.setFakeBoldText(true);
+                float tw = tp.measureText(lb) + 44f;
+                float cx = w / 2f, cy = 86f;
+                android.graphics.RectF pill = new android.graphics.RectF(cx - tw / 2, cy - 17, cx + tw / 2, cy + 17);
+                tp.setShadowLayer(10, 0, 0, 0x66000000);
+                cv.drawRoundRect(pill, 17, 17, tp);
+                tp.clearShadowLayer();
+                tp.setARGB((int) (255 * in), (hc >> 16) & 255, (hc >> 8) & 255, hc & 255);
+                cv.drawText(lb, cx - tp.measureText(lb) / 2, cy + 5.5f, tp);
+            }
+
             // 底层：整圈微光描边
             Paint rim = new Paint(Paint.ANTI_ALIAS_FLAG);
             rim.setStyle(Paint.Style.STROKE);
