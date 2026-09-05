@@ -160,12 +160,13 @@ const openedAtts = ref(new Set())
 const renderMsgs = computed(() => {
   const out = []
   for (const m of msgs.value) {
+    if (m.role === 'user') { out.push({ ...m, attImgs: [], attFiles: [] }); continue } // 副本：aside 挂副本，绝不污染源数据
     if (m.role === 'custom' && m.customType === 'file') {
       const prev = out.length ? out[out.length - 1] : null
       if (prev && prev.role === 'user') {
         const u = imgOf(m)
-        if (u) (prev.attImgs || (prev.attImgs = [])).push(u)
-        else (prev.attFiles || (prev.attFiles = [])).push(m)
+        if (u) prev.attImgs.push(u)
+        else prev.attFiles.push(m)
       } else {
         out.push({ id: m.id + '-orph', role: 'orphanAtts', atts: [m] })
       }
@@ -262,14 +263,19 @@ function dlgSelect(i) {
 function startEdit(m) {
   editId.value = m.id
   input.value = (m.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n')
-  // 携带原附件（仅视觉模型带图；非视觉自动剥离，防发送被静默拦截）
+  // 附件回填（webui 编辑同款）：图片按 dataUrl 恢复、文件按路径引用重发——可删可增
   const vision = !!chat.state?.model?.vision
-  const imgs = (m.content || []).filter(b => b.type === 'image' && b.dataUrl)
+  const imgs = m.attImgs || []
+  const files = m.attFiles || []
+  const fileAtts = files.map(f => ({ name: f.details?.name || String(f.details?.path || '附件').split('/').pop(), path: f.details?.path }))
   if (imgs.length && !vision) {
-    attachments.value = []
-    setTimeout(() => warn('原消息含 ' + imgs.length + ' 张图，当前模型不支持图片，编辑将只保留文字'), 350)
+    attachments.value = fileAtts
+    setTimeout(() => warn('原消息含 ' + imgs.length + ' 张图，当前模型不支持图片，已剥离（可换 👁 模型重编辑）'), 350)
   } else {
-    attachments.value = imgs.map((b, i) => ({ name: '原图' + (i + 1), dataUrl: b.dataUrl, mime: b.mimeType || 'image/png', base64: String(b.dataUrl).split(',')[1] }))
+    attachments.value = [
+      ...imgs.map((u, i) => ({ name: '原图' + (i + 1), dataUrl: u, mime: (u.slice(5, u.indexOf(';')) || 'image/png'), base64: String(u).split(',')[1] })),
+      ...fileAtts,
+    ]
   }
   autoGrow()
   setTimeout(() => { if (taEl.value) { taEl.value.focus(); taEl.value.setSelectionRange(input.value.length, input.value.length) } }, 150)
@@ -871,9 +877,9 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
 .updk.kill { background: #443030; }
 
 /* 气泡内附件（ChatGPT/LobeChat 模式：直显不折叠） */
-.agrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; margin-bottom: 8px; }
-.agrid.one { grid-template-columns: minmax(0, 68vw); }
-.agrid.one .athumb { aspect-ratio: auto; max-height: 42vh; }
+.agrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 5px; margin-bottom: 7px; }
+.agrid.one { grid-template-columns: minmax(0, 40vw); }
+.agrid.one .athumb { aspect-ratio: auto; max-height: 160px; object-fit: cover; }
 .athumb { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; background: #0e1015; }
 .achips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .achip { display: inline-flex; align-items: center; gap: 6px; background: rgba(12, 14, 20, .5); border: 1px solid rgba(255,255,255,.08); border-radius: 10px; padding: 7px 11px; max-width: 100%; }
