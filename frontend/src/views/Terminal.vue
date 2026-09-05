@@ -62,6 +62,7 @@ function activate(id) {
   for (const sid of tstore.order) tstore.sessions[sid]?.el.classList.toggle('act', sid === id)
   requestAnimationFrame(() => setTimeout(() => {
     try { s.fit.fit() } catch {}
+    s.sendDims && s.sendDims() // 切换会话：立即上报真实尺寸（隐藏池创建时是占位列数）
     s.term.focus()
   }, 80))
 }
@@ -69,7 +70,7 @@ function activate(id) {
 function newTerm() {
   const s = createSession(chat.state?.cwd)
   activate(s.id)
-  setTimeout(() => { try { s.fit.fit(); s.term.focus() } catch {} }, 200)
+  setTimeout(() => { try { s.fit.fit(); s.sendDims && s.sendDims(); s.term.focus() } catch {} }, 200)
 }
 
 function raw(data) {
