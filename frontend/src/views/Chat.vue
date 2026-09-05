@@ -156,27 +156,23 @@ function cwdDeb() { if (cwdT) clearTimeout(cwdT); cwdT = setTimeout(() => newCwd
 const editId = ref('')
 // 附件卡片（customType:"file" aside）
 const openedAtts = ref(new Set())
-// 附件归属：custom aside 合并进紧随其后的用户消息（ChatGPT/LobeChat 模式：气泡内直显）
+// 附件归属：aside 紧跟在用户消息之后（nextTurn 投递）——合并回【前一条】用户消息
 const renderMsgs = computed(() => {
   const out = []
-  let pending = []
   for (const m of msgs.value) {
-    if (m.role === 'custom' && m.customType === 'file') { pending.push(m); continue }
-    if (m.role === 'user') {
-      const imgs = [], files = []
-      for (const a of pending) {
-        const u = imgOf(a)
-        if (u) imgs.push(u)
-        else files.push(a)
+    if (m.role === 'custom' && m.customType === 'file') {
+      const prev = out.length ? out[out.length - 1] : null
+      if (prev && prev.role === 'user') {
+        const u = imgOf(m)
+        if (u) (prev.attImgs || (prev.attImgs = [])).push(u)
+        else (prev.attFiles || (prev.attFiles = [])).push(m)
+      } else {
+        out.push({ id: m.id + '-orph', role: 'orphanAtts', atts: [m] })
       }
-      out.push({ ...m, attImgs: imgs, attFiles: files })
-      pending = []
       continue
     }
-    if (pending.length) { out.push({ id: m.id + '-orphan-atts', role: 'orphanAtts', atts: pending }); pending = [] }
     out.push(m)
   }
-  if (pending.length) out.push({ id: 'tail-atts', role: 'orphanAtts', atts: pending })
   return out
 })
 function toggleAtt(m) {
@@ -205,9 +201,20 @@ function stripFileWrapper(m) {
     .replace(/^\n?<file path="[^"]*">\n?```\n?/, '').replace(/\n?```\n?<\/file>\n?$/, '')
     .replace(/^<file path="[^"]*" size="\d+"\s*\/>$/gm, '')
 }
-// 图片全屏预览
+// 图片全屏灯箱
 const imgViewer = ref('')
 function viewImg(u) { imgViewer.value = u }
+// 文件灯箱：内容预览（内联文本剥 <file> 包装；仅引用给元信息）
+const fileViewer = ref(null)
+function viewFile(f) { fileViewer.value = f }
+function fileBody(f) {
+  return (f.content || []).filter(b => b.type === 'text').map(b => b.text).join('\n')
+    .replace(/^\n?<file path="[^"]*">\n?```\n?/, '').replace(/\n?```\n?<\/file>\n?$/, '')
+}
+function isTextAtt(f) {
+  const d = f.details || {}
+  return d.mode === 'inline' || d.mode === 'lines' || d.mode === 'bridged'
+}
 // pi 引擎询问面板（extension ui.select/confirm/input → dialog 推送）
 const dlg = reactive({ id: 0, kind: '', title: '', args: [], input: '', sel: 0, show: false })
 // ⋯ 更多菜单：更新检查（webui check_updates_all）+ 后台任务（bg_servers）
@@ -484,10 +491,31 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
       <button class="tb tap" title="更多" @click="menu = menu === 'more' ? '' : 'more'">⋯</button>
     </header>
 
-    <!-- 图片全屏预览 -->
+    <!-- 图片全屏灯箱 -->
     <div v-if="imgViewer" class="imgviewer tap" @touchstart.prevent="imgViewer = ''">
       <img :src="imgViewer" class="ivfull" />
       <span class="ivtip">点按任意处关闭</span>
+    </div>
+
+    <!-- 文件灯箱：内容预览 -->
+    <div v-if="fileViewer" class="fvwrap tap" @touchstart.prevent="fileViewer = null">
+      <div class="fvcard tap" @touchstart.stop>
+        <div class="fvhead">
+          <span class="fvico">{{ fileViewer.details?.type === 'folder' ? '📁' : '📄' }}</span>
+          <div class="fvmeta">
+            <b>{{ fileViewer.details?.name || '附件' }}</b>
+            <span>{{ fileViewer.details?.path }}<template v-if="fileViewer.details?.size"> · {{ fmtSize(fileViewer.details.size) }}</template><template v-if="fileViewer.details?.lines"> · {{ fileViewer.details.lines }} 行</template></span>
+          </div>
+          <button class="fvx tap" @touchstart.prevent="fileViewer = null">✕</button>
+        </div>
+        <div class="fvbody">
+          <pre v-if="isTextAtt(fileViewer)" class="fvpre">{{ fileBody(fileViewer) }}</pre>
+          <div v-else class="fvref">
+            <p>📎 路径引用（未内联，模型按需读取）</p>
+            <p class="fvpath">{{ fileViewer.details?.path }}</p>
+          </div>
+        </div>
+      </div>
     </div>
 
     <!-- 📎 附件动作面板 -->
@@ -604,11 +632,13 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
         <!-- 用户 -->
         <div v-else-if="m.role === 'user'" class="mrow urow">
           <div class="ub">
-            <div v-if="m.attImgs?.length" class="agrid">
-              <img v-for="(u, ii) in m.attImgs" :key="'ag' + ii" :src="u" class="athumb tap" @click="viewImg(u)" />
+            <div v-if="m.attImgs?.length" class="agrid" :class="{ one: m.attImgs.length === 1 }">
+              <img v-for="(u, ii) in m.attImgs" :key="'ag' + ii" :src="u" class="athumb tap"
+                @touchstart.prevent="viewImg(u)" @click="viewImg(u)" />
             </div>
             <div v-if="m.attFiles?.length" class="achips">
-              <div v-for="(f, fi) in m.attFiles" :key="'af' + fi" class="achip">
+              <div v-for="(f, fi) in m.attFiles" :key="'af' + fi" class="achip tap"
+                @touchstart.prevent="viewFile(f)" @click="viewFile(f)">
                 <span class="acico">{{ f.details?.type === 'folder' ? '📁' : (f.details?.mode === 'bridged' ? '🔤' : '📄') }}</span>
                 <span class="acname">{{ f.details?.name || f.details?.path || '附件' }}</span>
                 <span class="acsize">{{ fmtSize(f.details?.size) }}</span>
@@ -842,6 +872,8 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
 
 /* 气泡内附件（ChatGPT/LobeChat 模式：直显不折叠） */
 .agrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(96px, 1fr)); gap: 6px; margin-bottom: 8px; }
+.agrid.one { grid-template-columns: minmax(0, 68vw); }
+.agrid.one .athumb { aspect-ratio: auto; max-height: 42vh; }
 .athumb { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; background: #0e1015; }
 .achips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .achip { display: inline-flex; align-items: center; gap: 6px; background: rgba(12, 14, 20, .5); border: 1px solid rgba(255,255,255,.08); border-radius: 10px; padding: 7px 11px; max-width: 100%; }
@@ -849,6 +881,19 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
 .acname { font-size: 12px; color: #eef1f6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; max-width: 40vw; }
 .acsize { font-size: 10px; color: rgba(255,255,255,.45); flex-shrink: 0; }
 .ub.slim { padding: 8px 10px; display: flex; flex-direction: column; gap: 6px; }
+/* 文件灯箱 */
+.fvwrap { position: fixed; inset: 0; z-index: 99; background: rgba(5, 6, 10, .82); display: flex; align-items: center; justify-content: center; padding: 20px; }
+.fvcard { width: 100%; max-width: 420px; max-height: 82vh; background: #1c2027; border: 1px solid #323848; border-radius: 16px; display: flex; flex-direction: column; overflow: hidden; }
+.fvhead { display: flex; align-items: center; gap: 10px; padding: 14px; border-bottom: 1px solid #2a2f3c; }
+.fvico { font-size: 24px; }
+.fvmeta { flex: 1; min-width: 0; display: flex; flex-direction: column; gap: 2px; }
+.fvmeta b { font-size: 14px; color: #eef1f6; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fvmeta span { font-size: 11px; color: #8a93a3; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.fvx { background: none; border: 0; color: #8a93a3; font-size: 17px; padding: 4px 8px; }
+.fvbody { overflow-y: auto; flex: 1; }
+.fvpre { margin: 0; padding: 14px; font-size: 12px; line-height: 1.6; color: #c3ccd9; white-space: pre-wrap; word-break: break-all; font-family: ui-monospace, monospace; }
+.fvref { padding: 26px 18px; text-align: center; color: #8a93a3; font-size: 13px; }
+.fvpath { margin-top: 8px; color: #8ab4f8; font-size: 12px; word-break: break-all; }
 .imgviewer { position: fixed; inset: 0; z-index: 99; background: rgba(5, 6, 10, .96); display: flex; flex-direction: column; align-items: center; justify-content: center; }
 .ivfull { max-width: 96vw; max-height: 88vh; object-fit: contain; }
 .ivtip { color: #8a93a3; font-size: 12px; margin-top: 14px; }
