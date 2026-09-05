@@ -17,6 +17,8 @@ function tabPress(s, e) {
 }
 function tabRelease() { if (pressTimer) clearTimeout(pressTimer); pressTimer = null }
 const keysMode = ref('bar')     // bar（收缩：核心键） | full（展开：+扩展行）——常驻底部无悬浮球
+const dpadOff = ref(localStorage.getItem('xq_dpad_off') === '1')  // 悬浮方向键
+function saveDpad(off) { try { localStorage.setItem('xq_dpad_off', off ? '1' : '0') } catch {} }
 const ctrlOn = ref(false), altOn = ref(false)
 const renaming = ref(''), renameId = ref('')
 const confirmKill = ref('')
@@ -140,7 +142,7 @@ onUnmounted(() => {
         <button class="vk tap" @touchstart.prevent="raw(' ')">SPC</button>
         <button v-for="s2 in syms" :key="s2" class="vk sym tap" @touchstart.prevent="press(s2)">{{ s2 }}</button>
       </div>
-      <!-- 主行：核心键滚动条 + 倒T方向键簇 + 回车/展开 -->
+      <!-- 主行：纯滚动全宽（⏎▾入列，不再有右侧固定簇） -->
       <div class="kwrap">
         <div class="kscroll">
           <button class="vk kb tap" @touchstart.prevent="showKb">⌨</button>
@@ -151,18 +153,22 @@ onUnmounted(() => {
           <button class="vk tap" @touchstart.prevent="raw('\t')">TAB</button>
           <button class="vk cc tap" @touchstart.prevent="raw('\x03')">^C</button>
           <button class="vk cc tap" @touchstart.prevent="raw('\x0c')">^L</button>
+          <button class="vk enter tap" @touchstart.prevent="raw('\r')">⏎</button>
+          <button class="vk tog tap" :class="{ on: keysMode === 'full' }" @touchstart.prevent="keysMode = keysMode === 'full' ? 'bar' : 'full'">{{ keysMode === 'full' ? '▴' : '▾' }}</button>
         </div>
-        <div class="kt">
-          <button class="vk tap" @touchstart.prevent="raw('\x1b[A')">↑</button>
-          <div class="ktb">
-            <button class="vk tap" @touchstart.prevent="raw('\x1b[D')">←</button>
-            <button class="vk tap" @touchstart.prevent="raw('\x1b[B')">↓</button>
-            <button class="vk tap" @touchstart.prevent="raw('\x1b[C')">→</button>
-          </div>
-        </div>
-        <button class="vk enter tap" @touchstart.prevent="raw('\r')">⏎</button>
-        <button class="vk tog tap" :class="{ on: keysMode === 'full' }" @touchstart.prevent="keysMode = keysMode === 'full' ? 'bar' : 'full'">{{ keysMode === 'full' ? '▴' : '▾' }}</button>
       </div>
+    </div>
+
+    <!-- 悬浮方向键 D-pad（终端区右缘，可收起） -->
+    <button v-if="dpadOff" class="dpad-fab tap" title="方向键" @touchstart.prevent="dpadOff = false; saveDpad(false)">✥</button>
+    <div v-else class="dpad">
+      <button class="dp tap" @touchstart.prevent="raw('\x1b[A')">↑</button>
+      <div class="dpb">
+        <button class="dp tap" @touchstart.prevent="raw('\x1b[D')">←</button>
+        <button class="dp tap" @touchstart.prevent="raw('\x1b[B')">↓</button>
+        <button class="dp tap" @touchstart.prevent="raw('\x1b[C')">→</button>
+      </div>
+      <button class="dp-x tap" @touchstart.prevent="dpadOff = true; saveDpad(true)">⌄</button>
     </div>
 
     <!-- 长按标签：行内管理菜单 -->
@@ -201,16 +207,21 @@ onUnmounted(() => {
 .stage :deep(.xterm-viewport) { background: #0d0e12 !important; }
 /* 虚拟按键 v2：单行横滚条（Termius 模式） */
 .vkeys { background: #14161c; border-top: 1px solid #23262e; padding: 5px 6px calc(5px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 5px; }
-/* 主行：滚动条 + 倒T簇 + 回车/展开（回车展开跨两行高） */
-.kwrap { display: flex; align-items: stretch; gap: 5px; }
+/* 主行：纯滚动全宽 */
+.kwrap { display: flex; }
 .kscroll { display: flex; gap: 5px; overflow-x: auto; scrollbar-width: none; flex: 1; min-width: 0; padding: 1px 0; align-items: center; }
 .kscroll::-webkit-scrollbar { display: none; }
-.kt { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; align-items: center; }
-.kt > .vk { min-width: 40px; width: 40px; height: 32px; }
-.ktb { display: flex; gap: 4px; }
-.vk.enter { align-self: center; height: auto; }
-.vk.tog { align-self: center; height: auto; color: #a78bfa; }
+.vk.tog { color: #a78bfa; }
 .vk.tog.on { background: #2b2440; }
+/* 悬浮 D-pad（终端区右缘竖排锚定） */
+.dpad { position: absolute; right: 10px; bottom: 14px; z-index: 15; display: flex; flex-direction: column; align-items: center; gap: 5px;
+  background: rgba(20, 22, 28, .82); backdrop-filter: blur(8px); border: 1px solid #323848; border-radius: 14px; padding: 6px; }
+.dpad .dp { width: 44px; height: 40px; background: #1a1d26; color: #c6c9d0; border: 1px solid #2c303b; border-radius: 9px; font-size: 16px; }
+.dpad .dp:active { background: #2b2440; }
+.dpad .dpb { display: flex; gap: 5px; }
+.dpad .dp-x { position: absolute; top: -8px; right: -8px; width: 22px; height: 22px; border-radius: 50%; background: #2c303b; color: #8a93a3; border: 1px solid #3a4150; font-size: 11px; display: flex; align-items: center; justify-content: center; }
+.dpad-fab { position: absolute; right: 10px; bottom: 14px; z-index: 15; width: 42px; height: 42px; border-radius: 50%;
+  background: rgba(139, 92, 246, .85); color: #fff; border: 0; font-size: 17px; box-shadow: 0 4px 14px rgba(0,0,0,.45); }
 /* 扩展行：输入法式滑入 */
 .kextra { display: flex; gap: 5px; overflow-x: auto; scrollbar-width: none; padding: 2px 0; animation: kslide .16s ease; }
 .kextra::-webkit-scrollbar { display: none; }
