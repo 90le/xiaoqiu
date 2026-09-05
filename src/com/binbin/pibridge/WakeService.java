@@ -325,8 +325,8 @@ public class WakeService extends Service {
         waitLocalSpeak(60000);
         sendBroadcast(new android.content.Intent("com.pihost.TTS_STATE").putExtra("on", false).putExtra("token", token));
     }
-    private static File fastFileOf(String p) {
-        try { return new File(getFilesDir(), "wake-sounds/" + (p.hashCode() & 0x7fffffff) + ".wav"); } catch (Exception e) { return null; }
+    private File fastFileOf(String p) {
+        try { java.io.File d = getFilesDir(); return d == null ? null : new File(d, "wake-sounds/" + (p.hashCode() & 0x7fffffff) + ".wav"); } catch (Exception e) { return null; }
     }
     private void playFastFile(File f, String token) {
         try {
