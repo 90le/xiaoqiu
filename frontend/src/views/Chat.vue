@@ -130,7 +130,15 @@ function injectCopyBtns() {
 }
 function fmtTs(t) { return t ? new Date(t).toLocaleTimeString('zh', { hour: '2-digit', minute: '2-digit' }) : '' }
 function scroll() { nextTick(() => { if (listEl.value) listEl.value.scrollTop = listEl.value.scrollHeight }) }
-watch(() => [msgs.value.length, st.value?.streamingMessage?.content?.length], () => { scroll(); injectCopyBtns() })
+// 滚到底悬浮钮：离底 >200px 出现（流式时智能跟随）
+const atBottom = ref(true)
+function onListScroll() {
+  const el = listEl.value
+  if (!el) return
+  atBottom.value = el.scrollHeight - el.scrollTop - el.clientHeight < 200
+}
+watch(() => [msgs.value.length, st.value?.streamingMessage?.content?.length], () => { if (atBottom.value) scroll() })
+watch(() => [msgs.value.length, st.value?.streamingMessage?.content?.length], () => { injectCopyBtns() })
 let copyTimer = null
 watch(() => st.value?.streamingMessage?.content?.map(b => b.text || b.thinking || '').join('').length, () => {
   if (copyTimer) clearTimeout(copyTimer)
@@ -618,7 +626,7 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
     </div>
 
     <!-- 消息流 -->
-    <div class="flow" ref="listEl">
+    <div class="flow" ref="listEl" @scroll.passive="onListScroll">
       <div v-if="!msgs.length && !streaming" class="empty">
         <div class="logo">🏔</div>
         <div class="et">和小丘说话，或打字</div>
@@ -665,7 +673,7 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
               <!-- 思考：折叠块 -->
               <div v-if="b.type === 'thinking'" class="think" :class="{ open: thinkOpen(m, bi) }">
                 <button class="th-toggle tap" @click="toggleThink(m, bi)">
-                  <span class="chev">{{ thinkOpen(m, bi) ? '▾' : '▸' }}</span> 💭 {{ thinkOpen(m, bi) ? '思考过程' : thinkPreview(b.thinking) || '思考过程' }}
+                  <span class="chev">{{ thinkOpen(m, bi) ? '▾' : '▸' }}</span> 💭 {{ thinkOpen(m, bi) ? '思考过程' : thinkPreview(b.thinking) || '思考过程' }}<span v-if="b.durationMs" class="th-dur">· {{ (b.durationMs / 1000).toFixed(1) }}s</span>
                 </button>
                 <div v-if="thinkOpen(m, bi)" class="th-body">{{ b.thinking }}</div>
               </div>
@@ -693,6 +701,10 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
         </div>
       </template>
 
+      <!-- 滚到底悬浮钮 -->
+      <transition name="tst">
+        <button v-if="!atBottom" class="jumpbtn tap" @touchstart.prevent="scroll(); atBottom = true">↓</button>
+      </transition>
       <!-- 排队/插队气泡 -->
       <div v-if="st?.queue">
         <div v-for="(q, i) in (st.queue.steering || [])" :key="'s' + i" class="mrow urow">
@@ -875,6 +887,11 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
 .updk.kill { background: #443030; }
 
 /* 气泡内附件（ChatGPT/LobeChat 模式：直显不折叠） */
+.th-dur { font-size: 10px; color: #6b7482; margin-left: 4px; }
+/* 滚到底悬浮钮 */
+.jumpbtn { position: absolute; right: 14px; bottom: 130px; z-index: 30; width: 40px; height: 40px; border-radius: 50%;
+  background: #242a34; border: 1px solid #3a4150; color: #dfe4ec; font-size: 18px; box-shadow: 0 4px 14px rgba(0,0,0,.4); }
+
 /* 附件横滚行（微信/ChatGPT 模式）：小方图+小胶囊统一流，多了横滑 */
 .arow { display: flex; align-items: center; gap: 4px; overflow-x: auto; margin-bottom: 6px; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
 .arow::-webkit-scrollbar { display: none; }
@@ -1002,7 +1019,7 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
 .tag { font-size: 10px; color: #a78bfa; }
 
 /* 消息流 */
-.flow { flex: 1; overflow-y: auto; padding: 14px 12px 8px; }
+.flow { flex: 1; overflow-y: auto; padding: 14px 12px 8px; position: relative; }
 .empty { text-align: center; padding: 60px 20px; }
 .logo { font-size: 44px; margin-bottom: 10px; }
 .et { font-size: 16px; font-weight: 700; margin-bottom: 4px; }
