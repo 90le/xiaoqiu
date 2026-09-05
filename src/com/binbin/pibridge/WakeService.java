@@ -64,6 +64,19 @@ public class WakeService extends Service {
     @Override public IBinder onBind(Intent i) { return null; }
 
     @Override public void onCreate() {
+        // 前台服务：息屏不被 MIUI 冻结/回收（常驻通知=唤醒待命中的存在感）
+        try {
+            android.app.NotificationManager nm = (android.app.NotificationManager) getSystemService(NOTIFICATION_SERVICE);
+            android.app.NotificationChannel ch = new android.app.NotificationChannel("wake", "语音唤醒", android.app.NotificationManager.IMPORTANCE_MIN);
+            ch.setShowBadge(false); nm.createNotificationChannel(ch);
+            android.app.Notification n = new android.app.Notification.Builder(this, "wake")
+                    .setSmallIcon(android.R.drawable.ic_btn_speak_now)
+                    .setContentTitle("小丘待命中")
+                    .setContentText("任意界面/息屏喊「小丘」唤醒我")
+                    .setOngoing(true)
+                    .build();
+            startForeground(1001, n);
+        } catch (Exception e) { Log.w("PiBridge", "fgs: " + e); }
         super.onCreate();
         Log.i("PiBridge", "WakeService onCreate");
         Tools.init(this); // :kws 独立进程必须自行初始化 Tools（ctx/引擎/配置）
@@ -213,7 +226,7 @@ public class WakeService extends Service {
             while (running) {
                 String heard = carry; carry = "";
                 if (heard.isEmpty()) {
-                    File wav = WavUtil.recordAutoStop(this, 12, 3000); // 3秒无人声→null→收尾
+                    File wav = WavUtil.recordAutoStop(this, 12, 6000); // 6秒无人声→null→收尾（用户定：5-8秒）
                     if (wav == null) {
                         Tools.speakLocal(BYE_TIMEOUT[new java.util.Random().nextInt(BYE_TIMEOUT.length)]);
                         break;
