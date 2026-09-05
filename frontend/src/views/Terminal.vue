@@ -16,7 +16,7 @@ function tabPress(s, e) {
   }, 480)
 }
 function tabRelease() { if (pressTimer) clearTimeout(pressTimer); pressTimer = null }
-const keysMode = ref('bar')     // bar（单行全键横滚） | hide（浮球）
+const keysMode = ref('bar')     // bar（收缩：核心键） | full（展开：+扩展行）——常驻底部无悬浮球
 const ctrlOn = ref(false), altOn = ref(false)
 const renaming = ref(''), renameId = ref('')
 const confirmKill = ref('')
@@ -114,12 +114,36 @@ onUnmounted(() => {
     <!-- 终端舞台：pane 由会话池借入 -->
     <div ref="stage" class="stage"></div>
 
-    <!-- 虚拟按键 v3：全键单行横滚 · 右侧仅固定 导航+回车 -->
-    <div v-if="keysMode !== 'hide'" class="vkeys">
-      <div class="kbar">
+    <!-- 虚拟按键 v4：常驻底部，输入法式展开（bar↔full），倒T方向键 -->
+    <div class="vkeys">
+      <!-- 扩展行（展开时滑入，输入法式） -->
+      <div v-if="keysMode === 'full'" class="kextra">
+        <button class="vk cc tap" @touchstart.prevent="raw('\x04')">^D</button>
+        <button class="vk cc tap" @touchstart.prevent="raw('\x15')">^U</button>
+        <button class="vk cc tap" @touchstart.prevent="raw('\x17')">^W</button>
+        <button class="vk cc tap" @touchstart.prevent="raw('\x12')">^R</button>
+        <button class="vk cc tap" @touchstart.prevent="raw('\x01')">^A</button>
+        <button class="vk cc tap" @touchstart.prevent="raw('\x05')">^E</button>
+        <button class="vk cc tap" @touchstart.prevent="raw('\x0b')">^K</button>
+        <button class="vk cc tap" @touchstart.prevent="raw('\x19')">^Y</button>
+        <button class="vk cc tap" @touchstart.prevent="raw('\x1a')">^Z</button>
+        <button class="vk tap" @touchstart.prevent="raw('\x1b[H')">HOME</button>
+        <button class="vk tap" @touchstart.prevent="raw('\x1b[F')">END</button>
+        <button class="vk tap" @touchstart.prevent="raw('\x1b[5~')">PGUP</button>
+        <button class="vk tap" @touchstart.prevent="raw('\x1b[6~')">PGDN</button>
+        <button class="vk tap" @touchstart.prevent="raw('\x1b[2~')">INS</button>
+        <button class="vk tap" @touchstart.prevent="raw('\x7f')">DEL</button>
+        <button class="vk alt tap" @touchstart.prevent="raw('\x1bb')">A·B</button>
+        <button class="vk alt tap" @touchstart.prevent="raw('\x1bf')">A·F</button>
+        <button class="vk alt tap" @touchstart.prevent="raw('\x1bd')">A·D</button>
+        <button class="vk alt tap" @touchstart.prevent="raw('\x1b.')">A·.</button>
+        <button class="vk tap" @touchstart.prevent="raw(' ')">SPC</button>
+        <button v-for="s2 in syms" :key="s2" class="vk sym tap" @touchstart.prevent="press(s2)">{{ s2 }}</button>
+      </div>
+      <!-- 主行：核心键滚动条 + 倒T方向键簇 + 回车/展开 -->
+      <div class="kwrap">
         <div class="kscroll">
           <button class="vk kb tap" @touchstart.prevent="showKb">⌨</button>
-          <button class="vk dim tap" @touchstart.prevent="keysMode = 'hide'">✕</button>
           <button class="vk mod tap" :class="{ on: ctrlOn }" @touchstart.prevent="press('CTRL')">CTRL</button>
           <button class="vk mod tap" :class="{ on: altOn }" @touchstart.prevent="press('ALT')">ALT</button>
           <button class="vk mod tap" :class="{ on: shiftOn }" @touchstart.prevent="press('SHIFT')">SHIFT</button>
@@ -127,40 +151,19 @@ onUnmounted(() => {
           <button class="vk tap" @touchstart.prevent="raw('\t')">TAB</button>
           <button class="vk cc tap" @touchstart.prevent="raw('\x03')">^C</button>
           <button class="vk cc tap" @touchstart.prevent="raw('\x0c')">^L</button>
-          <button class="vk cc tap" @touchstart.prevent="raw('\x04')">^D</button>
-          <button class="vk cc tap" @touchstart.prevent="raw('\x15')">^U</button>
-          <button class="vk cc tap" @touchstart.prevent="raw('\x17')">^W</button>
-          <button class="vk cc tap" @touchstart.prevent="raw('\x12')">^R</button>
-          <button class="vk cc tap" @touchstart.prevent="raw('\x01')">^A</button>
-          <button class="vk cc tap" @touchstart.prevent="raw('\x05')">^E</button>
-          <button class="vk cc tap" @touchstart.prevent="raw('\x0b')">^K</button>
-          <button class="vk cc tap" @touchstart.prevent="raw('\x19')">^Y</button>
-          <button class="vk cc tap" @touchstart.prevent="raw('\x1a')">^Z</button>
-          <button class="vk tap" @touchstart.prevent="raw('\x1b[H')">HOME</button>
-          <button class="vk tap" @touchstart.prevent="raw('\x1b[F')">END</button>
-          <button class="vk tap" @touchstart.prevent="raw('\x1b[5~')">PGUP</button>
-          <button class="vk tap" @touchstart.prevent="raw('\x1b[6~')">PGDN</button>
-          <button class="vk tap" @touchstart.prevent="raw('\x1b[2~')">INS</button>
-          <button class="vk tap" @touchstart.prevent="raw('\x7f')">DEL</button>
-          <button class="vk alt tap" @touchstart.prevent="raw('\x1bb')">A·B</button>
-          <button class="vk alt tap" @touchstart.prevent="raw('\x1bf')">A·F</button>
-          <button class="vk alt tap" @touchstart.prevent="raw('\x1bd')">A·D</button>
-          <button class="vk alt tap" @touchstart.prevent="raw('\x1b.')">A·.</button>
-          <button class="vk tap" @touchstart.prevent="raw(' ')">SPC</button>
-          <button v-for="s2 in syms" :key="s2" class="vk sym tap" @touchstart.prevent="press(s2)">{{ s2 }}</button>
         </div>
-        <div class="kright">
-          <button class="vk tap" @touchstart.prevent="raw('\x1b[D')">←</button>
+        <div class="kt">
           <button class="vk tap" @touchstart.prevent="raw('\x1b[A')">↑</button>
-          <button class="vk tap" @touchstart.prevent="raw('\x1b[B')">↓</button>
-          <button class="vk tap" @touchstart.prevent="raw('\x1b[C')">→</button>
-          <span class="ksep"></span>
-          <button class="vk enter tap" @touchstart.prevent="raw('\r')">⏎</button>
+          <div class="ktb">
+            <button class="vk tap" @touchstart.prevent="raw('\x1b[D')">←</button>
+            <button class="vk tap" @touchstart.prevent="raw('\x1b[B')">↓</button>
+            <button class="vk tap" @touchstart.prevent="raw('\x1b[C')">→</button>
+          </div>
         </div>
+        <button class="vk enter tap" @touchstart.prevent="raw('\r')">⏎</button>
+        <button class="vk tog tap" :class="{ on: keysMode === 'full' }" @touchstart.prevent="keysMode = keysMode === 'full' ? 'bar' : 'full'">{{ keysMode === 'full' ? '▴' : '▾' }}</button>
       </div>
     </div>
-    <!-- 隐藏态浮球 -->
-    <button v-else class="kfab tap" @click="keysMode = 'bar'">⌨</button>
 
     <!-- 长按标签：行内管理菜单 -->
     <div v-if="tabMenu" class="tmask tap" @touchstart.prevent="tabMenu = null"></div>
@@ -198,11 +201,20 @@ onUnmounted(() => {
 .stage :deep(.xterm-viewport) { background: #0d0e12 !important; }
 /* 虚拟按键 v2：单行横滚条（Termius 模式） */
 .vkeys { background: #14161c; border-top: 1px solid #23262e; padding: 5px 6px calc(5px + env(safe-area-inset-bottom)); display: flex; flex-direction: column; gap: 5px; }
-.kbar { display: flex; align-items: stretch; gap: 6px; }
-.kscroll { display: flex; gap: 5px; overflow-x: auto; scrollbar-width: none; flex: 1; min-width: 0; padding: 1px 0; }
+/* 主行：滚动条 + 倒T簇 + 回车/展开（回车展开跨两行高） */
+.kwrap { display: flex; align-items: stretch; gap: 5px; }
+.kscroll { display: flex; gap: 5px; overflow-x: auto; scrollbar-width: none; flex: 1; min-width: 0; padding: 1px 0; align-items: center; }
 .kscroll::-webkit-scrollbar { display: none; }
-.kright { display: flex; gap: 5px; flex-shrink: 0; align-items: center; }
-.ksep { width: 1px; height: 26px; background: #2c303b; margin: 0 1px; }
+.kt { display: flex; flex-direction: column; gap: 4px; flex-shrink: 0; align-items: center; }
+.kt > .vk { min-width: 40px; width: 40px; height: 32px; }
+.ktb { display: flex; gap: 4px; }
+.vk.enter { align-self: center; height: auto; }
+.vk.tog { align-self: center; height: auto; color: #a78bfa; }
+.vk.tog.on { background: #2b2440; }
+/* 扩展行：输入法式滑入 */
+.kextra { display: flex; gap: 5px; overflow-x: auto; scrollbar-width: none; padding: 2px 0; animation: kslide .16s ease; }
+.kextra::-webkit-scrollbar { display: none; }
+@keyframes kslide { from { transform: translateY(14px); opacity: 0; } }
 .vk { flex-shrink: 0; min-width: 42px; height: 40px; background: #1a1d26; color: #c6c9d0; border: 1px solid #2c303b; border-radius: 9px; font-size: 12.5px; font-weight: 600; font-family: ui-monospace, monospace; }
 .vk:active { background: #262b38; }
 .vk.mod { background: #232635; color: #a78bfa; border-color: #3d3560; }
@@ -215,8 +227,6 @@ onUnmounted(() => {
 .vk.exp { color: #a78bfa; }
 .vk.exp.on { background: #2b2440; }
 .vk.dim { color: #666b76; }
-.kfab { position: fixed; right: 14px; bottom: 18px; z-index: 20; width: 44px; height: 44px; border-radius: 50%;
-  background: #8b5cf6; color: #fff; border: 0; font-size: 18px; box-shadow: 0 6px 20px rgba(0,0,0,.5); }
 /* 扩展面板 */
 .sp { flex: 1; min-width: 8px; }
 /* 长按标签行内菜单（Chrome 惯例） */
