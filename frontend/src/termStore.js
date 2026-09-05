@@ -58,7 +58,7 @@ export function createSession(cwd) {
     onExit: (code) => { if (tstore.sessions[id]) { tstore.sessions[id].alive = false; tstore.sessions[id].exitCode = code } },
   })
   term.onData((d) => wsSend({ type: 'terminal_input', terminalId: id, data: d }))
-  tstore.sessions[id] = { id, title, el, term, fit, unreg, alive: true, lastOut: Date.now(), exitCode: null }
+  tstore.sessions[id] = { id, title, cwd: cwd || '/data/data/com.pihost/files/home', el, term, fit, unreg, alive: true, lastOut: Date.now(), exitCode: null }
   tstore.order.push(id)
   const ro = new ResizeObserver(() => {
     if (el.offsetWidth > 0 && el.classList.contains('act')) { try { fit.fit() } catch {} }
