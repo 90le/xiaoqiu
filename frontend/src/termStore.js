@@ -103,10 +103,13 @@ export function createSession(cwd, opts = {}) {
   return tstore.sessions[id]
 }
 
-/** 附着服务端已有终端（agent bash / 命令标签）：只建 pane 挂输出，不发 create */
+/** 附着服务端已有终端（agent bash / 命令标签）：只建 pane 挂输出，不发 create。
+ *  注：附着点之前的输出引擎只在重连/切换会话时回放，这里打条本地横幅防"空白"困惑 */
 export function attachSession(id, title, cwd) {
   if (tstore.sessions[id]) return tstore.sessions[id]
-  return createSession(cwd, { id, title: title || id, attach: true })
+  const s = createSession(cwd, { id, title: title || id, attach: true })
+  try { s.term.write('\x1b[90m⟳ 已附着「' + (title || id) + '」，实时显示后续输出\x1b[0m\r\n') } catch {}
+  return s
 }
 
 export function killSession(id) {

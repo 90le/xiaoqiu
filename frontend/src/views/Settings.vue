@@ -74,6 +74,13 @@ const voices = [
   { id: 'douji', name: '豆几（动物圈）' },
   { id: 'luodo', name: '罗多（动物圈）' },
 ]
+const sttLabel = computed(() => sttEngine.value === 'local' ? '本地 SenseVoice' : '云端 GLM-ASR')
+const ttsLabel = computed(() => ({ auto: '智能优先', cloud: '仅云端', xiaomi: '小米本地' })[ttsEngine.value] || ttsEngine.value)
+const voiceLabel = computed(() => {
+  const v = voices.find(x => x.id === ttsVoice.value)
+  if (v) return v.name.split('（')[0]
+  return cloneId.value === ttsVoice.value ? '🎵 复刻音色' : ttsVoice.value
+})
 async function pickStt() { await setCfg('stt_engine', sttEngine.value); flash('识别引擎：' + (sttEngine.value === 'cloud' ? '云端 GLM-ASR' : '本地 SenseVoice')) }
 async function pickEngine() { await setCfg('tts_engine', ttsEngine.value); flash('播报引擎已切换') }
 async function pickVoice() { await setCfg('tts_voice', ttsVoice.value); flash('音色已切换，点「试听」可预览') }
@@ -341,6 +348,10 @@ const idleMsg = ref('')
 const stVision = computed(() => chat.settings ? chat.settings.visionBridgeEnabled !== false : true)
 const visionOptions = computed(() => (chat.settings?.visionModels || []).map(m => ({ v: m.provider + '/' + m.id, t: m.label || m.id })))
 const vModel = ref('')
+const vModelLabel = computed(() => {
+  if (!vModel.value) return '智能选择'
+  return (visionOptions.value.find(o => o.v === vModel.value) || {}).t || vModel.value
+})
 const vMode = ref('append')
 const vDraft = ref('')
 let vSynced = false
@@ -388,6 +399,11 @@ function delPreset(p) {
   setTimeout(() => engineApi.getSettings(), 600)
 }
 const presetMsg = ref('')
+
+/* ═══ 通用底部弹层选择器（替代原生 select 下拉）═══ */
+const picker = ref(null) // { title, options:[{v,t}], cur, cb }
+function openPicker(title, options, cur, cb) { picker.value = { title, options, cur, cb } }
+function pickOption(o) { picker.value.cb(o.v); picker.value = null }
 
 /* ═══════════ 启动 ═══════════ */
 watch(() => chat.settings, () => {
@@ -601,10 +617,7 @@ async function loadCfg() {
             <div class="srow-l"><span class="srow-chip" style="background:#3E7C8A;">👂</span><span class="srow-t">识别引擎</span></div>
             <div class="srow-d">本地即时免费 · 云端更准需额度</div>
           </div>
-          <select v-model="sttEngine" class="slim" @change="pickStt">
-            <option value="local">本地</option>
-            <option value="cloud">云端</option>
-          </select>
+          <button class="pickv tap" @click="openPicker('识别引擎', [{ v: 'local', t: '本地 SenseVoice（离线免费）' }, { v: 'cloud', t: '云端 GLM-ASR（更准需额度）' }], sttEngine, v => { sttEngine = v; pickStt() })">{{ sttLabel }} ›</button>
         </div>
       </div>
 
@@ -615,21 +628,14 @@ async function loadCfg() {
             <div class="srow-l"><span class="srow-chip" style="background:#B85C3E;">🔊</span><span class="srow-t">播报引擎</span></div>
             <div class="srow-d">智能优先 = 云端可用用云端，否则小米本地</div>
           </div>
-          <select v-model="ttsEngine" class="slim" @change="pickEngine">
-            <option value="auto">智能</option>
-            <option value="cloud">云端</option>
-            <option value="xiaomi">本地</option>
-          </select>
+          <button class="pickv tap" @click="openPicker('播报引擎', [{ v: 'auto', t: '智能优先（推荐）' }, { v: 'cloud', t: '仅云端 GLM-TTS' }, { v: 'xiaomi', t: '小米本地 TTS' }], ttsEngine, v => { ttsEngine = v; pickEngine() })">{{ ttsLabel }} ›</button>
         </div>
         <div class="srow">
           <div class="srow-txt">
             <div class="srow-l"><span class="srow-chip" style="background:#7A5CA8;">🎵</span><span class="srow-t">云端音色</span></div>
             <div class="srow-d">GLM-TTS · 需智谱额度</div>
           </div>
-          <select v-model="ttsVoice" class="slim" @change="pickVoice">
-            <option v-for="v in voices" :key="v.id" :value="v.id">{{ v.name.split('（')[0] }}</option>
-            <option v-if="cloneId" :value="cloneId">🎵 复刻音色</option>
-          </select>
+          <button class="pickv tap" @click="openPicker('云端音色', [...voices.map(v => ({ v: v.id, t: v.name })), ...(cloneId ? [{ v: cloneId, t: '🎵 我的复刻音色' }] : [])], ttsVoice, v => { ttsVoice = v; pickVoice() })">{{ voiceLabel }} ›</button>
         </div>
         <div class="srow" style="flex-direction:column;align-items:stretch;gap:8px;">
           <div class="srow-l"><span class="srow-chip" style="background:#3D6BE8;">🎤</span><span class="srow-t">复刻音色 ID <em class="mini-hint">语音复刻上传录音后获得</em></span></div>
@@ -853,10 +859,7 @@ async function loadCfg() {
             <div class="srow-l"><span class="srow-chip" style="background:#E8853D;">🎯</span><span class="srow-t">视觉模型</span></div>
             <div class="srow-d">{{ vModel ? '已指定' : '智能选择（自动找识图模型）' }}</div>
           </div>
-          <select v-model="vModel" class="slim">
-            <option value="">智能选择</option>
-            <option v-for="o in visionOptions" :key="o.v" :value="o.v">{{ o.t }}</option>
-          </select>
+          <button class="pickv tap" @click="openPicker('视觉模型', [{ v: '', t: '智能选择（自动找识图模型）' }, ...visionOptions], vModel, v => vModel = v)">{{ vModelLabel }} ›</button>
         </div>
       </div>
       <div class="card">
@@ -875,6 +878,20 @@ async function loadCfg() {
       </div>
     </template>
     <div style="height:24px;"></div>
+  </div>
+
+  <!-- 通用选择器（底部弹层） -->
+  <div v-if="picker" class="skview" @click="picker = null">
+    <div class="skview-b" @click.stop style="max-height:68vh;overflow-y:auto;padding-bottom:12px;">
+      <div class="skview-h">
+        <div class="skview-tt" style="flex:1;"><b>{{ picker.title }}</b></div>
+        <button class="minib tap" @click="picker = null">✕</button>
+      </div>
+      <div v-for="o in picker.options" :key="String(o.v)" :class="['pk-row', 'tap', { on: o.v === picker.cur }]" @click="pickOption(o)">
+        <span>{{ o.t }}</span>
+        <span v-if="o.v === picker.cur" class="ok">✓</span>
+      </div>
+    </div>
   </div>
 
   <!-- 供应商 Key 弹层 -->
@@ -1087,6 +1104,11 @@ label { display:block; font-size:13px; color:var(--muted); margin:12px 0 6px; }
 .srow-d { font-size:12px; color:var(--muted); margin-top:3px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
 .srow-act { display:flex; gap:8px; padding:10px 14px 12px; border-top:1px dashed var(--line); }
 .mini-hint { font-style:normal; font-size:11px; color:var(--muted); font-weight:400; }
+
+.pickv { border:1px solid var(--line); background:var(--bg); border-radius:10px; padding:8px 12px; font-size:13px; font-weight:600; color:var(--ink); max-width:160px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex-shrink:0; }
+.pk-row { display:flex; justify-content:space-between; align-items:center; padding:13px 16px; border-bottom:1px solid var(--line); font-size:14px; }
+.pk-row:last-child { border-bottom:0; }
+.pk-row.on { color:var(--hill); font-weight:700; background:var(--hill-soft); }
 
 /* 技能弹层 */
 .p2 { z-index:68; }

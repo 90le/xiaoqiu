@@ -69,8 +69,10 @@ let killTimer = null
 function resetConfirm(id) { if (killTimer) clearTimeout(killTimer); killTimer = setTimeout(() => { if (confirmKill.value === id) confirmKill.value = '' }, 3000) }
 
 const sessions = computed(() => tstore.order.map(id => tstore.sessions[id]).filter(s => s && !s.remote))
-// AI 命令终端（bash 接管 / 命令标签）：来自服务端 terminal_list，点击附着查看
-const aiTerms = computed(() => (chat.terminals || []).filter(t => t.agentBash || t.command))
+// AI 命令终端：内嵌版 terminal_list 无 agentBash 标志（源码 info() 实证）——
+// ai-bash 终端特征：id='ai-bash' / title='AI bash'；命令标签带 command 字段
+const isAiTerm = (t) => !!(t.agentBash || t.command || t.id === 'ai-bash' || t.title === 'AI bash')
+const aiTerms = computed(() => (chat.terminals || []).filter(isAiTerm))
 function openAi(t) {
   attachSession(t.id, t.title || (t.command?.name || t.command?.command || 'AI 命令').slice(0, 12), t.cwd)
   nextTick(() => activate(t.id))
