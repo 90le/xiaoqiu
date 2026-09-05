@@ -39,9 +39,10 @@ window.__xiaoqiuTask = (t, speak) => {
   if (!t) return
   const H = { 'Content-Type': 'application/json' }
   const say = (text) => { try { fetch('/api/tts_speak', { method: 'POST', headers: H, body: JSON.stringify({ text }) }) } catch {} }
-  api.prompt(t) // 发送进对话页当前活动会话
+  console.log('[WAKE] task 注入: ' + t)
+  const ok = api.prompt(t) // 发送进对话页当前活动会话
+  if (!ok) { say('小丘的连接断了，打开小丘再试一次'); return } // 发送失败必须有声反馈
   if (!speak) return
-  say('好嘞，这就办')
   const stop = watch(() => chat.streaming, (v, ov) => {
     if (v || !ov) return
     stop()

@@ -149,7 +149,9 @@ public class WakeService extends Service {
                     } else {
                         if (rms >= TH_LOW) silenceMs = 0; else silenceMs += 100;
                         long uttLen = total - speechStart;
-                        boolean endOfSpeech = silenceMs >= 800 && uttLen >= sr * 800 / 1000;
+                        // 短句（多半是唤醒词）500ms 静默即截断——唤醒提速的关键
+                        boolean shortUtt = uttLen < sr * 3;
+                        boolean endOfSpeech = silenceMs >= (shortUtt ? 500 : 800) && uttLen >= sr * 800 / 1000;
                         boolean tooLong = uttLen >= sr * 10;
                         if (endOfSpeech || tooLong) {
                             int len = (int) Math.min(uttLen, ringN);
@@ -179,10 +181,18 @@ public class WakeService extends Service {
             File chunkWav = new File(getCacheDir(), "wake-utt.wav");
             com.binbin.pibridge.WavUtil.writeWav(chunkWav, pcm, sr, 1, 16);
             String txt = "";
-            try {
-                JSONObject env = Tools.call("stt_transcribe", new JSONObject().put("file", chunkWav.getAbsolutePath()));
-                if (env != null && env.optBoolean("ok")) txt = env.optString("data", "");
-            } catch (Exception ignore) {}
+            // 短句（<3.5s，多为唤醒词）：云端 GLM-ASR 优先——更快更准（"小丘"不再转成"小舅"）
+            if (seg.length < sr * 35 / 10) {
+                try { txt = Tools.cloudStt(chunkWav); } catch (Exception ignore) { txt = null; }
+                if (txt == null) txt = "";
+                Log.d("PiBridge", "唤醒转写(云): " + txt);
+            }
+            if (txt.isEmpty()) {
+                try {
+                    JSONObject env = Tools.call("stt_transcribe", new JSONObject().put("file", chunkWav.getAbsolutePath()));
+                    if (env != null && env.optBoolean("ok")) txt = env.optString("data", "");
+                } catch (Exception ignore) {}
+            }
             txt = txt.replaceAll("<\\|[^>]*\\|>", "").replace(" ", "").trim();
             Log.d("PiBridge", "唤醒转写: " + txt);
             if (txt.isEmpty() || txt.startsWith("(")) return;
@@ -320,11 +330,14 @@ public class WakeService extends Service {
                 Tools.call("tts_speak", new org.json.JSONObject().put("text", answer));
                 return false; // 快答：语音会话继续
             }
-            // 复杂任务：静默注入 App 当前对话（用户当前在哪个会话就进哪个），
-            // 界面不弹不跳；结果由 App 侧流结束→口语化→TTS 播报闭环
+            // 复杂任务：立即广播注入 App 当前对话（不弹屏），本地秒答确认——
+            // 确认由唤醒进程自己说（不依赖 App 回执，杜绝"静默几秒啥也没有"）
             android.content.Intent bi = new android.content.Intent("com.pihost.WAKE_TASK");
             bi.putExtra("q", heard);
             sendBroadcast(bi);
+            Log.i("PiBridge", "🔔 任务已广播: " + heard);
+            Tools.speakLocal("好嘞，这就办");
+            waitSpeak(1500);
             return true;
         } catch (Exception e) { Log.w("PiBridge", "execCommand: " + e); return false; }
     }
