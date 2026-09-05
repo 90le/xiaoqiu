@@ -10,6 +10,9 @@ const showMgr = ref(false)
 const keysMode = ref('slim')     // slim | full | hide
 const ctrlOn = ref(false), altOn = ref(false)
 const renaming = ref(''), renameId = ref('')
+const confirmKill = ref('')
+let killTimer = null
+function resetConfirm(id) { if (killTimer) clearTimeout(killTimer); killTimer = setTimeout(() => { if (confirmKill.value === id) confirmKill.value = '' }, 3000) }
 
 const sessions = computed(() => tstore.order.map(id => tstore.sessions[id]).filter(Boolean))
 
@@ -101,93 +104,99 @@ onUnmounted(() => {
     <div v-if="keysMode !== 'hide'" class="vkeys" :class="{ full: keysMode === 'full' }">
       <div class="k2">
         <div class="krow">
-          <button v-if="keysMode === 'slim'" class="vk exp tap" @click="keysMode = 'full'">▾</button>
-          <button v-else class="vk exp on tap" @click="keysMode = 'slim'">▴</button>
-          <button class="vk tap" @click="raw('\x1b')">ESC</button>
-          <button class="vk tap" @click="raw('\t')">TAB</button>
-          <button class="vk mod tap" :class="{ on: ctrlOn }" @click="press('CTRL')">CTRL</button>
-          <button class="vk mod tap" :class="{ on: altOn }" @click="press('ALT')">ALT</button>
-          <button class="vk mod tap" :class="{ on: shiftOn }" @click="press('SHIFT')">SHIFT</button>
+          <button class="vk mod tap" :class="{ on: ctrlOn }" @touchstart.prevent="press('CTRL')">CTRL</button>
+          <button class="vk mod tap" :class="{ on: altOn }" @touchstart.prevent="press('ALT')">ALT</button>
+          <button class="vk mod tap" :class="{ on: shiftOn }" @touchstart.prevent="press('SHIFT')">SHIFT</button>
+          <button class="vk cc tap" @touchstart.prevent="raw('\x0c')">^L</button>
+          <button class="vk tap" @touchstart.prevent="raw('\x7f')">DEL</button>
           <span class="kfill"></span>
-          <div class="knav one"><button class="vk tap" @click="raw('\x1b[A')">↑</button></div>
+          <div class="knav one"><button class="vk tap" @touchstart.prevent="raw('\x1b[A')">↑</button></div>
+          <button v-if="keysMode === 'slim'" class="vk exp tap" @touchstart.prevent="keysMode = 'full'">▾</button>
+          <button v-else class="vk exp on tap" @touchstart.prevent="keysMode = 'slim'">▴</button>
+          <button class="vhide tap" @touchstart.prevent="keysMode = 'hide'">✕</button>
         </div>
         <div class="krow">
-          <button class="vk tap" @click="raw('\r')">ENTER</button>
-          <button class="vk tap" @click="raw('\x1b[H')">HOME</button>
-          <button class="vk tap" @click="raw('\x1b[F')">END</button>
-          <button class="vk tap" @click="raw('\x1b[5~')">PGUP</button>
-          <button class="vk tap" @click="raw('\x1b[6~')">PGDN</button>
-          <button class="vk cc tap" @click="raw('\x03')">^C</button>
-          <button class="vk cc tap" @click="raw('\x0c')">^L</button>
-          <button class="vk cc tap" @click="raw('\x04')">^D</button>
-          <button class="vk kb tap" @click="showKb">⌨</button>
-          <button class="vk tap" @click="raw('\x1b[2~')">INS</button>
-          <button class="vk tap" @click="raw('\x7f')">DEL</button>
+          <button class="vk tap" @touchstart.prevent="raw('\x1b')">ESC</button>
+          <button class="vk tap" @touchstart.prevent="raw('\t')">TAB</button>
+          <button class="vk enter tap" @touchstart.prevent="raw('\r')">ENTER</button>
+          <button class="vk cc tap" @touchstart.prevent="raw('\x03')">^C</button>
+          <button class="vk kb tap" @touchstart.prevent="showKb">⌨</button>
           <span class="kfill"></span>
           <div class="knav tri">
-            <button class="vk tap" @click="raw('\x1b[D')">←</button>
-            <button class="vk tap" @click="raw('\x1b[B')">↓</button>
-            <button class="vk tap" @click="raw('\x1b[C')">→</button>
+            <button class="vk tap" @touchstart.prevent="raw('\x1b[D')">←</button>
+            <button class="vk tap" @touchstart.prevent="raw('\x1b[B')">↓</button>
+            <button class="vk tap" @touchstart.prevent="raw('\x1b[C')">→</button>
           </div>
-          <button class="vhide tap" @click="keysMode = 'hide'">✕</button>
         </div>
       </div>
       <div v-if="keysMode === 'full'" class="kpanel">
+        <!-- 导航组 -->
+        <div class="ksec">导航</div>
         <div class="kgrid">
-          <button class="vk tap" @click="raw('\x1b')">ESC</button>
-          <button class="vk tap" @click="raw('\t')">TAB</button>
-          <button class="vk mod tap" :class="{ on: ctrlOn }" @click="press('CTRL')">CTRL</button>
-          <button class="vk mod tap" :class="{ on: altOn }" @click="press('ALT')">ALT</button>
-          <button class="vk tap" @click="raw('\x7f')">DEL</button>
-          <button class="vk tap" @click="raw('\r')">ENTER</button>
-          <button class="vk tap" @click="raw('\x1b[H')">HOME</button>
-          <button class="vk tap" @click="raw('\x1b[F')">END</button>
-
-          <button class="vk tap" @click="raw('\x1b[D')">←</button>
-          <button class="vk tap" @click="raw('\x1b[A')">↑</button>
-          <button class="vk tap" @click="raw('\x1b[B')">↓</button>
-          <button class="vk tap" @click="raw('\x1b[C')">→</button>
-          <button class="vk tap" @click="raw('\x1b[5~')">PGUP</button>
-          <button class="vk tap" @click="raw('\x1b[6~')">PGDN</button>
-          <button class="vk tap" @click="raw('\x1b[2~')">INS</button>
-          <button class="vk tap" @click="raw(' ')">SPACE</button>
+          <button class="vk tap" @touchstart.prevent="raw('\x1b[H')">HOME</button>
+          <button class="vk tap" @touchstart.prevent="raw('\x1b[F')">END</button>
+          <button class="vk tap" @touchstart.prevent="raw('\x1b[5~')">PGUP</button>
+          <button class="vk tap" @touchstart.prevent="raw('\x1b[6~')">PGDN</button>
+          <button class="vk tap" @touchstart.prevent="raw('\x1b[2~')">INS</button>
+          <button class="vk tap" @touchstart.prevent="raw('\x7f')">DEL</button>
+          <button class="vk enter tap" @touchstart.prevent="raw('\r')">ENTER</button>
+          <button class="vk tap" @touchstart.prevent="raw(' ')">SPACE</button>
+          <button class="vk tap" @touchstart.prevent="raw('\x1b[D')">←</button>
+          <button class="vk tap" @touchstart.prevent="raw('\x1b[A')">↑</button>
+          <button class="vk tap" @touchstart.prevent="raw('\x1b[B')">↓</button>
+          <button class="vk tap" @touchstart.prevent="raw('\x1b[C')">→</button>
         </div>
+        <!-- Ctrl 组合组 -->
+        <div class="ksec">Ctrl 组合</div>
         <div class="kgrid cc">
-          <button v-for="[l, c] in combos" :key="l" class="vk tap" @click="raw(c)">{{ l }}</button>
-          <button v-for="[l, c] in alts" :key="l" class="vk alt tap" @click="raw(c)">{{ l }}</button>
+          <button v-for="[l, c] in combos" :key="l" class="vk tap" @touchstart.prevent="raw(c)">{{ l }}</button>
         </div>
+        <!-- Alt 组合组 -->
+        <div class="ksec">Alt 组合</div>
+        <div class="kgrid altg">
+          <button v-for="[l, c] in alts" :key="l" class="vk alt tap" @touchstart.prevent="raw(c)">{{ l }}</button>
+        </div>
+        <!-- 符号组 -->
+        <div class="ksec">符号</div>
         <div class="kgrid sym">
-          <button v-for="s2 in syms" :key="s2" class="vk tap" @click="press(s2)">{{ s2 }}</button>
+          <button v-for="s2 in syms" :key="s2" class="vk tap" @touchstart.prevent="press(s2)">{{ s2 }}</button>
         </div>
       </div>
     </div>
     <!-- 隐藏态浮球 -->
     <button v-else class="kfab tap" @click="keysMode = 'slim'">⌨</button>
 
-    <!-- 会话管理器弹窗 -->
+    <!-- 会话管理器（底部 sheet） -->
     <div v-if="showMgr" class="mask tap" @click="showMgr = false"></div>
     <div v-if="showMgr" class="mgr">
+      <div class="mgrbar"></div>
       <div class="mh">
-        <b>终端会话</b><span class="muted" style="font-size:12px"> {{ sessions.length }} 个</span>
+        <b>终端会话</b><span class="muted mcount">{{ sessions.length }} 个</span>
         <span class="sp"></span>
-        <button class="mb tap" @click="newTerm(); showMgr = false">＋ 新建</button>
-        <button class="mb tap" @click="showMgr = false">✕</button>
+        <button class="mb new tap" @touchstart.prevent="newTerm(); showMgr = false">＋ 新建</button>
+        <button class="mb tap" @touchstart.prevent="showMgr = false">✕ 关闭</button>
       </div>
       <div class="mlist">
         <div v-for="s in sessions" :key="s.id" class="mi tap" @click="activate(s.id); showMgr = false">
           <span class="tdot big" :class="{ on: s.alive }"></span>
           <div class="mib">
             <template v-if="renameId === s.id">
-              <input v-model="renaming" class="rin" @click.stop @keydown.enter="renameSession(s.id, renaming); renameId = ''" @blur="renameSession(s.id, renaming); renameId = ''" />
+              <input v-model="renaming" class="rin" autofocus @click.stop
+                @keydown.enter="renameSession(s.id, renaming); renameId = ''"
+                @blur="renameSession(s.id, renaming); renameId = ''" />
             </template>
-            <b v-else @dblclick.stop="renameId = s.id; renaming = s.title">{{ s.title }}</b>
-            <span class="muted">{{ s.alive ? '运行中 · 活动 ' + fmtAgo(s.lastOut) : '已退出' + (s.exitCode != null ? '（码' + s.exitCode + '）' : '') }}</span>
+            <b v-else>{{ s.title }}</b>
+            <span class="muted">{{ s.alive ? '运行中 · 活动 ' + fmtAgo(s.lastOut) : '已退出' + (s.exitCode != null ? '（码' + s.exitCode + '）' : '') }}{{ s.cwd ? ' · ' + s.cwd.replace('/data/data/com.pihost/files/home', '~') : '' }}</span>
           </div>
           <span class="sp"></span>
-          <button class="mb tap" title="切换" @click.stop="activate(s.id); showMgr = false">▶</button>
+          <button class="mb tap" title="重命名" @click.stop="renameId = s.id; renaming = s.title">✎</button>
           <button class="mb tap" title="重启" @click.stop="restartSession(s.id)">↻</button>
-          <button class="mb del tap" title="关闭" @click.stop="killSession(s.id)">🗑</button>
+          <button class="mb del tap" :class="{ confirm: confirmKill === s.id }" :title="confirmKill === s.id ? '再点确认' : '关闭'"
+            @click.stop="confirmKill === s.id ? (killSession(s.id), confirmKill = '') : (confirmKill = s.id, resetConfirm(s.id))">
+            {{ confirmKill === s.id ? '确认?' : '🗑' }}
+          </button>
         </div>
+        <div v-if="!sessions.length" class="mempty">没有终端会话</div>
       </div>
     </div>
   </div>
@@ -248,19 +257,31 @@ onUnmounted(() => {
 .kgrid.cc .vk.alt { color: #e8b268; background: #241f18; border-color: #4a3c26; }
 .kgrid.sym { grid-template-columns: repeat(10, 1fr); }
 .kgrid.sym .vk { font-size: 13px; }
-/* 会话管理器：顶栏下右侧紧凑弹层（锚定🗂按钮，不居中不挡终端） */
-.mask { position: fixed; inset: 0; background: rgba(0,0,0,.35); z-index: 60; }
-.mgr { position: fixed; left: 50%; top: 45%; transform: translate(-50%, -50%); width: calc(100% - 48px); max-width: 340px; max-height: 58vh;
-  background: #14161c; border: 1px solid #2c303b; border-radius: 14px; z-index: 61; display: flex; flex-direction: column;
-  box-shadow: 0 16px 48px rgba(0,0,0,.6); animation: mgrin .14s ease; }
-@keyframes mgrin { from { transform: translate(-50%, -47%) scale(.97); opacity: 0; } }
-.mh { display: flex; align-items: center; gap: 8px; padding: 13px 15px 7px; color: #dcddde; font-size: 14px; }
+/* 会话管理器：底部 sheet（手机惯例，thumb 友好） */
+.mask { position: fixed; inset: 0; background: rgba(0,0,0,.4); z-index: 60; }
+.mgr { position: fixed; left: 0; right: 0; bottom: 0; max-height: 66vh;
+  background: #14161c; border-radius: 18px 18px 0 0; z-index: 61; display: flex; flex-direction: column;
+  padding-bottom: env(safe-area-inset-bottom); animation: mgrin .18s ease; }
+@keyframes mgrin { from { transform: translateY(60px); opacity: 0; } }
+.mgrbar { width: 36px; height: 4px; border-radius: 2px; background: #2c303b; margin: 10px auto 2px; flex-shrink: 0; }
+.mh { display: flex; align-items: center; gap: 8px; padding: 10px 15px 8px; color: #dcddde; font-size: 14px; }
 .sp { flex: 1; }
-.mb { background: #1a1d26; color: #c6c9d0; border: 1px solid #2c303b; border-radius: 8px; padding: 5px 10px; font-size: 12px; flex-shrink: 0; }
+.mb { background: #1a1d26; color: #c6c9d0; border: 1px solid #2c303b; border-radius: 8px; padding: 6px 12px; font-size: 12px; flex-shrink: 0; min-width: 36px; text-align: center; }
+.mb.new { color: #a78bfa; border-color: #3d3560; }
 .mb.del { color: #e08585; border-color: #4a2626; }
-.mlist { overflow-y: auto; padding: 0 10px 12px; }
-.mi { display: flex; align-items: center; gap: 6px; padding: 10px 6px; border-bottom: 1px solid #1e2128; }
-.mib { display: flex; flex-direction: column; gap: 2px; font-size: 13.5px; color: #dcddde; min-width: 0; flex: 1; }
-.mib .muted { font-size: 10.5px; }
-.rin { background: #1a1d26; border: 1px solid #8b5cf6; color: #dcddde; border-radius: 6px; padding: 3px 8px; font-size: 13px; width: 130px; }
+.mb.del.confirm { background: #5c2626; color: #ffb4b4; border-color: #8b3a3a; animation: pulse 1s infinite; }
+.mcount { font-size: 12px; }
+.mlist { overflow-y: auto; padding: 0 10px calc(12px); }
+.mi { display: flex; align-items: center; gap: 6px; padding: 11px 4px; border-bottom: 1px solid #1e2128; }
+.mi:active { background: rgba(139,92,246,.06); }
+.mib { display: flex; flex-direction: column; gap: 3px; font-size: 13.5px; color: #dcddde; min-width: 0; flex: 1; }
+.mib b { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.mib .muted { font-size: 10px; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.rin { background: #1a1d26; border: 1px solid #8b5cf6; color: #dcddde; border-radius: 6px; padding: 4px 8px; font-size: 13px; width: 60vw; max-width: 200px; }
+.mempty { text-align: center; color: #666b76; font-size: 13px; padding: 30px 0; }
+/* ENTER 主操作色 */
+.vk.enter { color: #7dd3a8; background: #16321f; border-color: #2a5a3a; font-weight: 700; }
+/* full 面板分组标签 */
+.ksec { font-size: 10px; color: #666b76; padding: 8px 12px 3px; letter-spacing: 1px; }
+.kgrid.altg { grid-template-columns: repeat(4, 1fr); }
 </style>
