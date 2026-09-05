@@ -17,6 +17,7 @@ export const chat = reactive({
   status: 'connecting', ready: false, retryIn: 0,
   state: null,            // UiState: messages/streamingMessage/model/thinkingLevel/stats...
   models: [],             // ModelInfo[]
+  settings: null,         // 引擎设置全量（get_settings/settings 消息）
   sessions: [],           // SessionSummary[]
   conversations: [], activeConvId: '',
   slashCommands: [],
@@ -102,6 +103,7 @@ export function connect() {
         send({ type: 'get_commands' })
         send({ type: 'list_projects' })
         send({ type: 'list_sessions' })
+        send({ type: 'get_settings' })
         break
       case 'snapshot':
         // 权威快照：整体替换 + 重启 delta 序号追踪（webui 同款）
@@ -134,6 +136,7 @@ export function connect() {
         break
       }
       case 'models': chat.models = m.models || []; break
+      case 'settings': chat.settings = m; break
       case 'sessions': chat.sessions = m.sessions || []; break
       case 'conversations': chat.conversations = m.conversations || []; chat.activeConvId = m.activeId; break
       case 'slash_commands': chat.slashCommands = m.commands || []; break
@@ -193,6 +196,8 @@ export const api = {
   abort() { return send({ type: 'abort' }) },
   newChat() { return send({ type: 'new_chat' }) },
   setModel(modelId) { return send({ type: 'set_model', modelId }) },
+  getSettings() { return send({ type: 'get_settings' }) },
+  setSettings(patch) { return send({ type: 'set_settings', ...patch }) },
   setThinking(level) { return send({ type: 'set_thinking', level }) },
   listSessions() { return send({ type: 'list_sessions' }) },
   listModels() { return send({ type: 'list_models' }) },
