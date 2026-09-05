@@ -638,17 +638,15 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
         <!-- 用户 -->
         <div v-else-if="m.role === 'user'" class="mrow urow">
           <div class="ub">
-            <div v-if="m.attImgs?.length" class="agrid" :class="{ one: m.attImgs.length === 1 }">
-              <img v-for="(u, ii) in m.attImgs" :key="'ag' + ii" :src="u" class="athumb tap"
+            <div v-if="m.attImgs?.length || m.attFiles?.length" class="arow" :class="{ one: m.attImgs?.length === 1 && !m.attFiles?.length }">
+              <img v-for="(u, ii) in (m.attImgs || [])" :key="'ag' + ii" :src="u" class="a2thumb tap"
                 @touchstart.prevent="viewImg(u)" @click="viewImg(u)" />
-            </div>
-            <div v-if="m.attFiles?.length" class="achips">
-              <div v-for="(f, fi) in m.attFiles" :key="'af' + fi" class="achip tap"
+              <div v-for="(f, fi) in (m.attFiles || [])" :key="'af' + fi" class="a2chip tap"
                 @touchstart.prevent="viewFile(f)" @click="viewFile(f)">
-                <span class="acico">{{ f.details?.type === 'folder' ? '📁' : (f.details?.mode === 'bridged' ? '🔤' : '📄') }}</span>
-                <span class="acname">{{ f.details?.name || f.details?.path || '附件' }}</span>
-                <span class="acsize">{{ fmtSize(f.details?.size) }}</span>
+                <span class="a2ico">{{ f.details?.type === 'folder' ? '📁' : (f.details?.mode === 'bridged' ? '🔤' : '📄') }}</span>
+                <span class="a2name">{{ f.details?.name || f.details?.path || '附件' }}</span>
               </div>
+              <span v-if="(m.attImgs?.length || 0) + (m.attFiles?.length || 0) > 4" class="amore">››</span>
             </div>
             <img v-for="(b, bi) in (m.content||[]).filter(b => b.type === 'image' && b.dataUrl)" :key="bi" :src="b.dataUrl" class="uimg" />
             <div class="ut">{{ (m.content||[]).filter(b => b.type === 'text').map(b => b.text).join('\n') }}</div>
@@ -877,10 +875,15 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
 .updk.kill { background: #443030; }
 
 /* 气泡内附件（ChatGPT/LobeChat 模式：直显不折叠） */
-.agrid { display: grid; grid-template-columns: repeat(auto-fill, minmax(72px, 1fr)); gap: 5px; margin-bottom: 7px; }
-.agrid.one { grid-template-columns: minmax(0, 40vw); }
-.agrid.one .athumb { aspect-ratio: auto; max-height: 160px; object-fit: cover; }
-.athumb { width: 100%; aspect-ratio: 1; object-fit: cover; border-radius: 10px; background: #0e1015; }
+/* 附件横滚行（微信/ChatGPT 模式）：小方图+小胶囊统一流，多了横滑 */
+.arow { display: flex; align-items: center; gap: 4px; overflow-x: auto; margin-bottom: 6px; scroll-snap-type: x proximity; -webkit-overflow-scrolling: touch; }
+.arow::-webkit-scrollbar { display: none; }
+.a2thumb { width: 56px; height: 56px; object-fit: cover; border-radius: 9px; flex-shrink: 0; background: #0e1015; border: 1px solid rgba(255,255,255,.07); scroll-snap-align: start; }
+.arow.one .a2thumb { width: 118px; height: 118px; }
+.a2chip { display: inline-flex; align-items: center; gap: 5px; background: rgba(12,14,20,.5); border: 1px solid rgba(255,255,255,.08); border-radius: 9px; padding: 6px 9px; flex-shrink: 0; scroll-snap-align: start; }
+.a2ico { font-size: 14px; }
+.a2name { font-size: 11px; color: #eef1f6; max-width: 28vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.amore { color: rgba(255,255,255,.4); font-size: 13px; flex-shrink: 0; padding: 0 2px; }
 .achips { display: flex; flex-wrap: wrap; gap: 6px; margin-bottom: 8px; }
 .achip { display: inline-flex; align-items: center; gap: 6px; background: rgba(12, 14, 20, .5); border: 1px solid rgba(255,255,255,.08); border-radius: 10px; padding: 7px 11px; max-width: 100%; }
 .acico { font-size: 15px; }
