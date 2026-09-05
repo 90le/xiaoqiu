@@ -57,9 +57,26 @@ export function createSession(cwd) {
     write: (d) => { term.write(d); if (tstore.sessions[id]) tstore.sessions[id].lastOut = Date.now() },
     onExit: (code) => { if (tstore.sessions[id]) { tstore.sessions[id].alive = false; tstore.sessions[id].exitCode = code } },
   })
+  // WebView IME 组合重发修复（探针实证：onData 收到 h/he/hel/hell/hello 增长整串）。
+  // v1 失败原因：lastComp 设了 ≤3 字符上限，第 4 字起判定失效整串重发。
+  // v2：无条件跟踪 + 双向差分（增长发增量 / 缩短发退格），2 秒空闲重置。
+  let lastComp = '', lastCompAt = 0
   term.onData((d) => {
     try { window.__imeProbe && window.__imeProbe(d) } catch {}
-    wsSend({ type: 'terminal_input', terminalId: id, data: d })
+    const now = Date.now()
+    if (now - lastCompAt > 2000) lastComp = '' // 停顿超 2s：按新输入上下文处理
+    let send = d
+    if (lastComp) {
+      if (d.startsWith(lastComp) && d.length > lastComp.length && d.length - lastComp.length <= 3) {
+        send = d.slice(lastComp.length) // 组合增长：只发增量
+      } else if (lastComp.startsWith(d) && d.length < lastComp.length) {
+        send = '\x7f'.repeat(lastComp.length - d.length) // 组合删字：发退格
+      }
+      // 其余（空格提交后新词/回车/粘贴/整体替换）：发整串
+    }
+    lastComp = d
+    lastCompAt = now
+    if (send) wsSend({ type: 'terminal_input', terminalId: id, data: send })
   })
   tstore.sessions[id] = { id, title, cwd: cwd || '/data/data/com.pihost/files/home', el, term, fit, unreg, alive: true, lastOut: Date.now(), exitCode: null }
   tstore.order.push(id)
