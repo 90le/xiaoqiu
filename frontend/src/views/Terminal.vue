@@ -16,7 +16,7 @@ function tabPress(s, e) {
   }, 480)
 }
 function tabRelease() { if (pressTimer) clearTimeout(pressTimer); pressTimer = null }
-const keysMode = ref('bar')     // bar（单行横滚） | full（+扩展） | hide（浮球）
+const keysMode = ref('bar')     // bar（单行全键横滚） | hide（浮球）
 const ctrlOn = ref(false), altOn = ref(false)
 const renaming = ref(''), renameId = ref('')
 const confirmKill = ref('')
@@ -114,10 +114,12 @@ onUnmounted(() => {
     <!-- 终端舞台：pane 由会话池借入 -->
     <div ref="stage" class="stage"></div>
 
-    <!-- 虚拟按键 v2：单行横滚（Termius 模式），左滚常用键 · 右固定导航/输入 -->
+    <!-- 虚拟按键 v3：全键单行横滚 · 右侧仅固定 导航+回车 -->
     <div v-if="keysMode !== 'hide'" class="vkeys">
       <div class="kbar">
         <div class="kscroll">
+          <button class="vk kb tap" @touchstart.prevent="showKb">⌨</button>
+          <button class="vk dim tap" @touchstart.prevent="keysMode = 'hide'">✕</button>
           <button class="vk mod tap" :class="{ on: ctrlOn }" @touchstart.prevent="press('CTRL')">CTRL</button>
           <button class="vk mod tap" :class="{ on: altOn }" @touchstart.prevent="press('ALT')">ALT</button>
           <button class="vk mod tap" :class="{ on: shiftOn }" @touchstart.prevent="press('SHIFT')">SHIFT</button>
@@ -129,12 +131,22 @@ onUnmounted(() => {
           <button class="vk cc tap" @touchstart.prevent="raw('\x15')">^U</button>
           <button class="vk cc tap" @touchstart.prevent="raw('\x17')">^W</button>
           <button class="vk cc tap" @touchstart.prevent="raw('\x12')">^R</button>
+          <button class="vk cc tap" @touchstart.prevent="raw('\x01')">^A</button>
+          <button class="vk cc tap" @touchstart.prevent="raw('\x05')">^E</button>
+          <button class="vk cc tap" @touchstart.prevent="raw('\x0b')">^K</button>
+          <button class="vk cc tap" @touchstart.prevent="raw('\x19')">^Y</button>
+          <button class="vk cc tap" @touchstart.prevent="raw('\x1a')">^Z</button>
           <button class="vk tap" @touchstart.prevent="raw('\x1b[H')">HOME</button>
           <button class="vk tap" @touchstart.prevent="raw('\x1b[F')">END</button>
           <button class="vk tap" @touchstart.prevent="raw('\x1b[5~')">PGUP</button>
           <button class="vk tap" @touchstart.prevent="raw('\x1b[6~')">PGDN</button>
           <button class="vk tap" @touchstart.prevent="raw('\x1b[2~')">INS</button>
           <button class="vk tap" @touchstart.prevent="raw('\x7f')">DEL</button>
+          <button class="vk alt tap" @touchstart.prevent="raw('\x1bb')">A·B</button>
+          <button class="vk alt tap" @touchstart.prevent="raw('\x1bf')">A·F</button>
+          <button class="vk alt tap" @touchstart.prevent="raw('\x1bd')">A·D</button>
+          <button class="vk alt tap" @touchstart.prevent="raw('\x1b.')">A·.</button>
+          <button class="vk tap" @touchstart.prevent="raw(' ')">SPC</button>
           <button v-for="s2 in syms" :key="s2" class="vk sym tap" @touchstart.prevent="press(s2)">{{ s2 }}</button>
         </div>
         <div class="kright">
@@ -143,26 +155,7 @@ onUnmounted(() => {
           <button class="vk tap" @touchstart.prevent="raw('\x1b[B')">↓</button>
           <button class="vk tap" @touchstart.prevent="raw('\x1b[C')">→</button>
           <span class="ksep"></span>
-          <button class="vk kb tap" @touchstart.prevent="showKb">⌨</button>
           <button class="vk enter tap" @touchstart.prevent="raw('\r')">⏎</button>
-          <button class="vk exp tap" :class="{ on: keysMode === 'full' }" @touchstart.prevent="keysMode = keysMode === 'full' ? 'bar' : 'full'">▾</button>
-        </div>
-      </div>
-      <div v-if="keysMode === 'full'" class="kpanel">
-        <div class="kphead">
-          <span class="ksec2">扩展键</span>
-          <button class="vk tap" @touchstart.prevent="raw(' ')">SPACE</button>
-          <button class="vk alt tap" @touchstart.prevent="raw('\x1bb')">ALT+B</button>
-          <button class="vk alt tap" @touchstart.prevent="raw('\x1bf')">ALT+F</button>
-          <button class="vk alt tap" @touchstart.prevent="raw('\x1bd')">ALT+D</button>
-          <button class="vk alt tap" @touchstart.prevent="raw('\x1b.')">ALT+.</button>
-          <button class="vk cc tap" @touchstart.prevent="raw('\x01')">^A</button>
-          <button class="vk cc tap" @touchstart.prevent="raw('\x05')">^E</button>
-          <button class="vk cc tap" @touchstart.prevent="raw('\x0b')">^K</button>
-          <button class="vk cc tap" @touchstart.prevent="raw('\x19')">^Y</button>
-          <button class="vk cc tap" @touchstart.prevent="raw('\x1a')">^Z</button>
-          <span class="sp"></span>
-          <button class="vk dim tap" @touchstart.prevent="keysMode = 'hide'">✕ 隐藏键盘</button>
         </div>
       </div>
     </div>
@@ -225,11 +218,6 @@ onUnmounted(() => {
 .kfab { position: fixed; right: 14px; bottom: 18px; z-index: 20; width: 44px; height: 44px; border-radius: 50%;
   background: #8b5cf6; color: #fff; border: 0; font-size: 18px; box-shadow: 0 6px 20px rgba(0,0,0,.5); }
 /* 扩展面板 */
-.kpanel { background: #101219; border-radius: 10px; animation: kslide .16s ease; }
-@keyframes kslide { from { transform: translateY(16px); opacity: 0; } }
-.kphead { display: flex; align-items: center; gap: 5px; padding: 7px 6px; overflow-x: auto; scrollbar-width: none; }
-.kphead::-webkit-scrollbar { display: none; }
-.ksec2 { font-size: 10px; color: #666b76; letter-spacing: 1px; flex-shrink: 0; margin-right: 3px; }
 .sp { flex: 1; min-width: 8px; }
 /* 长按标签行内菜单（Chrome 惯例） */
 .tmask { position: fixed; inset: 0; z-index: 70; background: transparent; }
