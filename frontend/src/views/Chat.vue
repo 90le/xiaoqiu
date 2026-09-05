@@ -1010,7 +1010,7 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
 .dlgi { flex: 1; background: #171a20; border: 1px solid #3a3f4a; border-radius: 8px; color: #dfe4ec; padding: 9px 10px; font-size: 13px; outline: none; }
 
 /* 模型/思考下拉升级（webui 对齐） */
-.di.dis { opacity: .35; pointer-events: none; }
+.di.dis { opacity: .5; color: #6b7076; pointer-events: none; text-decoration: line-through; text-decoration-thickness: 1px; }
 .di .oks { margin-left: auto; color: #7cc47f; font-weight: 700; }
 .msearch { width: calc(100% - 20px); margin: 4px 10px 6px; padding: 7px 10px; border: 1px solid #3a3f4a; border-radius: 8px; background: #171a20; color: #dfe4ec; font-size: 13px; outline: none; }
 .mscroll { max-height: 46vh; overflow-y: auto; overscroll-behavior: contain; }

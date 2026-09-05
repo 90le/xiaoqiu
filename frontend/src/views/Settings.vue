@@ -161,7 +161,7 @@ const promptDirty = computed(() => {
 })
 function fillDefault() { if (chat.settings?.defaultSystemPrompt) promptDraft.value = chat.settings.defaultSystemPrompt }
 function savePrompt() {
-  engineApi.setSettings({ promptMode: promptMode.value, customSystemPrompt: promptDraft.value })
+  setS({ promptMode: promptMode.value, customSystemPrompt: promptDraft.value })
   promptSynced = false
   setTimeout(syncPromptDraft, 600)
 }
@@ -223,7 +223,7 @@ function toggleList(listName, item, key) {
   if (!s) return
   const cur = new Set(s[listName] || [])
   item.enabled ? cur.add(item[key]) : cur.delete(item[key])
-  engineApi.setSettings({ [listName]: [...cur] })
+  setS({ [listName]: [...cur] })
 }
 function toggleSkill(s) { toggleList('disabledSkills', s, 'name') }
 function toggleExt(e) { toggleList('disabledExtensions', e, 'id') }
@@ -346,7 +346,7 @@ const idleDraft = ref('15')
 watch(() => chat.settings?.terminalBashIdleMs, v => { if (v != null) idleDraft.value = String(Math.round(v / 1000)) }, { immediate: true })
 function saveIdle() {
   const s = Math.max(1, Math.min(120, parseInt(idleDraft.value) || 15))
-  engineApi.setSettings({ terminalBashIdleMs: s * 1000 })
+  setS({ terminalBashIdleMs: s * 1000 })
   idleMsg.value = '已设为 ' + s + ' 秒'
   setTimeout(() => idleMsg.value = '', 2000)
 }
@@ -376,7 +376,7 @@ const vDirty = computed(() => {
   return vModel.value !== (s.visionBridgeModel || '') || vMode.value !== (s.visionBridgePromptMode || 'append') || vDraft.value !== (s.visionBridgePrompt || '')
 })
 function saveVision() {
-  engineApi.setSettings({ visionBridgeModel: vModel.value || null, visionBridgePromptMode: vMode.value, visionBridgePrompt: vDraft.value })
+  setS({ visionBridgeModel: vModel.value || null, visionBridgePromptMode: vMode.value, visionBridgePrompt: vDraft.value })
   vSynced = false
   setTimeout(syncVision, 600)
 }
@@ -408,6 +408,11 @@ function delPreset(p) {
 const presetMsg = ref('')
 
 /* ═══ 通用底部弹层选择器（替代原生 select 下拉）═══ */
+const setQMsg = ref('')
+function setS(patch) {
+  const ok = engineApi.setSettings(patch)
+  if (ok === false) { setQMsg.value = '连接中…已排队，连上自动生效'; setTimeout(() => setQMsg.value = '', 3000) }
+}
 const picker = ref(null) // { title, options:[{v,t}], cur, cb }
 function openPicker(title, options, cur, cb) { picker.value = { title, options, cur, cb } }
 function pickOption(o) { picker.value.cb(o.v); picker.value = null }
@@ -834,14 +839,14 @@ async function loadCfg() {
             <div class="srow-l"><span class="srow-chip" style="background:#3D6BE8;">⌨</span><span class="srow-t">终端工具</span></div>
             <div class="srow-d" style="white-space:normal;">允许 AI 使用终端跑命令</div>
           </div>
-          <div :class="['sw', 'tap', { on: stTt }]" @click="engineApi.setSettings({ terminalToolsEnabled: !stTt })"><div class="knob"></div></div>
+          <div :class="['sw', 'tap', { on: stTt }]" @click="setS({ terminalToolsEnabled: !stTt })"><div class="knob"></div></div>
         </div>
         <div class="srow">
           <div class="srow-txt">
             <div class="srow-l"><span class="srow-chip" style="background:#B85C3E;">🤖</span><span class="srow-t">bash 接管</span></div>
             <div class="srow-d" style="white-space:normal;">AI 的命令在终端页「🤖 AI 命令」区实时可见，环境保留（cd / venv 不丢）</div>
           </div>
-          <div :class="['sw', 'tap', { on: stBash }]" @click="engineApi.setSettings({ terminalBash: !stBash })"><div class="knob"></div></div>
+          <div :class="['sw', 'tap', { on: stBash }]" @click="setS({ terminalBash: !stBash })"><div class="knob"></div></div>
         </div>
         <div class="srow" style="flex-direction:column;align-items:stretch;gap:8px;">
           <div class="srow-l"><span class="srow-chip" style="background:#7A5CA8;">⏱</span><span class="srow-t">空闲判定 <em class="mini-hint">命令静止多久算"跑完"</em></span></div>
@@ -852,6 +857,7 @@ async function loadCfg() {
           </div>
           <div v-if="idleMsg" class="msg ok" style="margin-top:0;">{{ idleMsg }}</div>
         </div>
+        <div v-if="setQMsg" class="msg ok" style="padding:8px 14px 0;margin:0;">{{ setQMsg }}</div>
         <div class="footnote">💡 开关改动即时保存；若 AI 正在回复中，下一回合生效。bash 接管打开后，去终端页看 AI 跑命令。</div>
       </div>
     </template>
@@ -864,7 +870,7 @@ async function loadCfg() {
             <div class="srow-l"><span class="srow-chip" style="background:#3E7C8A;">👁</span><span class="srow-t">视觉桥</span></div>
             <div class="srow-d" style="white-space:normal;">发给 AI 的图片先由视觉模型转成文字描述（主模型不识图时的桥接）</div>
           </div>
-          <div :class="['sw', 'tap', { on: stVision }]" @click="engineApi.setSettings({ visionBridgeEnabled: !stVision })"><div class="knob"></div></div>
+          <div :class="['sw', 'tap', { on: stVision }]" @click="setS({ visionBridgeEnabled: !stVision })"><div class="knob"></div></div>
         </div>
         <div class="srow">
           <div class="srow-txt">
@@ -1132,7 +1138,7 @@ label { display:block; font-size:13px; color:var(--muted); margin:12px 0 6px; }
 .thinkpills { display:flex; gap:5px; flex-wrap:wrap; }
 .tp { border:1px solid var(--line); background:var(--card); border-radius:99px; padding:5px 11px; font-size:12px; font-weight:600; color:var(--muted); }
 .tp.on { background:var(--hill); border-color:var(--hill); color:#fff; }
-.tp.dis { opacity:.32; }
+.tp.dis { opacity:.45; color:#B9B4A6; border-style:dashed; border-color:#D8D5CB; background:transparent; text-decoration:line-through; text-decoration-thickness:1px; pointer-events:none; }
 .mbadges { margin-left:5px; font-size:11px; font-style:normal; }
 .mbadges i { font-style:normal; margin-left:2px; }
 .prow-h { font-size:12px; font-weight:700; color:var(--muted); margin:12px 4px 6px; letter-spacing:.5px; }

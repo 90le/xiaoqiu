@@ -80,6 +80,50 @@ function openAi(t) {
 
 function openShellDrawer() { window.dispatchEvent(new Event('xq-open-drawer')) }
 function showKb() { try { window.XiaoqiuBridge && window.XiaoqiuBridge.showKeyboard() } catch {} }
+// 长按终端区 → 复制/粘贴（xterm 画布无原生文本选择，自建通道）
+let cpT = null, cpXY = null
+const cpMenu = ref(false)
+const cpBusy = ref('')
+function stagePress(e) {
+  const t = e.touches[0]
+  cpXY = { x: t.clientX, y: t.clientY }
+  cpT = setTimeout(() => { cpT = null; try { navigator.vibrate && navigator.vibrate(15) } catch {}; cpMenu.value = true }, 480)
+}
+function stageMove(e) {
+  if (!cpXY || !cpT) return
+  const t = e.touches[0]
+  if (Math.abs(t.clientX - cpXY.x) + Math.abs(t.clientY - cpXY.y) > 12) { clearTimeout(cpT); cpT = null }
+}
+function stageUp() { if (cpT) { clearTimeout(cpT); cpT = null } }
+function copyScreen() {
+  const s = tstore.sessions[activeId.value]
+  if (!s) { cpMenu.value = false; return }
+  cpBusy.value = '读取屏面…'
+  try {
+    const buf = s.term.buffer.active
+    const y0 = buf.viewportY
+    const lines = []
+    for (let y = y0; y < y0 + s.term.rows; y++) {
+      const ln = buf.getLine(y)
+      lines.push(ln ? ln.translateToString(true) : '')
+    }
+    let text = lines.join('\n').replace(/\n{3,}/g, '\n\n').replace(/\s+$/g, '')
+    navigator.clipboard.writeText(text).then(() => { cpBusy.value = '✅ 已复制屏显 ' + lines.length + ' 行' }, () => { cpBusy.value = '❌ 复制失败' })
+  } catch { cpBusy.value = '❌ 读取失败' }
+  setTimeout(() => { cpBusy.value = ''; cpMenu.value = false }, 1400)
+}
+async function pasteClip2() {
+  cpBusy.value = '读剪贴板…'
+  try {
+    const t = await navigator.clipboard.readText()
+    cpBusy.value = ''
+    cpMenu.value = false
+    if (t) raw(t)
+  } catch {
+    cpBusy.value = '❌ 无剪贴板权限，请用右下 D-pad 的 📋'
+    setTimeout(() => { cpBusy.value = ''; cpMenu.value = false }, 1800)
+  }
+}
 function activate(id) {
   const s = tstore.sessions[id]
   if (!s) return
@@ -172,8 +216,16 @@ onUnmounted(() => {
       <button class="tb newb tap" @click="newTerm">＋</button>
     </header>
 
-    <!-- 终端舞台：pane 由会话池借入 -->
-    <div ref="stage" class="stage"></div>
+    <!-- 终端舞台：pane 由会话池借入（长按=复制/粘贴） -->
+    <div ref="stage" class="stage" @touchstart.passive="stagePress" @touchmove.passive="stageMove" @touchend.passive="stageUp" @touchcancel.passive="stageUp"></div>
+    <!-- 长按菜单：复制屏显 / 粘贴 -->
+    <div v-if="cpMenu" class="cpmask" @click="cpMenu = false">
+      <div class="cpbox" @click.stop>
+        <div class="cprow tap" @click="copyScreen">{{ cpBusy || '📋 复制屏显内容' }}</div>
+        <div class="cprow tap" @click="pasteClip2">{{ cpBusy === '读剪贴板…' ? cpBusy : '📥 粘贴到终端' }}</div>
+        <div class="cprow cancel tap" @click="cpMenu = false">取消</div>
+      </div>
+    </div>
 
     <!-- 虚拟按键 v7：职责分离——打字归输入法，这里只放修饰/组合/功能/符号 -->
     <div class="vkeys">
@@ -267,6 +319,12 @@ onUnmounted(() => {
 <style scoped>
 .termwrap { position: fixed; inset: 0; background: #0d0e12; display: flex; flex-direction: column; z-index: 10; }
 .tabs { display: flex; align-items: center; gap: 5px; padding: 6px 8px; background: #14161c; border-bottom: 1px solid #23262e; }
+.cpmask { position: fixed; inset: 0; z-index: 40; background: rgba(8,10,14,.5); display: flex; align-items: center; justify-content: center; animation: fadeq .15s ease; }
+@keyframes fadeq { from { opacity: 0; } }
+.cpbox { background: #1b1e26; border: 1px solid #2a2e39; border-radius: 16px; width: 78%; max-width: 320px; overflow: hidden; }
+.cprow { padding: 15px 18px; font-size: 15px; color: #dcddde; border-bottom: 1px solid #262a34; text-align: center; }
+.cprow:last-child { border-bottom: 0; }
+.cprow.cancel { color: #8b8f98; font-size: 13px; padding: 11px; }
 .aisep { font-size: 12px; flex-shrink: 0; align-self: center; opacity: .75; margin: 0 2px; }
 .tab.ai { border-style: dashed; }
 .tab.ai.act { border-color: #3ecf72; background: rgba(62,207,114,.08); }
