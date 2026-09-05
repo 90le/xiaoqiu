@@ -315,11 +315,12 @@ public class WakeService extends Service {
                 Tools.call("tts_speak", new org.json.JSONObject().put("text", answer));
                 return false; // 快答：语音会话继续
             }
-            MainActivity.PENDING_TASK = heard;
-            Intent i = new Intent(this, MainActivity.class);
-            i.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
-            startActivity(i);
-            return true; // 复杂任务：转交屏幕，语音会话结束
+            // 复杂任务：静默注入 App 当前对话（用户当前在哪个会话就进哪个），
+            // 界面不弹不跳；结果由 App 侧流结束→口语化→TTS 播报闭环
+            android.content.Intent bi = new android.content.Intent("com.pihost.WAKE_TASK");
+            bi.putExtra("q", heard);
+            sendBroadcast(bi);
+            return true;
         } catch (Exception e) { Log.w("PiBridge", "execCommand: " + e); return false; }
     }
 

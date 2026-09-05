@@ -517,38 +517,9 @@ window.__voiceStatus = (s) => {
   else if (s.startsWith('error')) { voiceState.value = s; setTimeout(() => voiceState.value = '', 2500) }
   else voiceState.value = ''
 }
-// 悬浮球/唤醒任务交接：发 prompt；speak=true（唤醒语音会话）时流结束→口语化→TTS 播报闭环
-window.__xiaoqiuTask = (t, speak) => {
-  if (!t) return
-  api.prompt(t)
-  if (!speak) return
-  const stop = watch(() => chat.streaming, (v, ov) => {
-    if (v || !ov) return // 只在 流式 true→false（回答结束）触发
-    stop()
-    setTimeout(async () => {
-      try {
-        const msgs = chat.state?.messages || []
-        let last = null
-        for (let i = msgs.length - 1; i >= 0; i--) if (msgs[i]?.role === 'assistant' && !msgs[i]?.pending) { last = msgs[i]; break }
-        let text = (last?.content || []).map(b => (b.type === 'text' ? b.text : '')).join('').trim()
-        if (!text) return
-        const H = { 'Content-Type': 'application/json' }
-        let say = text
-        if (text.length > 90) { // 长回答先口语化压缩再念（ai_humanize kind=reply）
-          try {
-            const r = await fetch('/api/ai_humanize', { method: 'POST', headers: H, body: JSON.stringify({ kind: 'reply', text: text.slice(0, 4000) }) })
-            const d = (await r.json())?.structuredContent
-            if (d?.ok && d?.data) say = String(d.data)
-          } catch {}
-        }
-        await fetch('/api/tts_speak', { method: 'POST', headers: H, body: JSON.stringify({ text: say.slice(0, 400) }) })
-      } catch {}
-    }, 400)
-  })
-}
 
 onMounted(() => { connect(); startWatchdog(); scroll() })
-onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; delete window.__xiaoqiuTask })
+onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus })
 </script>
 
 <template>

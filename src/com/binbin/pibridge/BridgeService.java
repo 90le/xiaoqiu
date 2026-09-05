@@ -71,6 +71,13 @@ public class BridgeService extends Service {
                 WakeGlow.hide();
             }
         }, new android.content.IntentFilter("com.pihost.WAKE_GLOW_OFF"));
+        // 唤醒复杂任务：静默注入 App 当前对话（不打开界面）
+        registerReceiver(new android.content.BroadcastReceiver() {
+            @Override public void onReceive(Context c, android.content.Intent i) {
+                String q = i.getStringExtra("q");
+                if (q != null && !q.isEmpty()) MainActivity.runWakeTask(q);
+            }
+        }, new android.content.IntentFilter("com.pihost.WAKE_TASK"));
         // 环境引擎：首启自动装 pi 环境
         if (!EnvInstaller.isReady() && !EnvInstaller.isRunning()) {
             EnvInstaller.installAsync(new EnvInstaller.Cb() {

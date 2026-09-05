@@ -1,5 +1,6 @@
 <script setup>
-import { ref, onMounted, onUnmounted } from 'vue'
+import { chat, api } from './useChat.js'
+import { ref, watch, onMounted, onUnmounted } from 'vue'
 import Dashboard from './views/Dashboard.vue'
 import Chat from './views/Chat.vue'
 import Device from './views/Device.vue'
@@ -32,6 +33,39 @@ function pick(h) {
   if (id) view.value = id
 }
 const openDrawerReq = () => { drawer.value = true }
+// 唤醒语音会话的任务通道（全局，任意视图可用，不切屏）：
+// 进 App 当前对话（api.prompt=活动会话）→ 简短确认 → 流结束口语化播报结果
+window.__xiaoqiuTask = (t, speak) => {
+  if (!t) return
+  const H = { 'Content-Type': 'application/json' }
+  const say = (text) => { try { fetch('/api/tts_speak', { method: 'POST', headers: H, body: JSON.stringify({ text }) }) } catch {} }
+  api.prompt(t) // 发送进对话页当前活动会话
+  if (!speak) return
+  say('好嘞，这就办')
+  const stop = watch(() => chat.streaming, (v, ov) => {
+    if (v || !ov) return
+    stop()
+    setTimeout(async () => {
+      try {
+        const msgs = chat.state?.messages || []
+        let last = null
+        for (let i = msgs.length - 1; i >= 0; i--) if (msgs[i]?.role === 'assistant') { last = msgs[i]; break }
+        let text = (last?.content || []).map(b => (b.type === 'text' ? b.text : '')).join('').trim()
+        if (!text) return
+        let out = text
+        if (text.length > 90) {
+          try {
+            const r = await fetch('/api/ai_humanize', { method: 'POST', headers: H, body: JSON.stringify({ kind: 'reply', text: text.slice(0, 4000) }) })
+            const d = (await r.json())?.structuredContent
+            if (d?.ok && d?.data) out = String(d.data)
+          } catch {}
+        }
+        say(out.slice(0, 400))
+      } catch {}
+    }, 400)
+  })
+}
+
 onMounted(() => {
   window.addEventListener('xq-open-drawer', openDrawerReq)
   pick(location.hash)
