@@ -19,6 +19,7 @@ export const chat = reactive({
   models: [],             // ModelInfo[]
   settings: null,         // 引擎设置全量（get_settings/settings 消息）
   providers: [],          // 内置供应商状态（providers_status）
+  commands: [],           // 用户命令快捷面板（list_commands → commands 消息）
   modelsCfg: [],          // 自定义模型服务（models_config → UiProviderConfig[]）
   sessions: [],           // SessionSummary[]
   conversations: [], activeConvId: '',
@@ -155,6 +156,7 @@ export function connect() {
       }
       case 'providers_status': chat.providers = m.providers || []; break
       case 'models_config': chat.modelsCfg = m.providers || []; break
+      case 'commands': chat.commands = m.commands || []; break
       case 'fetch_models_result':
       case 'clone_provider_result': {
         const w = reqWaiters.get(m.reqId)
@@ -233,6 +235,9 @@ export const api = {
   readFile(path) { return new Promise(res => { fileWaiters.set(path, res); send({ type: 'read_file', path }) }) },
   writeFile(path, text) { send({ type: 'write_file', path, text }); return true },
   reloadExtensions() { return send({ type: 'extensions_reload' }) },
+  listCommands() { return send({ type: 'list_commands' }) },
+  saveCommands(commands) { return sendSafe({ type: 'save_commands', commands }) },
+  runCommand(terminalId, command, cols, rows) { return send({ type: 'run_command', terminalId, command, cols, rows, conversationId: chat.activeConvId || chat.state?.conversationId || '' }) },
   listProviders() { return send({ type: 'list_providers' }) },
   listModelsConfig() { return send({ type: 'list_models_config' }) },
   setProviderKey(provider, apiKey) { return send({ type: 'set_provider_api_key', provider, apiKey }) },

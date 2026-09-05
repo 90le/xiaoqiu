@@ -99,7 +99,12 @@ export function createSession(cwd, opts = {}) {
     }
   })
   ro.observe(el)
-  if (!opts.attach) wsSend({ type: 'terminal_create', terminalId: id, title, locale: 'zh', cwd: cwd || '/data/data/com.pihost/files/home', cols: term.cols || 80, rows: term.rows || 24 })
+  if (opts.command) {
+    // 命令终端：创建即跑（webui run_command 同款）
+    wsSend({ type: 'run_command', terminalId: id, command: opts.command, cols: term.cols || 80, rows: term.rows || 24, conversationId: '' })
+  } else if (!opts.attach) {
+    wsSend({ type: 'terminal_create', terminalId: id, title, locale: 'zh', cwd: cwd || '/data/data/com.pihost/files/home', cols: term.cols || 80, rows: term.rows || 24 })
+  }
   return tstore.sessions[id]
 }
 

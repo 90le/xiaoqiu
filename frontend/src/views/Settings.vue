@@ -227,13 +227,28 @@ function toggleList(listName, item, key) {
 }
 function toggleSkill(s) { toggleList('disabledSkills', s, 'name') }
 function toggleExt(e) { toggleList('disabledExtensions', e, 'id') }
+const SK_PATH = (name) => '.pi/agent/skills/' + name + '/SKILL.md'
 async function viewSkill(s) {
-  skillView.value = { name: s.name, desc: s.description, text: '加载中…', enabled: s.enabled, mode: 'load' }
+  skillView.value = { name: s.name, desc: s.description, text: '加载中…', enabled: s.enabled, mode: 'load', editing: false, draft: '', origin: '' }
   try {
-    const m = await engineApi.readFile('.pi/agent/skills/' + s.name + '/SKILL.md')
+    const m = await engineApi.readFile(SK_PATH(s.name))
     skillView.value.text = m && !m.binary ? m.text : '（二进制或读取失败）'
     skillView.value.mode = 'ok'
   } catch { skillView.value.text = '读取失败'; skillView.value.mode = 'err' }
+}
+function skEdit() {
+  const sv = skillView.value
+  sv.draft = sv.text; sv.origin = sv.text; sv.editing = true
+}
+function skReset() { skillView.value.editing = false }
+const skSaved = ref(true)
+function skSave() {
+  const sv = skillView.value
+  engineApi.writeFile(SK_PATH(sv.name), sv.draft)
+  sv.text = sv.draft
+  sv.editing = false
+  skSaved.value = false
+  setTimeout(() => skSaved.value = true, 900)
 }
 function skillViewToggle() {
   const sv = skillView.value
@@ -406,6 +421,10 @@ function delPreset(p) {
   setTimeout(() => engineApi.getSettings(), 600)
 }
 const presetMsg = ref('')
+
+/* ═══ HintTip「?」：点开行内说明（移动端无 hover）═══ */
+const hintOpen = ref('') // 当前展开的提示键名
+function toggleHint(k) { hintOpen.value = hintOpen.value === k ? '' : k }
 
 /* ═══ 通用底部弹层选择器（替代原生 select 下拉）═══ */
 const setQMsg = ref('')
@@ -749,7 +768,8 @@ async function loadCfg() {
           </div>
         </div>
         <div class="thinkline">
-          <span class="thinklabel">思考</span>
+          <span class="thinklabel">思考<span class="qm tap" @click.stop="toggleHint('think')">?</span></span>
+          <div v-if="hintOpen === 'think'" class="hintline" style="width:100%;">推理强度：越高想得越深（复杂任务好）但更慢更贵；日常问答用低或关。灰显档位=当前模型不支持。</div>
           <div v-if="thinkSupported" class="thinkpills">
             <button v-for="l in thinkLevels" :key="l.v" :class="['tp', 'tap', { on: curThink === l.v, dis: !l.ok }]"
               :title="l.ok ? '' : '当前模型不支持此档位'" @click="l.ok && engineApi.setThinking(l.v)">{{ l.t }}</button>
@@ -808,7 +828,8 @@ async function loadCfg() {
       </div>
 
       <!-- 预设 -->
-      <div class="secl">预设 <em>整套设置快照（模型+思考+提示词+开关）</em>
+      <div class="secl">预设 <em>整套设置快照（模型+思考+提示词+开关）</em><span class="qm tap" @click.stop="toggleHint('preset')">?</span>
+        <div v-if="hintOpen === 'preset'" class="hintline" style="margin:6px 0 0;">预设=当前全部设置存档（模型/思考档/系统提示词/各开关），一键切换工作场景。如「极速省电：快模型+关思考」「深度攻坚：强模型+思考高」。</div>
         <span class="secl-r"><button class="minib tap" @click="presetNaming = true">＋ 存当前</button></span>
       </div>
       <div v-if="presetNaming" class="card" style="padding:12px;">
@@ -843,7 +864,10 @@ async function loadCfg() {
         </div>
         <div class="srow">
           <div class="srow-txt">
-            <div class="srow-l"><span class="srow-chip" style="background:#B85C3E;">🤖</span><span class="srow-t">bash 接管</span></div>
+            <div class="srow-l"><span class="srow-chip" style="background:#B85C3E;">🤖</span><span class="srow-t">bash 接管</span>
+              <span class="qm tap" @click.stop="toggleHint('bash')">?</span>
+            </div>
+            <div v-if="hintOpen === 'bash'" class="hintline">开启后 AI 的 bash 工具改为跑在常驻终端：命令实时可见、可随时用 terminal_input 接管交互、cd/venv 等环境跨命令保留。关闭则是一次性隐藏执行。</div>
             <div class="srow-d" style="white-space:normal;">AI 的命令在终端页「🤖 AI 命令」区实时可见，环境保留（cd / venv 不丢）</div>
           </div>
           <div :class="['sw', 'tap', { on: stBash }]" @click="setS({ terminalBash: !stBash })"><div class="knob"></div></div>
@@ -867,7 +891,10 @@ async function loadCfg() {
       <div class="grp-card">
         <div class="srow">
           <div class="srow-txt">
-            <div class="srow-l"><span class="srow-chip" style="background:#3E7C8A;">👁</span><span class="srow-t">视觉桥</span></div>
+            <div class="srow-l"><span class="srow-chip" style="background:#3E7C8A;">👁</span><span class="srow-t">视觉桥</span>
+              <span class="qm tap" @click.stop="toggleHint('vision')">?</span>
+            </div>
+            <div v-if="hintOpen === 'vision'" class="hintline">主模型不识图时的桥接：图片先交给指定的视觉模型转成文字描述，再送入对话。应用截图/拍照问答都走这里。</div>
             <div class="srow-d" style="white-space:normal;">发给 AI 的图片先由视觉模型转成文字描述（主模型不识图时的桥接）</div>
           </div>
           <div :class="['sw', 'tap', { on: stVision }]" @click="setS({ visionBridgeEnabled: !stVision })"><div class="knob"></div></div>
@@ -1013,8 +1040,18 @@ async function loadCfg() {
         <div :class="['sw', 'tap', { on: skillView.enabled }]" @click="skillViewToggle"><div class="knob"></div></div>
         <button class="minib tap" @click="skillView = null">✕</button>
       </div>
-      <div class="skview-c">{{ skillView.text }}</div>
-      <div class="skview-f">只读 · 编辑功能后续开放</div>
+      <textarea v-if="skillView.editing" v-model="skillView.draft" class="skview-ed"></textarea>
+      <div v-else class="skview-c">{{ skillView.text }}</div>
+      <div class="skview-f">
+        <template v-if="skillView.editing">
+          <button class="mini-btn tap" @click="skReset">放弃</button>
+          <button class="mini-btn tap" style="background:var(--hill);color:#fff;border-color:var(--hill);" @click="skSave">{{ skSaved ? '💾 保存' : '已保存 ✓' }}</button>
+        </template>
+        <template v-else>
+          <span>点 ✎ 可编辑技能说明</span>
+          <button class="mini-btn tap" @click="skEdit">✎ 编辑</button>
+        </template>
+      </div>
     </div>
   </div>
 </template>
@@ -1124,6 +1161,9 @@ label { display:block; font-size:13px; color:var(--muted); margin:12px 0 6px; }
 .mini-hint { font-style:normal; font-size:11px; color:var(--muted); font-weight:400; }
 
 .pickv { border:1px solid var(--line); background:var(--bg); border-radius:10px; padding:8px 12px; font-size:13px; font-weight:600; color:var(--ink); max-width:160px; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; flex-shrink:0; }
+.qm { display: inline-flex; align-items: center; justify-content: center; width: 16px; height: 16px; border-radius: 50%; border: 1px solid var(--muted); color: var(--muted); font-size: 10px; font-weight: 700; margin-left: 5px; flex-shrink: 0; }
+.hintline { font-size: 11.5px; color: var(--muted); background: var(--bg); border-radius: 8px; padding: 8px 10px; margin-top: 5px; line-height: 1.6; }
+
 .pk-row { display:flex; justify-content:space-between; align-items:center; padding:13px 16px; border-bottom:1px solid var(--line); font-size:14px; }
 .pk-row:last-child { border-bottom:0; }
 .pk-row.on { color:var(--hill); font-weight:700; background:var(--hill-soft); }
@@ -1150,6 +1190,7 @@ label { display:block; font-size:13px; color:var(--muted); margin:12px 0 6px; }
 .skview-tt { flex:1; min-width:0; }
 .skview-tt b { font-size:15px; }
 .skview-c { flex:1; overflow-y:auto; background:var(--bg); border-radius:12px; padding:12px 14px; margin:10px 0; font:12px ui-monospace,monospace; white-space:pre-wrap; line-height:1.7; max-height:60vh; }
-.skview-f { text-align:center; font-size:11px; color:var(--muted); padding:4px 0 8px; }
+.skview-ed { flex: 1; min-height: 300px; background: var(--bg); border: 1px solid var(--line); border-radius: 12px; padding: 12px; margin: 10px 0; font: 12px ui-monospace, monospace; line-height: 1.7; color: var(--ink); }
+.skview-f { display:flex; align-items:center; justify-content:center; gap:10px; font-size:11px; color:var(--muted); padding:4px 0 8px; }
 @keyframes fadein { from { opacity:0; } }
 </style>

@@ -133,6 +133,36 @@ function openAi(t) {
 
 function openShellDrawer() { window.dispatchEvent(new Event('xq-open-drawer')) }
 function showKb() { try { window.XiaoqiuBridge && window.XiaoqiuBridge.showKeyboard() } catch {} }
+/* ══ 命令快捷面板（.pi/commands.json 任务复用）═══ */
+import * as UC from '../useChat.js' // api 直用
+const cmdPanel = ref(false)
+const cmdEdit = ref(null)   // 编辑草稿 { name, command, cwd } | null
+const cmdDel = ref('')
+function openCmds() { cmdPanel.value = true; UC.api.listCommands() }
+function runCmd(def) {
+  cmdPanel.value = false
+  const cwd = (def.cwd || '').replace('\${pwd}', tstore.sessions[activeId.value]?.cwd || '')
+  const s = createSession(cwd || undefined, { title: def.name || '命令', command: def.command })
+  if (s) nextTick(() => activate(s.id))
+}
+function editCmd(def, idx) {
+  cmdEdit.value = def ? { idx, name: def.name, command: def.command, cwd: def.cwd || '' } : { idx: -1, name: '', command: '', cwd: '' }
+}
+function delCmd(def, idx) {
+  if (cmdDel.value !== def?.name) { cmdDel.value = def?.name || ''; setTimeout(() => cmdDel.value = '', 2500); return }
+  const next = chat.commands.filter((_, i) => i !== idx)
+  UC.api.saveCommands(next)
+  cmdDel.value = ''
+}
+function saveCmd() {
+  const d = cmdEdit.value
+  if (!d || !d.name.trim() || !d.command.trim()) return
+  const cur = [...chat.commands]
+  if (d.idx >= 0) cur[d.idx] = { name: d.name.trim(), command: d.command.trim(), ...(d.cwd.trim() ? { cwd: d.cwd.trim() } : {}) }
+  else cur.push({ name: d.name.trim(), command: d.command.trim(), ...(d.cwd.trim() ? { cwd: d.cwd.trim() } : {}) })
+  UC.api.saveCommands(cur)
+  cmdEdit.value = null
+}
 /* ══ 选区复制（浏览器式）：长按选词 → 双拖柄调整 → 复制 ══
  * xterm 画布无原生选择，自绘：像素↔单元格换算 + 高亮框 + 起止拖柄 */
 const sel = reactive({ on: false, a: null, b: null, bar: null, busy: '' }) // a/b = {col,row} buffer 绝对
@@ -433,6 +463,7 @@ onUnmounted(() => {
         </div>
       </div>
       <button class="tb newb tap" @click="newTerm">＋</button>
+      <button class="tb tap" title="命令面板" @click="openCmds">⌘</button>
     </header>
 
     <!-- 终端舞台：pane 由会话池借入（长按=选词复制，拖柄=调范围） -->
@@ -445,6 +476,39 @@ onUnmounted(() => {
           @touchstart.stop.prevent="hTouchStart(h.side, $event)" @touchmove.stop.prevent="hTouchMove(h.side, $event)" @touchend.stop="selEndDrag"></div>
       </template>
     </div>
+    <!-- 命令快捷面板 -->
+    <div v-if="cmdPanel" class="skview2" @click="cmdPanel = false">
+      <div class="skview-b2" @click.stop>
+        <div class="skview-h2">
+          <b>命令快捷面板</b>
+          <button class="minib tap" @click="editCmd(null)">＋ 新建</button>
+          <button class="minib tap" @click="cmdPanel = false">✕</button>
+        </div>
+        <!-- 编辑/新建 -->
+        <div v-if="cmdEdit" class="cmdform">
+          <input v-model="cmdEdit.name" placeholder="名称（如：看日志）">
+          <input v-model="cmdEdit.command" placeholder="命令（如：tail -f ~/pui.log）" style="font-family:ui-monospace,monospace;font-size:12px;">
+          <input v-model="cmdEdit.cwd" placeholder="工作目录（可选，${pwd}=当前）" style="font-family:ui-monospace,monospace;font-size:12px;">
+          <div style="display:flex;gap:8px;margin-top:8px;">
+            <button class="minib tap" style="flex:1;padding:9px;" @click="cmdEdit = null">取消</button>
+            <button class="goonb tap" style="flex:1;padding:9px;border:0;border-radius:9px;background:var(--hill,#3E7C59);color:#fff;font-size:13px;font-weight:700;" @click="saveCmd">保存</button>
+          </div>
+        </div>
+        <!-- 列表 -->
+        <template v-else>
+          <div v-for="(def, i) in chat.commands" :key="def.name + i" class="cmdrow">
+            <div class="cmdrow-t tap" @click="runCmd(def)">
+              <b>{{ def.name }}</b>
+              <span class="cmddim">{{ def.command }}</span>
+            </div>
+            <button class="minib tap" @click="editCmd(def, i)">✎</button>
+            <button class="minib tap" :style="cmdDel === def.name ? { background:'#C24B3C', color:'#fff', borderColor:'#C24B3C' } : { color:'#C24B3C' }" @click="delCmd(def, i)">🗑</button>
+          </div>
+          <div v-if="!chat.commands.length" class="cmdempty">暂无命令 · 「＋新建」把常用命令固化为一键任务</div>
+        </template>
+      </div>
+    </div>
+
     <!-- 回到底部（滚离时出现） -->
     <button v-if="scrolledUp" class="tobottom tap" @touchstart.prevent="goBottom">↓ 最新</button>
     <!-- 选区工具条 -->
@@ -549,6 +613,19 @@ onUnmounted(() => {
 <style scoped>
 .termwrap { position: fixed; inset: 0; background: #0d0e12; display: flex; flex-direction: column; z-index: 10; overflow: hidden; }
 .tabs { display: flex; align-items: center; gap: 5px; padding: 6px 8px; background: #14161c; border-bottom: 1px solid #23262e; }
+.skview2 { position: fixed; inset: 0; z-index: 42; background: rgba(8,10,14,.55); display: flex; align-items: flex-end; animation: selin .15s ease; }
+.skview-b2 { background: #171a21; border: 1px solid #2a2e39; border-radius: 18px 18px 0 0; width: 100%; max-height: 72vh; overflow-y: auto; padding: 12px 12px 18px; animation: upin .2s ease; }
+@keyframes upin { from { transform: translateY(40px); } }
+.skview-h2 { display: flex; align-items: center; gap: 8px; padding: 4px 4px 10px; }
+.skview-h2 b { flex: 1; font-size: 15px; color: #dcddde; }
+.cmdform { background: #1e222b; border: 1px solid #2a2e39; border-radius: 12px; padding: 10px; display: flex; flex-direction: column; gap: 8px; margin-bottom: 8px; }
+.cmdform input { background: #12151b; border: 1px solid #2a2e39; border-radius: 8px; padding: 10px; font-size: 13px; color: #dcddde; }
+.cmdrow { display: flex; align-items: center; gap: 6px; padding: 9px 4px; border-bottom: 1px solid #23262e; }
+.cmdrow-t { flex: 1; min-width: 0; }
+.cmdrow-t b { font-size: 14px; color: #dcddde; display: block; }
+.cmddim { font-size: 11px; color: #6b7076; font-family: ui-monospace, monospace; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; display: block; max-width: 72vw; }
+.cmdempty { text-align: center; color: #6b7076; font-size: 13px; padding: 26px 10px; }
+
 .tobottom { position: fixed; left: 50%; transform: translateX(-50%); bottom: 126px; z-index: 30; background: rgba(30,33,42,.94); color: #a78bfa; border: 1px solid #3a3560; border-radius: 99px; font-size: 12.5px; font-weight: 700; padding: 8px 18px; box-shadow: 0 6px 18px rgba(0,0,0,.4); animation: selin .16s ease; }
 
 /* ══ 选区复制 ══ */
