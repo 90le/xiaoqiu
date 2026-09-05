@@ -17,13 +17,7 @@ function tabPress(s, e) {
 }
 function tabRelease() { if (pressTimer) clearTimeout(pressTimer); pressTimer = null }
 const keysMode = ref('bar')     // bar（收缩：核心键） | full（展开：+扩展行）——常驻底部无悬浮球
-// 完整键盘布局（QWERTY；press() 应用 CTRL/ALT/SHIFT 粘滞组合）
-const kbRows = [
-  ['1', '2', '3', '4', '5', '6', '7', '8', '9', '0'],
-  ['q', 'w', 'e', 'r', 't', 'y', 'u', 'i', 'o', 'p'],
-  ['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l'],
-  ['z', 'x', 'c', 'v', 'b', 'n', 'm'],
-]
+// 编程符号（输入法难打的）——展开态横滚行
 const kbSyms = ['`', '~', '|', '-', '/', '\\', ':', ';', '\'', '"', '[', ']', '{', '}', '<', '>', '(', ')', '$', '#', '%', '&', '*', '+', '=', '_', '!', '?', '@', '^', '.']
 const dpadOff = ref(localStorage.getItem('xq_dpad_off') === '1')  // 悬浮方向键
 function saveDpad(off) { try { localStorage.setItem('xq_dpad_off', off ? '1' : '0') } catch {} }
@@ -130,31 +124,30 @@ onUnmounted(() => {
     <!-- 终端舞台：pane 由会话池借入 -->
     <div ref="stage" class="stage"></div>
 
-    <!-- 虚拟按键 v6：常驻两行编程精选 + 可展开完整键盘 -->
+    <!-- 虚拟按键 v7：职责分离——打字归输入法，这里只放修饰/组合/功能/符号 -->
     <div class="vkeys">
-      <!-- 展开态：完整键盘（数字/字母/符号/修饰底条） -->
-      <div v-if="keysMode === 'full'" class="kbpanel">
-        <div class="kbr" v-for="(row, ri) in kbRows" :key="'kr' + ri">
-          <button v-for="k in row" :key="k" class="kk tap" @click="press(k)">{{ shiftOn ? k.toUpperCase() : k }}</button>
-          <button v-if="ri === 2" class="kk wide tap" @click="raw('\x7f')">⌫</button>
+      <!-- 展开态：两行横滚（编程符号 + 次级功能） -->
+      <div v-if="keysMode === 'full'" class="kwrap extra">
+        <div class="kscroll">
+          <button v-for="s2 in kbSyms" :key="s2" class="vk sym tap" @click="press(s2)">{{ s2 }}</button>
         </div>
-        <div class="kbr sym-r">
-          <button v-for="s2 in kbSyms" :key="s2" class="kk sym tap" @click="press(s2)">{{ s2 }}</button>
-        </div>
-        <div class="kbr bot">
-          <button class="kk mod tap" :class="{ on: ctrlOn }" @click="press('CTRL')">CTRL</button>
-          <button class="kk mod tap" :class="{ on: altOn }" @click="press('ALT')">ALT</button>
-          <button class="kk mod tap" :class="{ on: shiftOn }" @click="press('SHIFT')">SHIFT</button>
-          <button class="kk tap" @click="raw('\x1b')">ESC</button>
-          <button class="kk tap" @click="raw('\t')">TAB</button>
-          <button class="kk cc tap" @click="raw('\x03')">^C</button>
-          <button class="kk spc tap" @click="raw(' ')">空格</button>
-          <button class="kk enter tap" @click="raw('\r')">⏎</button>
-          <button class="kk tog on tap" @click="keysMode = 'bar'">▴</button>
+        <div class="kscroll">
+          <button class="vk alt tap" @click="raw('\x1bb')">A·B</button>
+          <button class="vk alt tap" @click="raw('\x1bf')">A·F</button>
+          <button class="vk alt tap" @click="raw('\x1bd')">A·D</button>
+          <button class="vk alt tap" @click="raw('\x1b.')">A·.</button>
+          <button class="vk cc tap" @click="raw('\x12')">^R</button>
+          <button class="vk cc tap" @click="raw('\x0b')">^K</button>
+          <button class="vk cc tap" @click="raw('\x19')">^Y</button>
+          <button class="vk cc tap" @click="raw('\x10')">^P</button>
+          <button class="vk cc tap" @click="raw('\x0e')">^N</button>
+          <button class="vk tap" @click="raw('\x1b[2~')">INS</button>
+          <button class="vk tap" @click="raw('\x7f')">DEL</button>
+          <button class="vk tap" @click="raw(' ')">SPC</button>
         </div>
       </div>
-      <!-- 常态：两行编程精选（可横滚） -->
-      <div v-else class="kwrap">
+      <!-- 常态：两行编程高频 -->
+      <div class="kwrap">
         <div class="kscroll">
           <button class="vk kb tap" @click="showKb">⌨</button>
           <button class="vk mod tap" :class="{ on: ctrlOn }" @click="press('CTRL')">CTRL</button>
@@ -164,29 +157,19 @@ onUnmounted(() => {
           <button class="vk tap" @click="raw('\t')">TAB</button>
           <button class="vk enter tap" @click="raw('\r')">⏎</button>
           <button class="vk cc tap" @click="raw('\x03')">^C</button>
-          <button class="vk cc tap" @click="raw('\x0c')">^L</button>
-          <button class="vk cc tap" @click="raw('\x04')">^D</button>
+          <button class="vk tap" @click="raw('\x7f')">⌫</button>
         </div>
         <div class="kscroll">
+          <button class="vk cc tap" @click="raw('\x04')">^D</button>
+          <button class="vk cc tap" @click="raw('\x1a')">^Z</button>
           <button class="vk cc tap" @click="raw('\x15')">^U</button>
           <button class="vk cc tap" @click="raw('\x17')">^W</button>
-          <button class="vk cc tap" @click="raw('\x12')">^R</button>
-          <button class="vk cc tap" @click="raw('\x01')">^A</button>
-          <button class="vk cc tap" @click="raw('\x05')">^E</button>
-          <button class="vk cc tap" @click="raw('\x0b')">^K</button>
-          <button class="vk cc tap" @click="raw('\x19')">^Y</button>
-          <button class="vk cc tap" @click="raw('\x1a')">^Z</button>
+          <button class="vk cc tap" @click="raw('\x0c')">^L</button>
           <button class="vk tap" @click="raw('\x1b[H')">HOME</button>
           <button class="vk tap" @click="raw('\x1b[F')">END</button>
           <button class="vk tap" @click="raw('\x1b[5~')">PGUP</button>
           <button class="vk tap" @click="raw('\x1b[6~')">PGDN</button>
-          <button class="vk tap" @click="raw('\x1b[2~')">INS</button>
-          <button class="vk tap" @click="raw('\x7f')">DEL</button>
-          <button class="vk alt tap" @click="raw('\x1bb')">A·B</button>
-          <button class="vk alt tap" @click="raw('\x1bf')">A·F</button>
-          <button class="vk alt tap" @click="raw('\x1bd')">A·D</button>
-          <button class="vk tap" @click="raw(' ')">SPC</button>
-          <button class="vk tog tap" @click="keysMode = 'full'">▾</button>
+          <button class="vk tog tap" :class="{ on: keysMode === 'full' }" @click="keysMode = keysMode === 'full' ? 'bar' : 'full'">{{ keysMode === 'full' ? '▴' : '▾' }}</button>
         </div>
       </div>
     </div>
@@ -247,22 +230,8 @@ onUnmounted(() => {
 .kwrap { display: flex; flex-direction: column; gap: 5px; }
 .kscroll { display: flex; gap: 5px; overflow-x: auto; scrollbar-width: none; flex: 1; min-width: 0; padding: 1px 0; align-items: center; }
 .kscroll::-webkit-scrollbar { display: none; }
-/* 展开态：完整键盘 */
-.kbpanel { display: flex; flex-direction: column; gap: 5px; animation: kslide .16s ease; }
-.kbr { display: flex; gap: 5px; }
-.kbr.sym-r { overflow-x: auto; scrollbar-width: none; padding-bottom: 1px; }
-.kbr.sym-r::-webkit-scrollbar { display: none; }
-.kk { flex: 1; min-width: 0; height: 42px; background: #232735; color: #dfe4ec; border: 1px solid #2e3342; border-radius: 8px; font-size: 15px; font-family: ui-monospace, monospace; }
-.kk:active { background: #2f3446; }
-.kk.wide { flex: 1.6; font-size: 13px; color: #e08585; background: #2a1d1d; border-color: #4a2626; }
-.kk.sym { flex: 0 0 auto; min-width: 34px; padding: 0 6px; font-size: 13.5px; }
-.kk.mod { flex: 1.4; font-size: 11.5px; color: #a78bfa; background: #232635; border-color: #3d3560; }
-.kk.mod.on { background: #8b5cf6; color: #fff; }
-.kk.cc { color: #7dd3a8; background: #182227; border-color: #24402f; font-size: 12px; flex: 1.2; }
-.kk.enter { color: #7dd3a8; background: #16321f; border-color: #2a5a3a; flex: 1.3; }
-.kk.spc { flex: 5; font-size: 12.5px; color: #aeb6c4; }
-.kk.tog { flex: 1.1; color: #a78bfa; font-size: 13px; }
-.kk.tog.on { background: #2b2440; }
+/* 展开态：两行横滚（与常驻同构，滑入） */
+.kwrap.extra { animation: kslide .16s ease; margin-bottom: 5px; }
 .vk.tog { color: #a78bfa; }
 .vk.tog.on { background: #2b2440; }
 /* 悬浮 D-pad（终端区右缘竖排锚定） */
