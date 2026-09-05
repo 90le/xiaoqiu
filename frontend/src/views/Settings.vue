@@ -260,10 +260,17 @@ const modelGroups = computed(() => {
   return g
 })
 const curModelId = computed(() => chat.state?.model?.id)
-const THINK_LEVELS = [
+const THINK_BASE = [
   { v: 'off', t: '关' }, { v: 'minimal', t: '极简' }, { v: 'low', t: '低' },
   { v: 'medium', t: '中' }, { v: 'high', t: '高' }, { v: 'xhigh', t: '极高' }, { v: 'max', t: '最大' },
 ]
+// 支持档位亮色可点，不支持灰显禁点（availableThinkingLevels 与 Chat.vue 同源）
+const thinkLevels = computed(() => {
+  const avail = chat.state?.availableThinkingLevels
+  const ok = Array.isArray(avail) && avail.length ? new Set(avail) : null
+  return THINK_BASE.map(l => ({ ...l, ok: ok ? ok.has(l.v) : true }))
+})
+const thinkSupported = computed(() => thinkLevels.value.some(l => l.ok && l.v !== 'off'))
 const curThink = computed(() => chat.state?.thinkingLevel || 'off')
 
 /* 内置供应商 key 弹层 */
@@ -382,19 +389,19 @@ const presetDel = ref('')
 function doSavePreset() {
   const n = presetName.value.trim()
   if (!n) return
-  wsSend({ type: 'save_preset', name: n })
+  engineApi.sendSafe({ type: 'save_preset', name: n })
   presetNaming.value = false; presetName.value = ''
   setTimeout(() => engineApi.getSettings(), 600)
 }
 function applyPreset(p) {
-  wsSend({ type: 'apply_preset', name: p.name })
+  engineApi.sendSafe({ type: 'apply_preset', name: p.name })
   setTimeout(() => engineApi.getSettings(), 800)
   presetMsg.value = '已应用「' + p.name + '」'
   setTimeout(() => presetMsg.value = '', 2500)
 }
 function delPreset(p) {
   if (presetDel.value !== p.name) { presetDel.value = p.name; setTimeout(() => presetDel.value = '', 2500); return }
-  wsSend({ type: 'delete_preset', name: p.name })
+  engineApi.sendSafe({ type: 'delete_preset', name: p.name })
   presetDel.value = ''
   setTimeout(() => engineApi.getSettings(), 600)
 }
@@ -729,15 +736,20 @@ async function loadCfg() {
         <div class="curm">
           <span class="srow-chip big" :style="{ background: chipColor(curModelId || '?') }">AI</span>
           <div style="flex:1;min-width:0;">
-            <div class="curm-n">{{ chat.state?.model?.name || chat.state?.model?.id || '—' }}</div>
+            <div class="curm-n">{{ chat.state?.model?.name || chat.state?.model?.id || '—' }}
+              <span v-if="chat.state?.model?.vision" class="pill dim-pill">👁 视觉</span>
+              <span v-if="chat.state?.model?.reasoning" class="pill dim-pill">🧠 思考</span>
+            </div>
             <div class="curm-p">{{ chat.state?.model?.provider || '' }}</div>
           </div>
         </div>
         <div class="thinkline">
           <span class="thinklabel">思考</span>
-          <div class="thinkpills">
-            <button v-for="l in THINK_LEVELS" :key="l.v" :class="['tp', 'tap', { on: curThink === l.v }]" @click="engineApi.setThinking(l.v)">{{ l.t }}</button>
+          <div v-if="thinkSupported" class="thinkpills">
+            <button v-for="l in thinkLevels" :key="l.v" :class="['tp', 'tap', { on: curThink === l.v, dis: !l.ok }]"
+              :title="l.ok ? '' : '当前模型不支持此档位'" @click="l.ok && engineApi.setThinking(l.v)">{{ l.t }}</button>
           </div>
+          <span v-else class="muted" style="font-size:12px;">当前模型不支持思考档</span>
         </div>
       </div>
 
@@ -753,7 +765,7 @@ async function loadCfg() {
         <div class="grp-card">
           <div v-for="m in list" :key="m.id" class="srow tap" @click="engineApi.setModel(m.id)">
             <div class="srow-txt">
-              <div class="srow-t">{{ m.name }}</div>
+              <div class="srow-t">{{ m.name }}<span v-if="m.vision || m.reasoning" class="mbadges"><i v-if="m.vision">👁</i><i v-if="m.reasoning">🧠</i></span></div>
             </div>
             <span v-if="m.id === curModelId" class="pill ok-pill">当前 ✓</span>
           </div>
@@ -1120,6 +1132,9 @@ label { display:block; font-size:13px; color:var(--muted); margin:12px 0 6px; }
 .thinkpills { display:flex; gap:5px; flex-wrap:wrap; }
 .tp { border:1px solid var(--line); background:var(--card); border-radius:99px; padding:5px 11px; font-size:12px; font-weight:600; color:var(--muted); }
 .tp.on { background:var(--hill); border-color:var(--hill); color:#fff; }
+.tp.dis { opacity:.32; }
+.mbadges { margin-left:5px; font-size:11px; font-style:normal; }
+.mbadges i { font-style:normal; margin-left:2px; }
 .prow-h { font-size:12px; font-weight:700; color:var(--muted); margin:12px 4px 6px; letter-spacing:.5px; }
 .prow-h em { font-style:normal; font-weight:400; margin-left:6px; opacity:.7; }
 

@@ -71,6 +71,9 @@ function applyDelta(st, msg) {
 
 // 每会话 delta 序号（webui 丢序检测：跳号=有 delta 丢失→防抖对账）
 const lastDeltaSeq = new Map()
+// ws 未连上时的设置类消息排队（ready 后冲刷）——防"点了开关但没发出去"
+const pendingQ = []
+function flushQ() { while (pendingQ.length) { const m = pendingQ.shift(); try { send(m) } catch {} } }
 // 文件读取一次性等待表（read_file → file_content 按路径匹配）
 const fileWaiters = new Map()
 // reqId 匹配的一次性等待表（fetch_models_result / clone_provider_result）
@@ -111,6 +114,7 @@ export function connect() {
         send({ type: 'list_projects' })
         send({ type: 'list_sessions' })
         send({ type: 'get_settings' })
+        flushQ()
         break
       case 'snapshot':
         // 权威快照：整体替换 + 重启 delta 序号追踪（webui 同款）
@@ -217,7 +221,15 @@ export const api = {
   newChat() { return send({ type: 'new_chat' }) },
   setModel(modelId) { return send({ type: 'set_model', modelId }) },
   getSettings() { return send({ type: 'get_settings' }) },
-  setSettings(patch) { return send({ type: 'set_settings', ...patch }) },
+  setSettings(patch) {
+    const msg = { type: 'set_settings', ...patch }
+    if (chat.status === 'open') return send(msg)
+    pendingQ.push(msg); return false // 排队，连接就绪自动发
+  },
+  sendSafe(msg) {
+    if (chat.status === 'open') return send(msg)
+    pendingQ.push(msg); return false
+  },
   readFile(path) { return new Promise(res => { fileWaiters.set(path, res); send({ type: 'read_file', path }) }) },
   writeFile(path, text) { send({ type: 'write_file', path, text }); return true },
   reloadExtensions() { return send({ type: 'extensions_reload' }) },
