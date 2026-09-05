@@ -33,7 +33,8 @@ public class MainActivity extends Activity {
 
     private WebView web;
     private TextView splash;
-    private android.webkit.ValueCallback<android.net.Uri[]> fileCb; // 网页文件选择回调
+    private android.webkit.ValueCallback<android.net.Uri[]> fileCb;
+    android.net.Uri camUri; // 拍照占位 URI
     private final java.util.concurrent.atomic.AtomicBoolean stopFlag =
             new java.util.concurrent.atomic.AtomicBoolean(false);
     private volatile boolean recording = false;
@@ -66,10 +67,34 @@ public class MainActivity extends Activity {
                 fileCb = cb;
                 try {
                     String[] acc = params != null ? params.getAcceptTypes() : new String[0];
-                    String mime = (acc.length > 0 && acc[0] != null && acc[0].contains("image")) ? "image/*" : "*/*";
-                    Intent i = new Intent(Intent.ACTION_GET_CONTENT);
+                    String a0 = (acc.length > 0 && acc[0] != null) ? acc[0] : "";
+                    boolean wantCapture = params != null && params.isCaptureEnabled();
+                    Intent i;
+                    if (wantCapture && a0.contains("video")) {
+                        // 录像：系统相机直接回传 content:// URI
+                        i = new Intent(android.provider.MediaStore.ACTION_VIDEO_CAPTURE);
+                        i.putExtra(android.provider.MediaStore.EXTRA_VIDEO_QUALITY, 1);
+                        i.putExtra(android.provider.MediaStore.EXTRA_SIZE_LIMIT, 22L * 1024 * 1024);
+                        startActivityForResult(i, 7702);
+                        return true;
+                    }
+                    if (wantCapture && a0.contains("image")) {
+                        // 拍照：MediaStore 占位 URI（相机写入公共相册，免 FileProvider）
+                        android.content.ContentValues cv = new android.content.ContentValues();
+                        cv.put(android.provider.MediaStore.Images.Media.DISPLAY_NAME, "xq_cam_" + System.currentTimeMillis() + ".jpg");
+                        cv.put(android.provider.MediaStore.Images.Media.MIME_TYPE, "image/jpeg");
+                        camUri = getContentResolver().insert(android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI, cv);
+                        i = new Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE);
+                        i.putExtra(android.provider.MediaStore.EXTRA_OUTPUT, camUri);
+                        startActivityForResult(i, 7703);
+                        return true;
+                    }
+                    // 普通文件（支持多选）
+                    String mime = a0.contains("image") ? "image/*" : a0.contains("video") ? "video/*" : "*/*";
+                    i = new Intent(Intent.ACTION_GET_CONTENT);
                     i.addCategory(Intent.CATEGORY_OPENABLE);
                     i.setType(mime);
+                    i.putExtra(Intent.EXTRA_ALLOW_MULTIPLE, true); // 关键：多选
                     startActivityForResult(Intent.createChooser(i, "选择文件"), 7701);
                 } catch (Exception e) {
                     fileCb = null;
@@ -235,11 +260,31 @@ public class MainActivity extends Activity {
     }
 
     @Override protected void onActivityResult(int req, int res, Intent data) {
-        if (req == 7701 && fileCb != null) {
+        if (fileCb != null && (req == 7701 || req == 7702 || req == 7703)) {
             android.net.Uri[] uris = null;
-            if (res == -1 && data != null && data.getData() != null) uris = new android.net.Uri[]{ data.getData() };
+            try {
+                if (res == -1) {
+                    if (req == 7703) { // 拍照：占位 URI 即成品
+                        uris = camUri != null ? new android.net.Uri[]{ camUri } : null;
+                    } else if (req == 7702) { // 录像：回传 URI
+                        uris = data != null && data.getData() != null ? new android.net.Uri[]{ data.getData() } : null;
+                    } else { // 文件多选：clipData 优先，单 data 兜底
+                        java.util.ArrayList<android.net.Uri> list = new java.util.ArrayList<>();
+                        if (data != null) {
+                            android.content.ClipData cd = data.getClipData();
+                            if (cd != null) for (int i = 0; i < cd.getItemCount(); i++) {
+                                android.net.Uri u = cd.getItemAt(i).getUri();
+                                if (u != null) list.add(u);
+                            }
+                            if (list.isEmpty() && data.getData() != null) list.add(data.getData());
+                        }
+                        uris = list.toArray(new android.net.Uri[0]);
+                    }
+                }
+            } catch (Exception ignore) {}
             try { fileCb.onReceiveValue(uris); } catch (Exception ignore) {}
             fileCb = null;
+            if (req == 7703) camUri = null;
             return;
         }
         super.onActivityResult(req, res, data);

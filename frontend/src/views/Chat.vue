@@ -157,8 +157,27 @@ const editId = ref('')
 // pi 引擎询问面板（extension ui.select/confirm/input → dialog 推送）
 const dlg = reactive({ id: 0, kind: '', title: '', args: [], input: '', sel: 0, show: false })
 // ⋯ 更多菜单：更新检查（webui check_updates_all）+ 后台任务（bg_servers）
-const updatesAll = reactive({ loading: false, items: [] })
-watch(() => chat.updatesAll, (v) => { if (v) { updatesAll.items = v; updatesAll.loading = false } })
+const updatesAll = reactive({ loading: false, items: [], at: 0 })
+watch(() => chat.updatesAll, (v) => { if (v) { updatesAll.items = v; updatesAll.loading = false; updatesAll.at = Date.now() } })
+const hasUpdates = computed(() => updatesAll.items.some(u => !u.upToDate && !u.error))
+// webui buildUpdateCommand 规则：package→pi update npm:<name>；pi-core/webui→npm i -g <name>@latest
+const updCmd = u => u.kind === 'package' ? 'pi update npm:' + u.name : 'npm i -g ' + u.name + '@latest'
+function copyText(txt, tip) {
+  navigator.clipboard?.writeText(txt).then(() => warn(tip), () => warn('复制失败'))
+}
+function copyUpdateCmd(u) {
+  if (u.upToDate || u.error) return
+  copyText(updCmd(u), '已复制：' + updCmd(u))
+}
+function copyAllUpdates() {
+  const list = updatesAll.items.filter(u => !u.upToDate && !u.error)
+  copyText(list.map(updCmd).join('; '), '已复制 ' + list.length + ' 条更新命令')
+}
+function fmtAge(ts) {
+  const s = Math.max(0, Math.floor((Date.now() - ts) / 1000))
+  return s < 60 ? s + '秒' : s < 3600 ? Math.floor(s / 60) + '分' : Math.floor(s / 3600) + '时'
+}
+function copyAddr(s) { copyText('http://127.0.0.1:' + s.port, '已复制 ' + s.port + ' 地址') }
 function openUpdates(force) {
   menu.value = 'updates'
   updatesAll.loading = true; updatesAll.items = []
@@ -313,12 +332,16 @@ function submit(queue = false) {
     autoGrow()
   }
 }
-function pickFile() { fileEl.value?.click() }
+// 📎 动作面板：文件(多) / 拍照 / 录像
+function pickFile() { menu.value = ''; nextTick(() => fileEl.value?.click()) }
+const camEl = ref(null), vidEl = ref(null)
+function takePhoto() { menu.value = ''; nextTick(() => camEl.value?.click()) }
+function takeVideo() { menu.value = ''; nextTick(() => vidEl.value?.click()) }
 // webui handleFiles 同款：多选 → 栅格图片走视觉管线（非视觉模型拒绝）+ 其它文件 b64 直传
 function onFile(e) {
   const files = Array.from(e.target.files || [])
   e.target.value = '' // 允许重复选同一文件
-  const isImg = f => /^image\/(png|jpe?g|gif|webp|bmp)$/.test(f.type)
+  const isImg = f => /^image\/(png|jpe?g|gif|webp|bmp)$/.test(f.type) // 视频走文件通道
   const imgs = files.filter(isImg), others = files.filter(f => !isImg(f))
   if (imgs.length && st.value?.model && !st.value.model.vision) {
     warn('当前模型不支持图片，已跳过 ' + imgs.length + ' 张图（可换 👁 视觉模型）')
@@ -394,24 +417,35 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
     <!-- ═══ 顶栏：历史 | 模型▾ | 思考▾ | 新对话 ═══ -->
     <header class="top">
       <button class="tb tap" title="工作台" @click="openShellDrawer">☰</button>
-      <button class="tb tap" title="历史会话" @click="menu = 'sessions'; api.listSessions()">🗂</button>
       <button class="tb name tap" @click="menu = menu === 'model' ? '' : 'model'">
         {{ st?.model?.name || '模型' }}{{ st?.model?.vision ? ' 👁' : '' }} <span class="car">▾</span>
       </button>
       <button class="tb tap" @click="menu = menu === 'think' ? '' : 'think'">
-        🧠 {{ thinkLabel(st?.thinkingLevel) }} <span class="car">▾</span>
+        🧠{{ thinkLabel(st?.thinkingLevel) }} <span class="car">▾</span>
       </button>
       <span class="sp"></span>
-      <button v-if="chat.status !== 'open'" class="tb warn tap" @click="connect()">↻ {{ chat.status === 'connecting' ? '连接中…' : '重连(' + (chat.retryIn || 1) + 's)' }}</button>
-      <button v-if="st?.isStreaming" class="tb stop tap" @click="doAbort">⏹ 停止</button>
+      <button v-if="chat.status !== 'open'" class="tb warn tap" @click="connect()">↻{{ chat.retryIn || 1 }}s</button>
+      <button v-if="st?.isStreaming" class="tb stop tap" @click="doAbort">⏹</button>
       <button class="tb tap" title="新对话" @click="api.newChat()">✚</button>
       <button class="tb tap" title="更多" @click="menu = menu === 'more' ? '' : 'more'">⋯</button>
     </header>
 
+    <!-- 📎 附件动作面板 -->
+    <div v-if="menu === 'attach'" class="backdrop tap" @click="menu = ''"></div>
+    <div v-if="menu === 'attach'" class="sheet">
+      <div class="shd">插入附件</div>
+      <div class="sgrid">
+        <button class="sitem tap" @touchstart.prevent="pickFile"><span class="sico">📁</span>文件（可多选）</button>
+        <button class="sitem tap" @touchstart.prevent="takePhoto"><span class="sico">📷</span>拍照</button>
+        <button class="sitem tap" @touchstart.prevent="takeVideo"><span class="sico">🎬</span>录像</button>
+      </div>
+      <button class="scancel tap" @touchstart.prevent="menu = ''">取消</button>
+    </div>
+
     <!-- ⋯ 更多菜单（webui TopBar 溢出菜单同款） -->
     <div v-if="menu === 'more'" class="backdrop tap" @click="menu = ''"></div>
     <div v-if="menu === 'more'" class="drop small moremenu">
-      <div class="di tap" @click="menu = 'sessions'; api.listSessions()">🔍 全局搜索会话</div>
+      <div class="di tap" @click="menu = 'sessions'; api.listSessions()">🗂 会话历史与搜索</div>
       <div class="di tap" @click="openUpdates">⬇ 检查更新</div>
       <div class="di tap" @click="openBgTasks">▤ 后台任务</div>
       <div class="di tap" @click="goSettings">⚙ 设置</div>
@@ -419,25 +453,34 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
 
     <!-- 检查更新弹窗 -->
     <div v-if="menu === 'updates'" class="backdrop tap" @click="menu = ''"></div>
-    <div v-if="menu === 'updates'" class="drop small">
-      <div class="dh">组件更新检查</div>
+    <div v-if="menu === 'updates'" class="drop small updbox">
+      <div class="dh">组件更新检查<span class="dhsub">{{ updatesAll.at ? '· ' + new Date(updatesAll.at).toLocaleTimeString('zh', { hour12: false }) : '' }}</span></div>
       <div v-if="updatesAll.loading" class="dh muted">检查中…</div>
-      <div v-for="(u, i) in updatesAll.items" :key="i" class="updrow">
-        <b>{{ u.name }}</b><span class="updm">{{ u.current }}{{ u.latest ? ' → ' + u.latest : '' }}</span>
-        <span class="updst" :class="u.error ? 'err' : u.upToDate ? 'ok' : 'avail'">{{ u.error ? '失败' : u.upToDate ? '✓ 最新' : '有更新' }}</span>
+      <div v-for="(u, i) in updatesAll.items" :key="i" class="updrow tap" :class="{ stale: !u.upToDate && !u.error }"
+        @touchstart.prevent="copyUpdateCmd(u)">
+        <b>{{ u.name }}</b>
+        <span class="updm">{{ u.current }}{{ u.latest ? ' → ' + u.latest : '' }}</span>
+        <span class="updst" :class="u.error ? 'err' : u.upToDate ? 'ok' : 'avail'">{{ u.error ? '失败' : u.upToDate ? '✓ 最新' : '点复制命令' }}</span>
       </div>
-      <div class="dfoot"><button class="dfb tap" @click="openUpdates(true)">↻ 重新检查</button></div>
+      <div v-if="!updatesAll.loading && !updatesAll.items.length" class="dh muted">无组件信息</div>
+      <div class="dfoot">
+        <button v-if="hasUpdates" class="dfb main tap" @touchstart.prevent="copyAllUpdates">📋 复制全部更新命令</button>
+        <button class="dfb tap" @touchstart.prevent="openUpdates(true)">↻ 重新检查</button>
+      </div>
     </div>
 
     <!-- 后台任务弹窗 -->
     <div v-if="menu === 'bgtasks'" class="backdrop tap" @click="menu = ''"></div>
-    <div v-if="menu === 'bgtasks'" class="drop small">
-      <div class="dh">后台任务（AI 启动的服务器）</div>
+    <div v-if="menu === 'bgtasks'" class="drop small updbox">
+      <div class="dh">后台任务<span class="dhsub">AI 启动的本地服务器</span></div>
       <div v-for="(s, i) in chat.bgServers" :key="i" class="updrow">
-        <b>:{{ s.port }}</b><span class="updm">{{ s.name || s.taskId?.slice(0, 8) }}</span>
-        <button class="updk tap" @touchstart.prevent="killBg(s)">✕ 停止</button>
+        <b class="bgdot">●</b><b>:{{ s.port }}</b>
+        <span class="updm">{{ s.name || 'server' }}<i v-if="s.startedAt" class="bgage">· 已运行 {{ fmtAge(s.startedAt) }}</i></span>
+        <button class="updk tap" @touchstart.prevent="copyAddr(s)">📋 地址</button>
+        <button class="updk kill tap" @touchstart.prevent="killBg(s)">停止</button>
       </div>
       <div v-if="!chat.bgServers?.length" class="dh muted">当前没有后台任务</div>
+      <div class="dfoot"><button class="dfb tap" @touchstart.prevent="openBgTasks">↻ 刷新</button></div>
     </div>
 
     <!-- 模型下拉 -->
@@ -648,8 +691,10 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
         </div>
       </div>
       <div class="crow">
-        <button class="cb tap" @click="pickFile">📎</button>
+        <button class="cb tap" title="附件" @touchstart.prevent="menu = menu === 'attach' ? '' : 'attach'">📎</button>
         <input ref="fileEl" type="file" multiple hidden @change="onFile" />
+        <input ref="camEl" type="file" accept="image/*" capture="environment" hidden @change="onFile" />
+        <input ref="vidEl" type="file" accept="video/*" capture="environment" hidden @change="onFile" />
         <textarea ref="taEl" v-model="input" rows="1" placeholder="发消息…" @paste="onPaste" @input="autoGrow"></textarea>
         <button class="cb mic tap" :class="{ rec: recording }" title="按住说话"
           @touchstart.prevent="micDown" @touchend.prevent="micUp" @mousedown="micDown" @mouseup="micUp">
@@ -705,6 +750,24 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
 </style>
 
 <style scoped>
+
+/* 更新/后台任务弹窗细节 */
+.updbox { max-width: 340px; }
+.dh .dhsub { font-size: 11px; color: #6b7482; font-weight: 400; margin-left: 6px; }
+.updrow.stale { background: #26221a; border-radius: 9px; }
+.updrow.stale:active { background: #332d1f; }
+.dfb.main { color: #e8b268; font-weight: 700; }
+.bgdot { color: #7cc47f; font-size: 9px; }
+.bgage { font-style: normal; color: #6b7482; margin-left: 4px; font-size: 10px; }
+.updk.kill { background: #443030; }
+
+/* 底部动作面板（附件等） */
+.sheet { position: fixed; left: 0; right: 0; bottom: 0; z-index: 72; background: #1c2027; border-radius: 18px 18px 0 0; padding: 14px 14px calc(14px + env(safe-area-inset-bottom)); }
+.shd { text-align: center; font-size: 12px; color: #8a93a3; margin-bottom: 12px; }
+.sgrid { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.sitem { background: #242a34; border: 1px solid #3a4150; border-radius: 14px; color: #dfe4ec; font-size: 12.5px; padding: 14px 6px; display: flex; flex-direction: column; align-items: center; gap: 8px; }
+.sitem .sico { font-size: 26px; }
+.scancel { width: 100%; margin-top: 10px; background: none; border: 0; color: #8a93a3; font-size: 14px; padding: 10px; }
 
 /* ⋯ 更多菜单/更新/后台任务 */
 .moremenu { min-width: 180px; }
@@ -928,16 +991,22 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
 .pinput button { background: #8b5cf6; border: 0; color: #fff; border-radius: 8px; padding: 0 13px; font-size: 12px; }
 .pcomp { padding: 4px 2px; }
 .pci { font-size: 11.5px; color: #8b8f98; padding: 5px 6px; border-radius: 6px; font-family: ui-monospace, monospace; }
-.crow { display: flex; gap: 8px; align-items: flex-end; }
-.crow textarea { flex: 1; background: #1a1d26; border: 1px solid #2c303b; color: #dcddde;
-  border-radius: 14px; padding: 12px 13px; font-size: 14.5px; font-family: inherit; resize: none;
-  height: 46px; min-height: 46px; max-height: 110px; overflow-y: auto; }
+/* 胶囊 composer：整块卡片，元素一体 */
+.crow { display: flex; gap: 6px; align-items: flex-end; background: #1a1d26; border: 1px solid #2c303b;
+  border-radius: 22px; padding: 7px 7px 7px 10px; }
+.crow:focus-within { border-color: #4a5064; }
+.crow textarea { flex: 1; background: none; border: 0; color: #dcddde;
+  font-size: 15px; font-family: inherit; resize: none; line-height: 22px;
+  height: 38px; min-height: 38px; max-height: 110px; overflow-y: auto; padding: 8px 2px; outline: none; }
 input[type="checkbox"] { accent-color: #8b5cf6; }
-.cb { width: 42px; height: 42px; border-radius: 50%; border: 1px solid #2c303b; background: #1a1d26;
-  color: #dcddde; font-size: 16px; flex-shrink: 0; }
-.cb.mic.rec { background: #e05555; border-color: #e05555; animation: pulse 1s infinite; }
-.cb.send { background: #8b5cf6; border-color: #8b5cf6; color: #fff; }
-.cb.send:disabled { opacity: .4; }
+.cb { width: 38px; height: 38px; border-radius: 50%; border: 0; background: #242835;
+  color: #aeb6c4; font-size: 15.5px; flex-shrink: 0; display: flex; align-items: center; justify-content: center; }
+.cb:active { background: #2c3145; }
+.cb.mic.rec { background: #e05555; color: #fff; animation: pulse 1s infinite; }
+.cb.q { background: #3a2f18; color: #e8b268; font-size: 14px; }
+.cb.send { background: #8b5cf6; color: #fff; }
+.cb.send.edit { background: #e8b268; }
+.cb.send.dim, .cb.dim { opacity: .35; }
 
 /* 会话抽屉 */
 .drawer { position: fixed; top: 52px; bottom: 0; left: 0; width: 84vw; max-width: 340px; z-index: 61;
