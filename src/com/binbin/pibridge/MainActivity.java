@@ -29,7 +29,18 @@ import java.net.URL;
  */
 public class MainActivity extends Activity {
     public static volatile boolean PENDING_CONVO = false; // 悬浮球长按：进入连续对话
-    public static volatile String PENDING_TASK = null;    // 悬浮球/唤醒：任务交接给对话页
+    public static volatile String PENDING_TASK = null;    // 悬浮球：任务交接给对话页（要切屏）
+    static volatile WebView sWeb = null;   // 唤醒静默任务注入用（不切屏）
+
+    /** 唤醒语音会话的复杂任务：注入当前对话（不打开界面、不切视图）——与对话页语音同逻辑 */
+    public static void runWakeTask(String q) {
+        final WebView w = sWeb;
+        if (w == null) {
+            try { Tools.call("tts_speak", new org.json.JSONObject().put("text", "小丘的界面还没打开过，先打开一次吧")); } catch (Exception ignore) {}
+            return;
+        }
+        w.evaluateJavascript("(window.__xiaoqiuTask?window.__xiaoqiuTask(" + org.json.JSONObject.quote(q) + ",true),'OK')", null);
+    }
 
     private WebView web;
     private TextView splash;
@@ -50,6 +61,7 @@ public class MainActivity extends Activity {
     private void buildUi() {
         FrameLayout root = new FrameLayout(this);
         web = new WebView(this);
+        sWeb = web;
         WebSettings s = web.getSettings();
         s.setJavaScriptEnabled(true);
         s.setDomStorageEnabled(true);
