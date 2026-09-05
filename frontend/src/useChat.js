@@ -69,6 +69,8 @@ function applyDelta(st, msg) {
 
 // 每会话 delta 序号（webui 丢序检测：跳号=有 delta 丢失→防抖对账）
 const lastDeltaSeq = new Map()
+// 文件读取一次性等待表（read_file → file_content 按路径匹配）
+const fileWaiters = new Map()
 function noteDeltaSeq(conversationId, seq) {
   const last = lastDeltaSeq.get(conversationId)
   if (last !== undefined && seq !== last + 1 && chat.state?.conversationId === conversationId) scheduleResync()
@@ -136,7 +138,12 @@ export function connect() {
         break
       }
       case 'models': chat.models = m.models || []; break
-      case 'settings': chat.settings = m; break
+      case 'settings_state': chat.settings = m.settings || m; break
+      case 'file_content': {
+        const w = fileWaiters.get(m.path)
+        if (w) { w(m); fileWaiters.delete(m.path) }
+        break
+      }
       case 'sessions': chat.sessions = m.sessions || []; break
       case 'conversations': chat.conversations = m.conversations || []; chat.activeConvId = m.activeId; break
       case 'slash_commands': chat.slashCommands = m.commands || []; break
@@ -198,6 +205,9 @@ export const api = {
   setModel(modelId) { return send({ type: 'set_model', modelId }) },
   getSettings() { return send({ type: 'get_settings' }) },
   setSettings(patch) { return send({ type: 'set_settings', ...patch }) },
+  readFile(path) { return new Promise(res => { fileWaiters.set(path, res); send({ type: 'read_file', path }) }) },
+  writeFile(path, text) { send({ type: 'write_file', path, text }); return true },
+  reloadExtensions() { return send({ type: 'extensions_reload' }) },
   setThinking(level) { return send({ type: 'set_thinking', level }) },
   listSessions() { return send({ type: 'list_sessions' }) },
   listModels() { return send({ type: 'list_models' }) },

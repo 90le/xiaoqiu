@@ -1,5 +1,5 @@
 <script setup>
-import { ref, computed, onMounted } from 'vue'
+import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import QiuLogo from '../components/QiuLogo.vue'
 import { chat, api as engineApi, connect } from '../useChat.js'
 
@@ -10,7 +10,20 @@ const pages = {
   termtools: '⌨ 终端工具', vision: '👁 视觉桥', voice: '🎙 语音与唤醒',
   phone: '📱 手机与权限', about: 'ℹ️ 关于',
 }
-function back() { page.value = null }
+// 安卓返回手势：开子页压一条历史，popstate 关子页（否则手势直接退出设置页）
+let subPushed = false
+function openPage(p) {
+  page.value = p
+  try { history.pushState({ sub: p }, ''); subPushed = true } catch { subPushed = false }
+}
+function onPop() {
+  if (page.value) { page.value = null; subPushed = false }
+  else if (subPushed) subPushed = false
+}
+function back() {
+  if (subPushed) { try { history.back(); return } catch {} }
+  page.value = null; subPushed = false
+}
 
 /* ═══════════ 引擎设置摘要（首页分组右侧值） ═══════════ */
 const st = computed(() => chat.settings || {})
@@ -135,12 +148,86 @@ async function saveKey() {
   keyMsg.value = d.ok ? d.data : (d.error ? d.error.message : '失败')
 }
 
+/* ═══════════ P2：提示词子页 ═══════════ */
+const pmSeg = ref('sys')                       // sys=系统提示词 agents=全局指令
+const promptMode = ref('append')
+const promptDraft = ref('')
+const promptSaved = ref(true)
+const effOpen = ref(false)
+let promptSynced = false
+// settings 首次到达 → 草稿同步（保存回执后由 settings_state 再同步）
+function syncPromptDraft() {
+  const s = chat.settings
+  if (!s || promptSynced) return
+  promptSynced = true
+  promptMode.value = s.promptMode || 'append'
+  promptDraft.value = s.customSystemPrompt || ''
+}
+function promptDirty() { const s = chat.settings; return !s || promptMode.value !== (s.promptMode || 'append') || promptDraft.value !== (s.customSystemPrompt || '') }
+function fillDefault() { if (chat.settings?.defaultSystemPrompt) promptDraft.value = chat.settings.defaultSystemPrompt }
+async function savePrompt() {
+  promptSaved.value = false
+  engineApi.setSettings({ promptMode: promptMode.value, customSystemPrompt: promptDraft.value })
+  setTimeout(() => { promptSaved.value = true; promptSynced = false; syncPromptDraft() }, 600)
+}
+// 全局指令 AGENTS.md（引擎工作区相对路径）
+const AG_PATH = '.pi/agent/AGENTS.md'
+const agDraft = ref('')
+const agState = ref(0) // 0未载 1载入中 2已载 3读取失败
+const agSaved = ref(true)
+async function loadAgents() {
+  agState.value = 1
+  try {
+    const m = await engineApi.readFile(AG_PATH)
+    agDraft.value = m && !m.binary ? m.text : ''
+    agState.value = 2
+  } catch { agState.value = 3 }
+}
+function saveAgents() {
+  if (agDraft.value.trim() === '') return
+  engineApi.writeFile(AG_PATH, agDraft.value)
+  agSaved.value = false
+  setTimeout(() => agSaved.value = true, 800)
+}
+function pmSegGo(s) {
+  pmSeg.value = s
+  if (s === 'agents' && agState.value === 0) loadAgents()
+}
+
+/* ═══════════ P2：技能与扩展子页 ═══════════ */
+const skillView = ref(null) // { name, text }
+function toggleList(listName, item, key) {
+  const s = chat.settings
+  if (!s) return
+  const cur = new Set(s[listName] || [])
+  item.enabled ? cur.add(item[key]) : cur.delete(item[key])
+  engineApi.setSettings({ [listName]: [...cur] })
+}
+function toggleSkill(s) { toggleList('disabledSkills', s, 'name') }
+function toggleExt(e) { toggleList('disabledExtensions', e, 'id') }
+async function viewSkill(s) {
+  skillView.value = { name: s.name, text: '加载中…' }
+  try {
+    const m = await engineApi.readFile('.pi/agent/skills/' + s.name + '/SKILL.md')
+    skillView.value = { name: s.name, text: m && !m.binary ? m.text : '（二进制或读取失败）' }
+  } catch { skillView.value = { name: s.name, text: '读取失败' } }
+}
+function reloadExts() { engineApi.reloadExtensions(); skillMsg.value = '已请求重载，稍候刷新'; setTimeout(() => skillMsg.value = '', 2000) }
+const skillMsg = ref('')
+
 /* ═══════════ 启动 ═══════════ */
+watch(() => chat.settings, syncPromptDraft)
 onMounted(() => {
+  syncPromptDraft()
+  window.addEventListener('popstate', onPop)
   // ws 未连则连（设置页可能先于对话页打开）
   if (chat.status !== 'open' && chat.status !== 'connecting') connect()
   if (chat.status === 'open') engineApi.getSettings()
   loadPerm(); loadCfg()
+})
+onUnmounted(() => {
+  window.removeEventListener('popstate', onPop)
+  if (subPushed) { try { history.back() } catch {} } // 离开设置页时清理子页历史
 })
 async function loadCfg() {
   const d = await appapi('cfg_get')
@@ -167,7 +254,7 @@ async function loadCfg() {
     <div class="sub">你说，我来办。</div>
 
     <div class="grp-card">
-      <div v-for="g in groups" :key="g.id" class="grp tap" @click="page = g.id">
+      <div v-for="g in groups" :key="g.id" class="grp tap" @click="openPage(g.id)">
         <span class="grp-ic">{{ g.icon }}</span>
         <span class="grp-txt">
           <span class="grp-t">{{ g.title }}</span>
@@ -328,21 +415,102 @@ async function loadCfg() {
       <div class="muted" style="text-align:center;font-size:12px;margin-top:8px;">小丘 · 山间工作台 · GPL v3</div>
     </template>
 
-    <!-- ── 建设中占位（P2-P4 依次点亮） ── -->
+    <!-- ── 📝 提示词（P2）── -->
+    <template v-else-if="page === 'prompt'">
+      <div class="segbar">
+        <button :class="['segb', 'tap', { on: pmSeg === 'sys' }]" @click="pmSegGo('sys')">系统提示词</button>
+        <button :class="['segb', 'tap', { on: pmSeg === 'agents' }]" @click="pmSegGo('agents')">全局指令 AGENTS.md</button>
+      </div>
+
+      <template v-if="pmSeg === 'sys'">
+        <div class="segbar">
+          <button :class="['segb', 'tap', { on: promptMode === 'append' }]" @click="promptMode = 'append'">追加模式</button>
+          <button :class="['segb', 'tap', { on: promptMode === 'replace' }]" @click="promptMode = 'replace'">替换模式</button>
+        </div>
+        <div class="card">
+          <div class="hint">{{ promptMode === 'append' ? '自定义内容追加在默认系统提示词之后（推荐，保持基础能力）' : '⚠ 整体替换默认系统提示词（高级，可能影响工具使用）' }}</div>
+          <textarea v-model="promptDraft" rows="7" :placeholder="promptMode === 'append' ? '例：回复保持简洁；优先使用中文…' : '替换后的完整系统提示词'"></textarea>
+          <div class="btn-line">
+            <button v-if="promptMode === 'replace'" class="mini-btn tap" @click="fillDefault">填入默认提示词</button>
+            <button class="mini-btn tap" @click="effOpen = !effOpen">{{ effOpen ? '收起生效预览' : '查看当前生效' }}</button>
+          </div>
+          <div v-if="effOpen" class="effbox">{{ chat.settings?.effectiveSystemPrompt || '（连接后显示）' }}</div>
+          <button class="btn tap" :disabled="!promptDirty()" :style="{ opacity: promptDirty() ? 1 : .45 }" @click="savePrompt">{{ promptSaved ? '保存并生效' : '已保存 ✓' }}</button>
+        </div>
+      </template>
+
+      <template v-else>
+        <div class="card">
+          <div class="hint">全局指令文件（对所有会话生效）：身份设定、工作习惯、常驻规则。修改即时保存引擎侧。</div>
+          <div v-if="agState === 1" class="muted">加载中…</div>
+          <div v-else-if="agState === 3" class="msg bad">读取失败（引擎未就绪？）</div>
+          <template v-else>
+            <textarea v-model="agDraft" rows="12" style="font-family:ui-monospace,monospace;font-size:12px;" placeholder="（文件为空，写下你的全局指令…）"></textarea>
+            <button class="btn tap" style="margin-top:10px;" @click="saveAgents">{{ agSaved ? '保存' : '已保存 ✓' }}</button>
+          </template>
+        </div>
+      </template>
+    </template>
+
+    <!-- ── 🧩 技能与扩展（P2）── -->
+    <template v-else-if="page === 'skills'">
+      <div class="sec">技能（{{ (chat.settings?.skills || []).length }}）
+        <span class="muted" style="font-weight:400;font-size:12px;"> · 点名称看说明</span>
+      </div>
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div v-for="s in chat.settings?.skills || []" :key="s.name" class="srow">
+          <div class="srow-txt tap" @click="viewSkill(s)">
+            <div class="srow-t">{{ s.name }}</div>
+            <div class="srow-d">{{ s.description || '（无描述）' }}</div>
+          </div>
+          <div :class="['sw', { on: s.enabled }]" @click="toggleSkill(s)"><div class="knob"></div></div>
+        </div>
+        <div v-if="chat.settings && !(chat.settings.skills || []).length" class="muted" style="padding:16px;">暂无技能</div>
+        <div v-if="!chat.settings" class="muted" style="padding:16px;">连接引擎中…</div>
+      </div>
+
+      <div class="sec">扩展（{{ (chat.settings?.extensions || []).length }}）</div>
+      <div class="card" style="padding:0;overflow:hidden;">
+        <div v-for="e in chat.settings?.extensions || []" :key="e.id" class="srow">
+          <div class="srow-txt">
+            <div class="srow-t">{{ e.name }}</div>
+            <div class="srow-d">{{ e.id }}</div>
+          </div>
+          <div :class="['sw', { on: e.enabled }]" @click="toggleExt(e)"><div class="knob"></div></div>
+        </div>
+        <div v-if="chat.settings && !(chat.settings.extensions || []).length" class="muted" style="padding:16px;">暂无扩展</div>
+      </div>
+      <div class="btn-line" style="margin-top:4px;">
+        <button class="mini-btn tap" @click="reloadExts">↻ 重载扩展</button>
+        <button class="mini-btn tap" @click="engineApi.getSettings()">↻ 刷新</button>
+      </div>
+      <div v-if="skillMsg" class="msg ok" style="margin-top:8px;">{{ skillMsg }}</div>
+    </template>
+
+    <!-- ── 建设中占位（P3-P4 依次点亮） ── -->
     <template v-else>
       <div class="card" style="text-align:center;padding:34px 16px;">
         <div style="font-size:36px;">🚧</div>
         <div style="font-weight:700;margin-top:10px;">{{ pages[page] }}</div>
         <div class="muted" style="font-size:13px;margin-top:8px;line-height:1.7;">
           {{ page === 'models' && '默认模型与思考档 · 供应商密钥 · 自定义模型 · 预设（P3）' }}
-          {{ page === 'prompt' && '系统提示词追加/替换 · 项目指令 AGENTS.md（P2）' }}
-          {{ page === 'skills' && '技能开关 · 扩展管理 · UI 插件（P2）' }}
           {{ page === 'termtools' && '终端工具开关 · bash 接管 · 空闲超时（P4）' }}
           {{ page === 'vision' && '图片理解通道 · 视觉模型选择（P4）' }}
         </div>
       </div>
     </template>
     <div style="height:24px;"></div>
+  </div>
+
+  <!-- 技能说明查看（底部弹层，只读） -->
+  <div v-if="skillView" class="skview" @click="skillView = null">
+    <div class="skview-b" @click.stop>
+      <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px;">
+        <b style="font-size:15px;">{{ skillView.name }}</b>
+        <button class="mini-btn tap" @click="skillView = null">✕</button>
+      </div>
+      <div style="flex:1;overflow-y:auto;background:var(--bg);border-radius:10px;padding:12px;font:12px ui-monospace,monospace;white-space:pre-wrap;line-height:1.65;">{{ skillView.text }}</div>
+    </div>
   </div>
 </template>
 
@@ -362,6 +530,24 @@ async function loadCfg() {
 .lgcy-h { display: flex; justify-content: space-between; align-items: center; padding: 13px 14px; font-size: 14px; font-weight: 600; }
 .lgcy-h em { font-style: normal; font-size: 11px; color: var(--muted); font-weight: 400; }
 .lgcy-b { padding: 0 14px 14px; }
+
+/* 分段切换条 */
+.segbar { display: flex; gap: 6px; margin-bottom: 10px; }
+.segb { flex: 1; border: 1px solid var(--line); background: var(--card); color: var(--muted); border-radius: 12px; padding: 9px 4px; font-size: 13px; font-weight: 600; transition: all .15s; }
+.segb.on { background: var(--hill); border-color: var(--hill); color: #fff; }
+.hint { font-size: 12px; color: var(--muted); line-height: 1.6; margin-bottom: 8px; }
+.effbox { background: var(--bg); border: 1px dashed var(--line); border-radius: 10px; padding: 10px; font: 11px ui-monospace, monospace; white-space: pre-wrap; max-height: 220px; overflow-y: auto; margin-bottom: 10px; color: var(--muted); }
+/* 技能/扩展行 */
+.srow { display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-bottom: 1px solid var(--line); }
+.srow:last-child { border-bottom: 0; }
+.srow-txt { flex: 1; min-width: 0; }
+.srow-t { font-size: 14px; font-weight: 600; }
+.srow-d { font-size: 12px; color: var(--muted); margin-top: 2px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+/* 技能查看弹层 */
+.skview { position: fixed; inset: 0; z-index: 70; background: rgba(20,26,18,.55); display: flex; align-items: flex-end; animation: fadein .15s ease; }
+.skview-b { background: var(--card); border-radius: 18px 18px 0 0; width: 100%; max-height: 78vh; display: flex; flex-direction: column; padding: 14px 14px 20px; animation: upin .2s ease; }
+@keyframes fadein { from { opacity: 0; } }
+@keyframes upin { from { transform: translateY(40px); } }
 
 /* 子页覆盖层：右滑入全屏 */
 .subp { position: fixed; inset: 0; z-index: 60; background: var(--bg); overflow-y: auto; padding: 0 12px; animation: slidein .22s ease; }
