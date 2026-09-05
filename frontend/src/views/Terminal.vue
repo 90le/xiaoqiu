@@ -23,15 +23,36 @@ const dpadOff = ref(localStorage.getItem('xq_dpad_off') === '1')  // 悬浮方�
 // D-pad 任意位置拖动（位置持久化；球态：拖=移位 点=展开）
 const dpadPos = ref(null)
 try { dpadPos.value = JSON.parse(localStorage.getItem('xq_dpad_pos') || 'null') } catch {}
+// localStorage 空时走 cfg 兜底（服务端落盘通道，永不受 WebView 存储策略影响）
+if (!dpadPos.value) {
+  fetch('/api/cfg_get', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: '{}' })
+    .then(r => r.json()).then(d => {
+      const v = d?.structuredContent?.data?.dpad_pos
+      if (v && !dpadPos.value) { try { dpadPos.value = JSON.parse(v) } catch {} }
+    }).catch(() => {})
+}
 const dbgPos = ref('读档中')
-try { dbgPos.value = '档=' + (localStorage.getItem('xq_dpad_pos') || 'null'); console.log('[DPAD] mount-load=' + dbgPos.value) } catch {}
+try {
+  dbgPos.value = '档=' + (localStorage.getItem('xq_dpad_pos') || 'null')
+  console.log('[DPAD] mount-load=' + dbgPos.value)
+  // localStorage 写读往返自检（真相仪器：NULL=WebView 存储坏了，ok=另有蹊跷）
+  try {
+    localStorage.setItem('xq_dpad_rt', 't' + Date.now())
+    const rt = localStorage.getItem('xq_dpad_rt')
+    console.log('[DPAD] roundtrip=' + (rt ? 'ok' : 'NULL——WebView存储写读不一致!'))
+  } catch (e) { console.log('[DPAD] roundtrip-throw=' + (e && e.message)) }
+} catch {}
 const _save0 = saveDpadPos
 saveDpadPos = function () { _save0(); try { dbgPos.value = '存=' + (localStorage.getItem('xq_dpad_pos') || 'null'); console.log('[DPAD] save->' + dbgPos.value) } catch {} }
 const dpadStyle = computed(() => {
   const p = dpadPos.value
   return p ? { left: p.x + 'px', top: p.y + 'px', right: 'auto', bottom: 'auto' } : {}
 })
-function saveDpadPos() { try { localStorage.setItem('xq_dpad_pos', JSON.stringify(dpadPos.value)) } catch {} }
+function saveDpadPos() {
+  const j = JSON.stringify(dpadPos.value)
+  try { localStorage.setItem('xq_dpad_pos', j) } catch {}
+  try { fetch('/api/cfg_set', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ key: 'dpad_pos', value: j }) }) } catch {}
+}
 let dragInfo = null
 // 越界救护：只在存档真跑出【窗口】可视区时才钳回（不按舞台矩形——键盘条/软键盘
 // 状态会让舞台矩形变化，把好位置误"纠正"；窗口矩形恒定，误伤为零）
