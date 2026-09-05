@@ -24,9 +24,9 @@ const dpadOff = ref(localStorage.getItem('xq_dpad_off') === '1')  // 悬浮方�
 const dpadPos = ref(null)
 try { dpadPos.value = JSON.parse(localStorage.getItem('xq_dpad_pos') || 'null') } catch {}
 const dbgPos = ref('读档中')
-try { dbgPos.value = '档=' + (localStorage.getItem('xq_dpad_pos') || 'null') } catch {}
+try { dbgPos.value = '档=' + (localStorage.getItem('xq_dpad_pos') || 'null'); console.log('[DPAD] mount-load=' + dbgPos.value) } catch {}
 const _save0 = saveDpadPos
-saveDpadPos = function () { _save0(); try { dbgPos.value = '存=' + (localStorage.getItem('xq_dpad_pos') || 'null') } catch {} }
+saveDpadPos = function () { _save0(); try { dbgPos.value = '存=' + (localStorage.getItem('xq_dpad_pos') || 'null'); console.log('[DPAD] save->' + dbgPos.value) } catch {} }
 const dpadStyle = computed(() => {
   const p = dpadPos.value
   return p ? { left: p.x + 'px', top: p.y + 'px', right: 'auto', bottom: 'auto' } : {}
