@@ -39,7 +39,7 @@ public class MainActivity extends Activity {
             try { Tools.call("tts_speak", new org.json.JSONObject().put("text", "小丘的界面还没打开过，先打开一次吧")); } catch (Exception ignore) {}
             return;
         }
-        w.evaluateJavascript("(window.__xiaoqiuTask?window.__xiaoqiuTask(" + org.json.JSONObject.quote(q) + ",true),'OK')", null);
+        w.evaluateJavascript("(window.__xiaoqiuTask?(window.__xiaoqiuTask(" + org.json.JSONObject.quote(q) + ",true),'OK'):'NO')", null);
     }
 
     private WebView web;
