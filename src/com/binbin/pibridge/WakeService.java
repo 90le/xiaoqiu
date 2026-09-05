@@ -186,7 +186,7 @@ public class WakeService extends Service {
             txt = txt.replaceAll("<\\|[^>]*\\|>", "").replace(" ", "").trim();
             Log.d("PiBridge", "唤醒转写: " + txt);
             if (txt.isEmpty() || txt.startsWith("(")) return;
-            String norm = txt.replace("秋", "丘").replace("邱", "丘").replace("九", "丘");
+            String norm = wakeNorm(txt);
             boolean hit = false;
             for (String w2 : new String[]{"小丘", "小丘丘", "你好小丘", "嘿小丘", "嗨小丘", "丘丘"}) {
                 if (norm.contains(w2)) { hit = true; break; }
@@ -201,6 +201,11 @@ public class WakeService extends Service {
     }
 
 
+    /** 唤醒词同音归一化：只影响命中匹配与剥离，不改指令内容（实测误转样本：小舅） */
+    private static String wakeNorm(String s) {
+        return s.replace("秋", "丘").replace("邱", "丘").replace("舅", "丘").replace("九", "丘").replace("球", "丘");
+    }
+
     private static final String[] WAKE_REPLIES = {"在！", "我在！", "诶！", "嗯！"};
     private static final String[] BYE_TIMEOUT = {"嗯，我先退下", "我先歇着啦"};
     private static final String[] BYE_BYE = {"好嘞", "嗯呐"};
@@ -212,7 +217,7 @@ public class WakeService extends Service {
         try {
             // ① 秒回应：本地 TTS 零网络延迟
             String said = heardOriginal == null ? "" : heardOriginal.replaceAll("[，。！？,.!?、\\s]+", "");
-            String norm = said.replace("秋", "丘").replace("邱", "丘");
+            String norm = wakeNorm(said);
             String[] wakes = {"小丘小丘", "你好小丘", "嘿小丘", "嗨小丘", "小丘"};
             String carry = "";
             for (String w0 : wakes) {
