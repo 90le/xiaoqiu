@@ -55,7 +55,25 @@ export function createSession(cwd) {
   term.open(el)
   try {
     const ta = el.querySelector('textarea')
-    if (ta) { ta.setAttribute('autocapitalize', 'off'); ta.setAttribute('autocomplete', 'off'); ta.setAttribute('autocorrect', 'off'); ta.setAttribute('spellcheck', 'false') }
+    if (ta) {
+      ta.setAttribute('autocapitalize', 'off'); ta.setAttribute('autocomplete', 'off'); ta.setAttribute('autocorrect', 'off'); ta.setAttribute('spellcheck', 'false')
+      // ── 输入通道接管（根治 xterm#5887/#6045：安卓 IME 229 与 _handleAnyTextareaChanges 差分赛跑→整串重发）──
+      // ① 掐灭组合输入：IME 降级为逐键 insertText（无组合态=无重发源）
+      ta.addEventListener('compositionstart', e => e.preventDefault())
+      // ② beforeinput 拦截直发：textarea.value 永不变化 → xterm 差分恒空 → 双通道归一
+      ta.addEventListener('beforeinput', e => {
+        if (e.inputType === 'insertText' && e.data) {
+          e.preventDefault()
+          wsSend({ type: 'terminal_input', terminalId: id, data: e.data })
+        } else if (e.inputType === 'insertLineBreak') {
+          e.preventDefault()
+          wsSend({ type: 'terminal_input', terminalId: id, data: '\r' })
+        } else if (e.inputType === 'deleteContentBackward') {
+          e.preventDefault()
+          wsSend({ type: 'terminal_input', terminalId: id, data: '\x7f' })
+        }
+      })
+    }
   } catch {}
   const unreg = termRegister(id, {
     write: (d) => { term.write(d); if (tstore.sessions[id]) tstore.sessions[id].lastOut = Date.now() },
