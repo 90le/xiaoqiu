@@ -29,17 +29,46 @@ const dpadStyle = computed(() => {
 })
 function saveDpadPos() { try { localStorage.setItem('xq_dpad_pos', JSON.stringify(dpadPos.value)) } catch {} }
 let dragInfo = null
+let resetT = null
+const dpadMsg = ref('')
+function dpadToast(t) { dpadMsg.value = t || 'D-pad 已复位到默认位置'; setTimeout(() => dpadMsg.value = '', 1600) }
+function armReset() {
+  if (resetT) clearTimeout(resetT)
+  resetT = setTimeout(() => {
+    resetT = null
+    if (dragInfo && !dragInfo.moved) {
+      dpadPos.value = null; saveDpadPos(); justReset = true
+      try { navigator.vibrate && navigator.vibrate(30) } catch {}
+      dpadToast()
+    }
+  }, 600)
+}
+function cancelReset() { if (resetT) { clearTimeout(resetT); resetT = null } }
 function dragStart(e) {
   const t = e.touches ? e.touches[0] : e
   const r = e.currentTarget.getBoundingClientRect()
   dragInfo = { sx: t.clientX, sy: t.clientY, ox: r.left, oy: r.top, w: r.width, h: r.height, moved: false }
+}
+// 球/拖柄按下：拖动 + 长按复位双语义
+function padStart(e) { dragStart(e); armReset() }
+// 挂载时把越界存档钳回舞台可视区（自动救回"点不到的球"）
+function sanitizeDpad() {
+  const p = dpadPos.value
+  if (!p) return
+  const st = stage.value?.getBoundingClientRect?.()
+  if (!st || !st.width) return
+  const fixed = {
+    x: Math.max(st.left + 2, Math.min(st.right - 50, p.x)),
+    y: Math.max(st.top + 2, Math.min(st.bottom - 50, p.y)),
+  }
+  if (fixed.x !== p.x || fixed.y !== p.y) { dpadPos.value = fixed; saveDpadPos() }
 }
 function dragMove(e) {
   if (!dragInfo) return
   e.preventDefault()
   const t = e.touches ? e.touches[0] : e
   const dx = t.clientX - dragInfo.sx, dy = t.clientY - dragInfo.sy
-  if (Math.abs(dx) + Math.abs(dy) > 6) dragInfo.moved = true
+  if (Math.abs(dx) + Math.abs(dy) > 6) { dragInfo.moved = true; cancelReset() }
   if (!dragInfo.moved) return
   // 钳制在终端舞台内（stage 矩形），不再用窗口矩形（会拖进键盘条/出屏）
   const stageNow = stage.value; const sr = stageNow?.getBoundingClientRect() || { left: 0, top: 0, right: window.innerWidth, bottom: window.innerHeight }
@@ -47,13 +76,16 @@ function dragMove(e) {
   const y = Math.max(sr.top + 2, Math.min(sr.bottom - dragInfo.h - 2, dragInfo.oy + dy))
   dpadPos.value = { x, y }
 }
+let justReset = false
 function dragEnd() {
+  cancelReset()
   if (dragInfo?.moved) saveDpadPos()
   dragInfo = null
 }
 function fabEnd() {
-  if (dragInfo && !dragInfo.moved) { dpadOff.value = false; saveDpad(false) } // 点=展开
-  else saveDpadPos() // 拖=移位（已实时更新）
+  cancelReset()
+  if (!justReset && dragInfo && !dragInfo.moved) { dpadOff.value = false; saveDpad(false) } // 点=展开（长按复位不触发）
+  justReset = false
   dragInfo = null
 }
 
@@ -281,6 +313,7 @@ function fmtAgo(t) {
 }
 
 onMounted(() => {
+  setTimeout(sanitizeDpad, 450) // 布局稳定后钳回出界 D-pad
   if (chat.status !== 'open') connect()
   nextTick(() => {
     poolAttach(stage.value)
@@ -330,6 +363,8 @@ onUnmounted(() => {
           @touchstart.stop.prevent="hTouchStart(h.side, $event)" @touchmove.stop.prevent="hTouchMove(h.side, $event)" @touchend.stop="selEndDrag"></div>
       </template>
     </div>
+    <!-- D-pad 复位提示 -->
+    <div v-if="dpadMsg" class="dpmsg">{{ dpadMsg }}</div>
     <!-- 选区工具条 -->
     <div v-if="sel.on && sel.bar" class="selbar" :style="{ left: sel.bar.x + 'px', top: sel.bar.y + 'px' }">
       <span v-if="sel.busy" class="selbusy">{{ sel.busy }}</span>
@@ -392,11 +427,11 @@ onUnmounted(() => {
 
         <!-- 悬浮方向键 D-pad v3：可拖动任意位置（⠿拖柄 / 球态拖=移 点=开） -->
     <button v-if="dpadOff" class="dpad-fab" :style="dpadStyle" title="方向键（拖=移位 点=展开）"
-      @touchstart="dragStart" @touchmove="dragMove" @touchend="fabEnd">
+      @touchstart="padStart" @touchmove="dragMove" @touchend="fabEnd">
       ✥
     </button>
     <div v-else class="dpad" :style="dpadStyle">
-      <div class="dpdrag" @touchstart.passive="dragStart" @touchmove="dragMove" @touchend="dragEnd">⠿⠿</div>
+      <div class="dpdrag" @touchstart.passive="padStart" @touchmove="dragMove" @touchend="dragEnd">⠿⠿</div>
       <button class="dp-x tap" @touchstart.prevent="dpadOff = true; saveDpad(true)">⌄</button>
       <button class="dp tap" @touchstart.prevent="raw('\x1b[A')">↑</button>
       <div class="dpb">
@@ -432,6 +467,8 @@ onUnmounted(() => {
 <style scoped>
 .termwrap { position: fixed; inset: 0; background: #0d0e12; display: flex; flex-direction: column; z-index: 10; overflow: hidden; }
 .tabs { display: flex; align-items: center; gap: 5px; padding: 6px 8px; background: #14161c; border-bottom: 1px solid #23262e; }
+.dpmsg { position: fixed; left: 50%; bottom: 140px; transform: translateX(-50%); z-index: 46; background: rgba(30,33,42,.95); color: #dcddde; font-size: 13px; padding: 9px 18px; border-radius: 99px; border: 1px solid #3a4050; animation: selin .15s ease; pointer-events: none; }
+
 /* ══ 选区复制 ══ */
 .selr { position: absolute; background: rgba(139, 92, 246, .32); border-radius: 2px; pointer-events: none; z-index: 5; }
 .selh { position: absolute; width: 22px; height: 22px; border-radius: 50% 50% 50% 4px; background: #8b5cf6; border: 2.5px solid #fff; z-index: 7; box-shadow: 0 2px 8px rgba(0,0,0,.45); transform: rotate(-45deg); }
