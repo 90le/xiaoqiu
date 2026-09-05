@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import QiuLogo from '../components/QiuLogo.vue'
-import { chat, api as engineApi, connect } from '../useChat.js'
+import { chat, api as engineApi, connect, wsSend } from '../useChat.js'
 
 /* ═══════════ 子页导航 ═══════════ */
 const page = ref(null)
@@ -325,8 +325,75 @@ function pickFetch(m) {
   fetchList.value = null
 }
 
+/* ═══════════ P4：终端工具 / 视觉桥 / 预设 ═══════════ */
+const stTt = computed(() => chat.settings ? chat.settings.terminalToolsEnabled !== false : true)
+const stBash = computed(() => !!chat.settings?.terminalBash)
+const idleDraft = ref('15')
+watch(() => chat.settings?.terminalBashIdleMs, v => { if (v != null) idleDraft.value = String(Math.round(v / 1000)) }, { immediate: true })
+function saveIdle() {
+  const s = Math.max(1, Math.min(120, parseInt(idleDraft.value) || 15))
+  engineApi.setSettings({ terminalBashIdleMs: s * 1000 })
+  idleMsg.value = '已设为 ' + s + ' 秒'
+  setTimeout(() => idleMsg.value = '', 2000)
+}
+const idleMsg = ref('')
+
+const stVision = computed(() => chat.settings ? chat.settings.visionBridgeEnabled !== false : true)
+const visionOptions = computed(() => (chat.settings?.visionModels || []).map(m => ({ v: m.provider + '/' + m.id, t: m.label || m.id })))
+const vModel = ref('')
+const vMode = ref('append')
+const vDraft = ref('')
+let vSynced = false
+function syncVision() {
+  const s = chat.settings
+  if (!s || vSynced) return
+  vSynced = true
+  vModel.value = s.visionBridgeModel || ''
+  vMode.value = s.visionBridgePromptMode || 'append'
+  vDraft.value = s.visionBridgePrompt || ''
+}
+const vDirty = computed(() => {
+  const s = chat.settings
+  if (!s) return false
+  return vModel.value !== (s.visionBridgeModel || '') || vMode.value !== (s.visionBridgePromptMode || 'append') || vDraft.value !== (s.visionBridgePrompt || '')
+})
+function saveVision() {
+  engineApi.setSettings({ visionBridgeModel: vModel.value || null, visionBridgePromptMode: vMode.value, visionBridgePrompt: vDraft.value })
+  vSynced = false
+  setTimeout(syncVision, 600)
+}
+function resetVision() { vSynced = false; syncVision() }
+
+/* 预设（整套设置快照） */
+const presetName = ref('')
+const presetNaming = ref(false)
+const presetDel = ref('')
+function doSavePreset() {
+  const n = presetName.value.trim()
+  if (!n) return
+  wsSend({ type: 'save_preset', name: n })
+  presetNaming.value = false; presetName.value = ''
+  setTimeout(() => engineApi.getSettings(), 600)
+}
+function applyPreset(p) {
+  wsSend({ type: 'apply_preset', name: p.name })
+  setTimeout(() => engineApi.getSettings(), 800)
+  presetMsg.value = '已应用「' + p.name + '」'
+  setTimeout(() => presetMsg.value = '', 2500)
+}
+function delPreset(p) {
+  if (presetDel.value !== p.name) { presetDel.value = p.name; setTimeout(() => presetDel.value = '', 2500); return }
+  wsSend({ type: 'delete_preset', name: p.name })
+  presetDel.value = ''
+  setTimeout(() => engineApi.getSettings(), 600)
+}
+const presetMsg = ref('')
+
 /* ═══════════ 启动 ═══════════ */
-watch(() => chat.settings, syncPromptDraft)
+watch(() => chat.settings, () => {
+  if (!promptDirty.value) { promptSynced = false; syncPromptDraft() }
+  if (!vDirty.value) { vSynced = false; syncVision() }
+})
 watch(page, p => { if (p === 'models') { engineApi.listProviders(); engineApi.listModelsConfig() } })
 onMounted(() => {
   syncPromptDraft()
@@ -716,17 +783,95 @@ async function loadCfg() {
         </div>
         <div v-if="!chat.modelsCfg.length" class="empty">暂无自定义服务 · 点「新建」接入任意 OpenAI 兼容接口</div>
       </div>
+
+      <!-- 预设 -->
+      <div class="secl">预设 <em>整套设置快照（模型+思考+提示词+开关）</em>
+        <span class="secl-r"><button class="minib tap" @click="presetNaming = true">＋ 存当前</button></span>
+      </div>
+      <div v-if="presetNaming" class="card" style="padding:12px;">
+        <div style="display:flex;gap:8px;">
+          <input v-model="presetName" placeholder="预设名（如：极速省电）" style="font-size:13px;" @keydown.enter="doSavePreset">
+          <button class="mini-btn tap" @click="doSavePreset">保存</button>
+          <button class="minib tap" @click="presetNaming = false">✕</button>
+        </div>
+      </div>
+      <div class="grp-card">
+        <div v-for="p in (chat.settings?.presets || [])" :key="p.name" class="srow">
+          <div class="srow-txt">
+            <div class="srow-t">{{ p.name }}</div>
+          </div>
+          <button class="minib tap" @click="applyPreset(p)">应用</button>
+          <button class="minib tap" :style="presetDel === p.name ? { background:'var(--bad)',color:'#fff',borderColor:'var(--bad)' } : { color:'var(--bad)' }" @click="delPreset(p)">{{ presetDel === p.name ? '确认?' : '🗑' }}</button>
+        </div>
+        <div v-if="chat.settings && !(chat.settings.presets || []).length" class="empty">暂无预设 · 调好设置后点「存当前」</div>
+      </div>
+      <div v-if="presetMsg" class="msg ok" style="margin-top:8px;">{{ presetMsg }}</div>
     </template>
 
-    <!-- ── 建设中占位（P4） ── -->
-    <template v-else>
-      <div class="card" style="text-align:center;padding:34px 16px;">
-        <div style="font-size:36px;">🚧</div>
-        <div style="font-weight:700;margin-top:10px;">{{ pages[page] }}</div>
-        <div class="muted" style="font-size:13px;margin-top:8px;line-height:1.7;">
-          {{ page === 'termtools' && '终端工具开关 · bash 接管 · 空闲超时（P4）' }}
-          {{ page === 'vision' && '图片理解通道 · 视觉模型选择（P4）' }}
+    <!-- ── ⌨ 终端工具（P4） ── -->
+    <template v-else-if="page === 'termtools'">
+      <div class="grp-card">
+        <div class="srow">
+          <div class="srow-txt">
+            <div class="srow-l"><span class="srow-chip" style="background:#3D6BE8;">⌨</span><span class="srow-t">终端工具</span></div>
+            <div class="srow-d" style="white-space:normal;">允许 AI 使用终端跑命令</div>
+          </div>
+          <div :class="['sw', 'tap', { on: stTt }]" @click="engineApi.setSettings({ terminalToolsEnabled: !stTt })"><div class="knob"></div></div>
         </div>
+        <div class="srow">
+          <div class="srow-txt">
+            <div class="srow-l"><span class="srow-chip" style="background:#B85C3E;">🤖</span><span class="srow-t">bash 接管</span></div>
+            <div class="srow-d" style="white-space:normal;">AI 的命令在终端页「🤖 AI 命令」区实时可见，环境保留（cd / venv 不丢）</div>
+          </div>
+          <div :class="['sw', 'tap', { on: stBash }]" @click="engineApi.setSettings({ terminalBash: !stBash })"><div class="knob"></div></div>
+        </div>
+        <div class="srow" style="flex-direction:column;align-items:stretch;gap:8px;">
+          <div class="srow-l"><span class="srow-chip" style="background:#7A5CA8;">⏱</span><span class="srow-t">空闲判定 <em class="mini-hint">命令静止多久算"跑完"</em></span></div>
+          <div style="display:flex;gap:8px;align-items:center;">
+            <input v-model="idleDraft" type="number" min="1" max="120" style="font-size:13px;flex:1;" @blur="saveIdle" @keydown.enter="saveIdle">
+            <span style="font-size:12px;color:var(--muted);">秒</span>
+            <button class="mini-btn tap" @click="saveIdle">保存</button>
+          </div>
+          <div v-if="idleMsg" class="msg ok" style="margin-top:0;">{{ idleMsg }}</div>
+        </div>
+        <div class="footnote">💡 开关改动即时保存；若 AI 正在回复中，下一回合生效。bash 接管打开后，去终端页看 AI 跑命令。</div>
+      </div>
+    </template>
+
+    <!-- ── 👁 视觉桥（P4） ── -->
+    <template v-else-if="page === 'vision'">
+      <div class="grp-card">
+        <div class="srow">
+          <div class="srow-txt">
+            <div class="srow-l"><span class="srow-chip" style="background:#3E7C8A;">👁</span><span class="srow-t">视觉桥</span></div>
+            <div class="srow-d" style="white-space:normal;">发给 AI 的图片先由视觉模型转成文字描述（主模型不识图时的桥接）</div>
+          </div>
+          <div :class="['sw', 'tap', { on: stVision }]" @click="engineApi.setSettings({ visionBridgeEnabled: !stVision })"><div class="knob"></div></div>
+        </div>
+        <div class="srow">
+          <div class="srow-txt">
+            <div class="srow-l"><span class="srow-chip" style="background:#E8853D;">🎯</span><span class="srow-t">视觉模型</span></div>
+            <div class="srow-d">{{ vModel ? '已指定' : '智能选择（自动找识图模型）' }}</div>
+          </div>
+          <select v-model="vModel" class="slim">
+            <option value="">智能选择</option>
+            <option v-for="o in visionOptions" :key="o.v" :value="o.v">{{ o.t }}</option>
+          </select>
+        </div>
+      </div>
+      <div class="card">
+        <div class="edhead">
+          <span class="edlabel">视觉桥提示词</span>
+          <div class="segbar" style="margin:0;width:150px;">
+            <button :class="['segb', 'tap', { on: vMode === 'append' }]" style="padding:6px 2px;font-size:12px;" @click="vMode = 'append'">追加</button>
+            <button :class="['segb', 'tap', { on: vMode === 'replace' }]" style="padding:6px 2px;font-size:12px;" @click="vMode = 'replace'">替换</button>
+          </div>
+        </div>
+        <textarea v-model="vDraft" class="edbox" rows="6" placeholder="控制视觉模型如何描述图片（留空用默认）"></textarea>
+      </div>
+      <div v-if="vDirty" class="savebar">
+        <button class="savebar-g tap" @click="resetVision">放弃</button>
+        <button class="savebar-p tap" @click="saveVision">💾 保存</button>
       </div>
     </template>
     <div style="height:24px;"></div>

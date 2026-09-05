@@ -38,9 +38,9 @@ export function nextTitle() {
   return '终端 ' + n
 }
 
-export function createSession(cwd) {
-  const id = 'xq-t' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5)
-  const title = nextTitle()
+export function createSession(cwd, opts = {}) {
+  const id = opts.id || ('xq-t' + Date.now().toString(36) + Math.random().toString(36).slice(2, 5))
+  const title = opts.title || nextTitle()
   const el = document.createElement('div')
   el.className = 'tpane'
   pool.appendChild(el)
@@ -77,7 +77,7 @@ export function createSession(cwd) {
     lastCompAt = now
     if (send) wsSend({ type: 'terminal_input', terminalId: id, data: send })
   })
-  tstore.sessions[id] = { id, title, cwd: cwd || '/data/data/com.pihost/files/home', el, term, fit, unreg, alive: true, lastOut: Date.now(), exitCode: null }
+  tstore.sessions[id] = { id, title, cwd: cwd || '/data/data/com.pihost/files/home', el, term, fit, unreg, alive: true, lastOut: Date.now(), exitCode: null, remote: !!opts.attach }
   tstore.order.push(id)
   // fit 后必须通知服务端改 PTY 尺寸（webui sendDims 同款）——否则 TUI 按 80 列重绘
   // 在手机实际 ~52 列屏上折行 → 光标掉行 → 楼梯式重复（pi TUI 整行重绘才显形）
@@ -99,14 +99,20 @@ export function createSession(cwd) {
     }
   })
   ro.observe(el)
-  wsSend({ type: 'terminal_create', terminalId: id, title, locale: 'zh', cwd: cwd || '/data/data/com.pihost/files/home', cols: term.cols || 80, rows: term.rows || 24 })
+  if (!opts.attach) wsSend({ type: 'terminal_create', terminalId: id, title, locale: 'zh', cwd: cwd || '/data/data/com.pihost/files/home', cols: term.cols || 80, rows: term.rows || 24 })
   return tstore.sessions[id]
+}
+
+/** 附着服务端已有终端（agent bash / 命令标签）：只建 pane 挂输出，不发 create */
+export function attachSession(id, title, cwd) {
+  if (tstore.sessions[id]) return tstore.sessions[id]
+  return createSession(cwd, { id, title: title || id, attach: true })
 }
 
 export function killSession(id) {
   const s = tstore.sessions[id]
   if (!s) return
-  try { wsSend({ type: 'terminal_kill', terminalId: id }) } catch {}
+  if (!s.remote) try { wsSend({ type: 'terminal_kill', terminalId: id }) } catch {} // agent 终端归引擎管，不 kill
   s.ro?.disconnect?.(); s.unreg?.()
   try { s.term.dispose() } catch {}
   s.el.remove()

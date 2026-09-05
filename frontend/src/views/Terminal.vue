@@ -1,7 +1,7 @@
 <script setup>
 import { ref, computed, onMounted, onUnmounted, nextTick } from 'vue'
 import { chat, wsSend, connect } from '../useChat.js'
-import { tstore, poolAttach, poolDetach, createSession, killSession, restartSession, renameSession } from '../termStore.js'
+import { tstore, poolAttach, poolDetach, createSession, attachSession, killSession, restartSession, renameSession } from '../termStore.js'
 import '@xterm/xterm/css/xterm.css'
 
 const stage = ref(null)
@@ -68,7 +68,13 @@ const confirmKill = ref('')
 let killTimer = null
 function resetConfirm(id) { if (killTimer) clearTimeout(killTimer); killTimer = setTimeout(() => { if (confirmKill.value === id) confirmKill.value = '' }, 3000) }
 
-const sessions = computed(() => tstore.order.map(id => tstore.sessions[id]).filter(Boolean))
+const sessions = computed(() => tstore.order.map(id => tstore.sessions[id]).filter(s => s && !s.remote))
+// AI 命令终端（bash 接管 / 命令标签）：来自服务端 terminal_list，点击附着查看
+const aiTerms = computed(() => (chat.terminals || []).filter(t => t.agentBash || t.command))
+function openAi(t) {
+  attachSession(t.id, t.title || (t.command?.name || t.command?.command || 'AI 命令').slice(0, 12), t.cwd)
+  nextTick(() => activate(t.id))
+}
 
 function openShellDrawer() { window.dispatchEvent(new Event('xq-open-drawer')) }
 function showKb() { try { window.XiaoqiuBridge && window.XiaoqiuBridge.showKeyboard() } catch {} }
@@ -143,6 +149,13 @@ onUnmounted(() => {
     <header class="tabs">
       <button class="tb tap" title="工作台" @click="openShellDrawer">☰</button>
       <div class="tabscroller">
+        <template v-if="aiTerms.length">
+          <span class="aisep">🤖</span>
+          <div v-for="t in aiTerms" :key="t.id" class="tab ai tap" :class="{ act: t.id === activeId }" @click="openAi(t)">
+            <span class="tdot" :class="{ on: t.running }"></span>
+            <span class="tlab">{{ (t.title || t.command?.name || 'AI').slice(0, 14) }}</span>
+          </div>
+        </template>
         <div v-for="s in sessions" :key="s.id" class="tab tap" :class="{ act: s.id === activeId, dead: !s.alive }"
           @click="activate(s.id)"
           @touchstart.passive="tabPress(s, $event)" @touchend="tabRelease" @touchmove="tabRelease"
@@ -252,6 +265,9 @@ onUnmounted(() => {
 <style scoped>
 .termwrap { position: fixed; inset: 0; background: #0d0e12; display: flex; flex-direction: column; z-index: 10; }
 .tabs { display: flex; align-items: center; gap: 5px; padding: 6px 8px; background: #14161c; border-bottom: 1px solid #23262e; }
+.aisep { font-size: 12px; flex-shrink: 0; align-self: center; opacity: .75; margin: 0 2px; }
+.tab.ai { border-style: dashed; }
+.tab.ai.act { border-color: #3ecf72; background: rgba(62,207,114,.08); }
 .tb { background: #1a1d26; color: #dcddde; border: 1px solid #23262e; border-radius: 9px; padding: 6px 10px; font-size: 14px; flex-shrink: 0; }
 .tabscroller { display: flex; gap: 4px; overflow-x: auto; flex: 1; scrollbar-width: none; }
 .tab { display: flex; align-items: center; gap: 5px; background: #1a1d26; border: 1px solid #23262e; border-radius: 9px; padding: 5px 9px; font-size: 12px; color: #8b8f98; flex-shrink: 0; }
