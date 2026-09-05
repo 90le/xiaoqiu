@@ -58,6 +58,10 @@ const qTotal = computed(() => {
 const st = computed(() => chat.state)
 const msgs = computed(() => st.value?.messages || [])
 const lastAid = computed(() => { const a = msgs.value.filter(x => x.role === 'assistant'); return a.length ? a[a.length - 1].id : '' })
+const convTitle = computed(() => {
+  const c = chat.conversations.find(x => x.id === chat.activeConvId)
+  return c?.title || '小丘'
+})
 const streaming = computed(() => st.value?.isStreaming ? (st.value?.streamingMessage || { role: 'assistant', content: [] }) : null)
 // webui 同款：全部 7 档 + 中文标签；不支持的档位置灰禁用（而非隐藏——SDK 会钳制无效请求）
 const THINKING_ALL = [
@@ -524,7 +528,10 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
     <!-- ═══ 顶栏：历史 | 模型▾ | 思考▾ | 新对话 ═══ -->
     <header class="top">
       <button class="tb tap" title="工作台" @click="openShellDrawer">☰</button>
-      <span class="sp"></span>
+      <button class="tb tap" title="会话历史" @touchstart.prevent="menu = 'sessions'; api.listSessions()">🗂</button>
+      <button class="tb title tap" title="会话历史" @touchstart.prevent="menu = 'sessions'; api.listSessions()">
+        <span v-if="st?.isStreaming" class="tdot"></span>{{ convTitle }}
+      </button>
       <button v-if="chat.status !== 'open'" class="tb warn tap" @click="connect()">↻{{ chat.retryIn || 1 }}s</button>
       <button v-if="st?.isStreaming" class="tb stop tap" @click="doAbort">⏹</button>
       <button class="tb tap" title="新对话" @click="api.newChat()">✚</button>
@@ -576,7 +583,6 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
     <!-- ⋯ 更多菜单（webui TopBar 溢出菜单同款） -->
     <div v-if="menu === 'more'" class="backdrop tap" @click="menu = ''"></div>
     <div v-if="menu === 'more'" class="drop small moremenu">
-      <div class="di tap" @click="menu = 'sessions'; api.listSessions()">🗂 会话历史与搜索</div>
       <div class="di tap" @click="openUpdates">⬇ 检查更新</div>
       <div class="di tap" @click="openBgTasks">▤ 后台任务</div>
       <div class="di tap" @click="goSettings">⚙ 设置</div>
@@ -1048,6 +1054,8 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus; de
 .top { display: flex; gap: 6px; align-items: center; padding: 8px 10px; background: #14161c; border-bottom: 1px solid #23262e; }
 .tb { background: #1a1d26; color: #dcddde; border: 1px solid #23262e; border-radius: 18px; padding: 6px 12px; font-size: 13px; }
 .tb.name { max-width: 40vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.tb.title { flex: 1; min-width: 0; max-width: 46vw; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 11px; color: #8a93a3; background: none; border: 0; padding: 6px 8px; justify-content: center; display: flex; align-items: center; gap: 5px; }
+.tdot { width: 6px; height: 6px; border-radius: 50%; background: #e8b268; flex-shrink: 0; animation: pulse 1.2s infinite; }
 .tb.stop { background: #3b1f24; border-color: #5c2b30; color: #f2a4a4; }
 .fb { background: none; border: 0; font-size: 15px; padding: 2px 4px; }
 .car { opacity: .6; font-size: 10px; }
