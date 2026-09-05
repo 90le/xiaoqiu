@@ -27,6 +27,12 @@ const kbRows = [
 const kbSyms = ['`', '~', '|', '-', '/', '\\', ':', ';', '\'', '"', '[', ']', '{', '}', '<', '>', '(', ')', '$', '#', '%', '&', '*', '+', '=', '_', '!', '?', '@', '^', '.']
 const dpadOff = ref(localStorage.getItem('xq_dpad_off') === '1')  // 悬浮方向键
 function saveDpad(off) { try { localStorage.setItem('xq_dpad_off', off ? '1' : '0') } catch {} }
+async function pasteClip() {
+  try {
+    const t = await navigator.clipboard.readText()
+    if (t) raw(t)
+  } catch { try { window.XiaoqiuBridge && window.XiaoqiuBridge.toast('剪贴板读取失败') } catch {} }
+}
 const ctrlOn = ref(false), altOn = ref(false)
 const renaming = ref(''), renameId = ref('')
 const confirmKill = ref('')
@@ -185,16 +191,20 @@ onUnmounted(() => {
       </div>
     </div>
 
-        <!-- 悬浮方向键 D-pad（终端区右缘，可收起） -->
+        <!-- 悬浮方向键 D-pad v2（上移：终端区垂直中部，含回车/粘贴） -->
     <button v-if="dpadOff" class="dpad-fab tap" title="方向键" @touchstart.prevent="dpadOff = false; saveDpad(false)">✥</button>
     <div v-else class="dpad">
+      <button class="dp-x tap" @touchstart.prevent="dpadOff = true; saveDpad(true)">⌄</button>
       <button class="dp tap" @touchstart.prevent="raw('\x1b[A')">↑</button>
       <div class="dpb">
         <button class="dp tap" @touchstart.prevent="raw('\x1b[D')">←</button>
         <button class="dp tap" @touchstart.prevent="raw('\x1b[B')">↓</button>
         <button class="dp tap" @touchstart.prevent="raw('\x1b[C')">→</button>
       </div>
-      <button class="dp-x tap" @touchstart.prevent="dpadOff = true; saveDpad(true)">⌄</button>
+      <div class="dpb wide2">
+        <button class="dp paste tap" @touchstart.prevent="pasteClip">📋</button>
+        <button class="dp enter tap" @touchstart.prevent="raw('\r')">⏎</button>
+      </div>
     </div>
 
     <!-- 长按标签：行内管理菜单 -->
@@ -256,13 +266,16 @@ onUnmounted(() => {
 .vk.tog { color: #a78bfa; }
 .vk.tog.on { background: #2b2440; }
 /* 悬浮 D-pad（终端区右缘竖排锚定） */
-.dpad { position: absolute; right: 10px; bottom: 14px; z-index: 15; display: flex; flex-direction: column; align-items: center; gap: 5px;
+.dpad { position: absolute; right: 10px; bottom: 22%; z-index: 15; display: flex; flex-direction: column; align-items: center; gap: 5px;
   background: rgba(20, 22, 28, .82); backdrop-filter: blur(8px); border: 1px solid #323848; border-radius: 14px; padding: 6px; }
 .dpad .dp { width: 44px; height: 40px; background: #1a1d26; color: #c6c9d0; border: 1px solid #2c303b; border-radius: 9px; font-size: 16px; }
 .dpad .dp:active { background: #2b2440; }
 .dpad .dpb { display: flex; gap: 5px; }
+.dpad .dpb.wide2 { width: 100%; }
+.dpad .dp.paste { color: #7db3e8; background: #16222c; border-color: #243a4a; }
+.dpad .dp.enter { color: #7dd3a8; background: #16321f; border-color: #2a5a3a; flex: 1; }
 .dpad .dp-x { position: absolute; top: -8px; right: -8px; width: 22px; height: 22px; border-radius: 50%; background: #2c303b; color: #8a93a3; border: 1px solid #3a4150; font-size: 11px; display: flex; align-items: center; justify-content: center; }
-.dpad-fab { position: absolute; right: 10px; bottom: 14px; z-index: 15; width: 42px; height: 42px; border-radius: 50%;
+.dpad-fab { position: absolute; right: 10px; bottom: 22%; z-index: 15; width: 42px; height: 42px; border-radius: 50%;
   background: rgba(139, 92, 246, .85); color: #fff; border: 0; font-size: 17px; box-shadow: 0 4px 14px rgba(0,0,0,.45); }
 /* 扩展行：输入法式滑入 */
 .kextra { display: flex; gap: 5px; overflow-x: auto; scrollbar-width: none; padding: 2px 0; animation: kslide .16s ease; }

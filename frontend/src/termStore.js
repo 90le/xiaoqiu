@@ -53,11 +53,28 @@ export function createSession(cwd) {
   const fit = new FitAddon()
   term.loadAddon(fit)
   term.open(el)
+  try {
+    const ta = el.querySelector('textarea')
+    if (ta) { ta.setAttribute('autocapitalize', 'off'); ta.setAttribute('autocomplete', 'off'); ta.setAttribute('autocorrect', 'off'); ta.setAttribute('spellcheck', 'false') }
+  } catch {}
   const unreg = termRegister(id, {
     write: (d) => { term.write(d); if (tstore.sessions[id]) tstore.sessions[id].lastOut = Date.now() },
     onExit: (code) => { if (tstore.sessions[id]) { tstore.sessions[id].alive = false; tstore.sessions[id].exitCode = code } },
   })
-  term.onData((d) => wsSend({ type: 'terminal_input', terminalId: id, data: d }))
+  // 安卓 IME 组合输入修复：软键盘每次 keystroke 重发整个组合串（h→he→hel…）
+  // 症状=TUI 里输入 hello 显示 hhehelhellhello。策略：新串以上一串为前缀且增量≤2 → 只发增量
+  let lastComp = '', lastCompAt = 0
+  term.onData((d) => {
+    const now = Date.now()
+    if (now - lastCompAt > 1500) lastComp = '' // 空闲重置（打字停顿后新词）
+    let send = d
+    if (d.length > 1 && lastComp && d.startsWith(lastComp) && d.length - lastComp.length <= 2) {
+      send = d.slice(lastComp.length) // 增量
+    }
+    lastComp = d.length <= 3 ? d : ''
+    lastCompAt = now
+    if (send) wsSend({ type: 'terminal_input', terminalId: id, data: send })
+  })
   tstore.sessions[id] = { id, title, cwd: cwd || '/data/data/com.pihost/files/home', el, term, fit, unreg, alive: true, lastOut: Date.now(), exitCode: null }
   tstore.order.push(id)
   const ro = new ResizeObserver(() => {
