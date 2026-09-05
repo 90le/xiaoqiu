@@ -18,6 +18,8 @@ export const chat = reactive({
   state: null,            // UiState: messages/streamingMessage/model/thinkingLevel/stats...
   models: [],             // ModelInfo[]
   settings: null,         // 引擎设置全量（get_settings/settings 消息）
+  providers: [],          // 内置供应商状态（providers_status）
+  modelsCfg: [],          // 自定义模型服务（models_config → UiProviderConfig[]）
   sessions: [],           // SessionSummary[]
   conversations: [], activeConvId: '',
   slashCommands: [],
@@ -71,6 +73,9 @@ function applyDelta(st, msg) {
 const lastDeltaSeq = new Map()
 // 文件读取一次性等待表（read_file → file_content 按路径匹配）
 const fileWaiters = new Map()
+// reqId 匹配的一次性等待表（fetch_models_result / clone_provider_result）
+const reqWaiters = new Map()
+let reqSeq = 0
 function noteDeltaSeq(conversationId, seq) {
   const last = lastDeltaSeq.get(conversationId)
   if (last !== undefined && seq !== last + 1 && chat.state?.conversationId === conversationId) scheduleResync()
@@ -144,6 +149,14 @@ export function connect() {
         if (w) { w(m); fileWaiters.delete(m.path) }
         break
       }
+      case 'providers_status': chat.providers = m.providers || []; break
+      case 'models_config': chat.modelsCfg = m.providers || []; break
+      case 'fetch_models_result':
+      case 'clone_provider_result': {
+        const w = reqWaiters.get(m.reqId)
+        if (w) { w(m); reqWaiters.delete(m.reqId) }
+        break
+      }
       case 'sessions': chat.sessions = m.sessions || []; break
       case 'conversations': chat.conversations = m.conversations || []; chat.activeConvId = m.activeId; break
       case 'slash_commands': chat.slashCommands = m.commands || []; break
@@ -208,6 +221,20 @@ export const api = {
   readFile(path) { return new Promise(res => { fileWaiters.set(path, res); send({ type: 'read_file', path }) }) },
   writeFile(path, text) { send({ type: 'write_file', path, text }); return true },
   reloadExtensions() { return send({ type: 'extensions_reload' }) },
+  listProviders() { return send({ type: 'list_providers' }) },
+  listModelsConfig() { return send({ type: 'list_models_config' }) },
+  setProviderKey(provider, apiKey) { return send({ type: 'set_provider_api_key', provider, apiKey }) },
+  clearProviderKey(provider) { return send({ type: 'clear_provider_api_key', provider }) },
+  saveModelConfig(providerId, config) { return send({ type: 'save_model_config', providerId, config }) },
+  deleteModelConfig(providerId) { return send({ type: 'delete_model_config', providerId }) },
+  fetchModels(baseUrl, apiKey, authHeader, api) {
+    const reqId = 'fm' + (++reqSeq)
+    return new Promise(res => { reqWaiters.set(reqId, res); send({ type: 'fetch_models', reqId, baseUrl, apiKey, authHeader, api }) })
+  },
+  cloneProvider(provider) {
+    const reqId = 'cp' + (++reqSeq)
+    return new Promise(res => { reqWaiters.set(reqId, res); send({ type: 'clone_provider', provider, reqId }) })
+  },
   setThinking(level) { return send({ type: 'set_thinking', level }) },
   listSessions() { return send({ type: 'list_sessions' }) },
   listModels() { return send({ type: 'list_models' }) },

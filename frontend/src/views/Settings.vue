@@ -133,19 +133,6 @@ const permRows = [
   { k: 'allFiles', label: '所有文件（环境引擎）', type: 'allfiles', hint: '引擎读写存储' },
 ]
 
-/* ── 旧版密钥（P3 下线） ── */
-const legacyOpen = ref(false)
-const provider = ref('zai-coding-cn')
-const key = ref('')
-const model = ref('glm-5.3-flash')
-const keyMsg = ref(''), keyOk = ref(false)
-async function saveKey() {
-  keyMsg.value = '保存中…'; keyOk.value = false
-  const d = await appapi('setkey', { provider: provider.value, key: key.value, model: model.value })
-  keyOk.value = !!d.ok
-  keyMsg.value = d.ok ? d.data : (d.error ? d.error.message : '失败')
-}
-
 /* ═══════════ 提示词子页 ═══════════ */
 const pmSeg = ref('sys')                       // sys=系统提示词 agents=全局指令
 const promptMode = ref('append')
@@ -256,8 +243,91 @@ function chipColor(name) {
   return cs[h % cs.length]
 }
 
+/* ═══════════ P3：模型大脑 ═══════════ */
+const mq = ref('')
+const modelGroups = computed(() => {
+  const q = mq.value.trim().toLowerCase()
+  const list = q ? chat.models.filter(m => (m.name + ' ' + m.provider).toLowerCase().includes(q)) : chat.models
+  const g = {}
+  for (const m of list) (g[m.provider] = g[m.provider] || []).push(m)
+  return g
+})
+const curModelId = computed(() => chat.state?.model?.id)
+const THINK_LEVELS = [
+  { v: 'off', t: '关' }, { v: 'minimal', t: '极简' }, { v: 'low', t: '低' },
+  { v: 'medium', t: '中' }, { v: 'high', t: '高' }, { v: 'xhigh', t: '极高' }, { v: 'max', t: '最大' },
+]
+const curThink = computed(() => chat.state?.thinkingLevel || 'off')
+
+/* 内置供应商 key 弹层 */
+const keyEdit = ref(null)
+const keyInput = ref('')
+function openKeyEdit(p) { keyEdit.value = p; keyInput.value = '' }
+function saveKeyEdit() {
+  if (!keyInput.value.trim()) return
+  engineApi.setProviderKey(keyEdit.value.id, keyInput.value.trim())
+  keyEdit.value = null
+  setTimeout(() => engineApi.listProviders(), 600)
+}
+function clearKeyEdit() {
+  engineApi.clearProviderKey(keyEdit.value.id)
+  keyEdit.value = null
+  setTimeout(() => engineApi.listProviders(), 600)
+}
+
+/* 自定义模型服务编辑（二级覆盖页） */
+const APIS = [
+  { v: 'openai-completions', t: 'OpenAI 兼容（chat/completions）' },
+  { v: 'openai-responses', t: 'OpenAI Responses API' },
+  { v: 'anthropic-messages', t: 'Anthropic Messages' },
+  { v: 'google-generative-ai', t: 'Google Generative AI' },
+]
+const pEdit = ref(null)
+function newProvider() { pEdit.value = { isNew: true, providerId: '', name: '', api: 'openai-completions', baseUrl: '', apiKey: '', authHeader: false, models: [] } }
+function editProvider(p) { pEdit.value = { isNew: false, ...p, apiKey: p.apiKey || '', models: (p.models || []).map(m => ({ ...m })) } }
+function pidFromName() { pEdit.value.providerId = (pEdit.value.name || '').trim().toLowerCase().replace(/[^a-z0-9-]+/g, '-') || ('svc-' + Date.now().toString(36)) }
+function saveProvider() {
+  const d = pEdit.value
+  if (!d.providerId) pidFromName()
+  engineApi.saveModelConfig(d.providerId, { name: d.name, api: d.api, baseUrl: d.baseUrl, apiKey: d.apiKey || undefined, authHeader: d.authHeader, models: d.models })
+  pEdit.value = null
+  setTimeout(() => engineApi.listModelsConfig(), 600)
+}
+const pDelConfirm = ref(false)
+function delProvider() {
+  if (!pDelConfirm.value) { pDelConfirm.value = true; setTimeout(() => pDelConfirm.value = false, 2500); return }
+  engineApi.deleteModelConfig(pEdit.value.providerId)
+  pEdit.value = null; pDelConfirm.value = false
+  setTimeout(() => engineApi.listModelsConfig(), 600)
+}
+const mAddId = ref(''), mAddName = ref('')
+function addModelRow() {
+  const id = mAddId.value.trim()
+  if (!id || !pEdit.value) return
+  pEdit.value.models.push({ id, name: mAddName.value.trim() || undefined })
+  mAddId.value = ''; mAddName.value = ''
+}
+function rmModelRow(i) { pEdit.value.models.splice(i, 1) }
+const fetching = ref(false), fetchList = ref(null), fetchErr = ref('')
+async function fetchModelList() {
+  const d = pEdit.value
+  if (!d || !d.baseUrl.trim()) { fetchErr.value = '先填 baseUrl'; return }
+  fetching.value = true; fetchList.value = null; fetchErr.value = ''
+  try {
+    const r = await engineApi.fetchModels(d.baseUrl.trim(), d.apiKey || '', d.authHeader, d.api)
+    if (r && r.ok) fetchList.value = r.models || []
+    else fetchErr.value = (r && r.error) || '获取失败'
+  } catch { fetchErr.value = '获取失败' }
+  fetching.value = false
+}
+function pickFetch(m) {
+  if (!pEdit.value.models.some(x => x.id === m.id)) pEdit.value.models.push({ id: m.id, name: m.name || undefined })
+  fetchList.value = null
+}
+
 /* ═══════════ 启动 ═══════════ */
 watch(() => chat.settings, syncPromptDraft)
+watch(page, p => { if (p === 'models') { engineApi.listProviders(); engineApi.listModelsConfig() } })
 onMounted(() => {
   syncPromptDraft()
   window.addEventListener('popstate', onPop)
@@ -320,27 +390,6 @@ async function loadCfg() {
       </div>
     </div>
 
-    <!-- 旧版密钥（P3 下线） -->
-    <div class="card" style="padding:0;overflow:hidden;">
-      <div class="lgcy-h tap" @click="legacyOpen = !legacyOpen">
-        <span>🔑 旧版密钥 <em>（即将由「模型大脑」取代）</em></span>
-        <span>{{ legacyOpen ? '▴' : '▾' }}</span>
-      </div>
-      <div v-if="legacyOpen" class="lgcy-b">
-        <label>API 供应商</label>
-        <select v-model="provider">
-          <option value="zai-coding-cn">智谱（zai-coding-cn）</option>
-          <option value="zhipu">智谱开放平台</option>
-          <option value="custom">自定义</option>
-        </select>
-        <label>API Key</label>
-        <input v-model="key" type="password" placeholder="粘贴你的 API Key">
-        <label>默认模型</label>
-        <input v-model="model" type="text">
-        <button class="btn" style="margin-top:10px;" @click="saveKey">保存</button>
-        <div v-if="keyMsg" :class="['msg', keyOk ? 'ok' : 'bad']">{{ keyMsg }}</div>
-      </div>
-    </div>
     <div style="height:20px;"></div>
   </div>
 
@@ -600,18 +649,175 @@ async function loadCfg() {
       </div>
     </template>
 
-    <!-- ── 建设中占位（P3-P4） ── -->
+    <!-- ── 🤖 模型大脑（P3） ── -->
+    <template v-else-if="page === 'models'">
+      <!-- 当前模型卡 -->
+      <div class="grp-card" style="padding:14px 14px 12px;">
+        <div class="curm">
+          <span class="srow-chip big" :style="{ background: chipColor(curModelId || '?') }">AI</span>
+          <div style="flex:1;min-width:0;">
+            <div class="curm-n">{{ chat.state?.model?.name || chat.state?.model?.id || '—' }}</div>
+            <div class="curm-p">{{ chat.state?.model?.provider || '' }}</div>
+          </div>
+        </div>
+        <div class="thinkline">
+          <span class="thinklabel">思考</span>
+          <div class="thinkpills">
+            <button v-for="l in THINK_LEVELS" :key="l.v" :class="['tp', 'tap', { on: curThink === l.v }]" @click="engineApi.setThinking(l.v)">{{ l.t }}</button>
+          </div>
+        </div>
+      </div>
+
+      <!-- 默认模型 -->
+      <div class="secl">默认模型</div>
+      <div class="searchbox">
+        <span class="search-ic">🔍</span>
+        <input v-model="mq" placeholder="搜索模型" class="search-in">
+        <button v-if="mq" class="search-x tap" @click="mq = ''">✕</button>
+      </div>
+      <template v-for="(list, prov) in modelGroups" :key="prov">
+        <div class="prow-h">{{ prov }}<em>{{ list.length }}</em></div>
+        <div class="grp-card">
+          <div v-for="m in list" :key="m.id" class="srow tap" @click="engineApi.setModel(m.id)">
+            <div class="srow-txt">
+              <div class="srow-t">{{ m.name }}</div>
+            </div>
+            <span v-if="m.id === curModelId" class="pill ok-pill">当前 ✓</span>
+          </div>
+        </div>
+      </template>
+      <div v-if="!chat.models.length" class="empty">模型清单载入中…</div>
+
+      <!-- 内置供应商 -->
+      <div class="secl">内置供应商 <em>填 Key 即用</em></div>
+      <div class="grp-card">
+        <div v-for="p in chat.providers" :key="p.id" class="srow tap" @click="openKeyEdit(p)">
+          <div class="srow-txt">
+            <div class="srow-t">{{ p.name || p.id }}</div>
+            <div class="srow-d">{{ p.source ? '来源：' + p.source : p.id }}</div>
+          </div>
+          <span :class="['pill', p.configured ? 'ok-pill' : 'dim-pill']">{{ p.configured ? '已配置' : '未配置' }}</span>
+          <span class="grp-ar">›</span>
+        </div>
+        <div v-if="!chat.providers.length" class="empty">载入中…</div>
+      </div>
+
+      <!-- 自定义服务 -->
+      <div class="secl">自定义模型服务 <em>models.json</em>
+        <span class="secl-r"><button class="minib tap" @click="newProvider">＋ 新建</button></span>
+      </div>
+      <div class="grp-card">
+        <div v-for="p in chat.modelsCfg" :key="p.providerId" class="srow tap" @click="editProvider(p)">
+          <div class="srow-txt">
+            <div class="srow-t">{{ p.name || p.providerId }}</div>
+            <div class="srow-d">{{ (p.models || []).length }} 模型 · {{ p.baseUrl || p.api }}</div>
+          </div>
+          <span class="grp-ar">›</span>
+        </div>
+        <div v-if="!chat.modelsCfg.length" class="empty">暂无自定义服务 · 点「新建」接入任意 OpenAI 兼容接口</div>
+      </div>
+    </template>
+
+    <!-- ── 建设中占位（P4） ── -->
     <template v-else>
       <div class="card" style="text-align:center;padding:34px 16px;">
         <div style="font-size:36px;">🚧</div>
         <div style="font-weight:700;margin-top:10px;">{{ pages[page] }}</div>
         <div class="muted" style="font-size:13px;margin-top:8px;line-height:1.7;">
-          {{ page === 'models' && '默认模型与思考档 · 供应商密钥 · 自定义模型 · 预设（P3）' }}
           {{ page === 'termtools' && '终端工具开关 · bash 接管 · 空闲超时（P4）' }}
           {{ page === 'vision' && '图片理解通道 · 视觉模型选择（P4）' }}
         </div>
       </div>
     </template>
+    <div style="height:24px;"></div>
+  </div>
+
+  <!-- 供应商 Key 弹层 -->
+  <div v-if="keyEdit" class="skview" @click="keyEdit = null">
+    <div class="skview-b" @click.stop style="padding-bottom:20px;">
+      <div class="skview-h">
+        <div class="skview-tt" style="flex:1;">
+          <b>{{ keyEdit.name || keyEdit.id }}</b>
+          <div class="muted" style="font-size:11px;">{{ keyEdit.configured ? '已配置（' + (keyEdit.source || '已保存') + '）' : '未配置' }}</div>
+        </div>
+        <button class="minib tap" @click="keyEdit = null">✕</button>
+      </div>
+      <label style="margin:10px 0 6px;">API Key</label>
+      <input v-model="keyInput" type="password" placeholder="粘贴 Key（保存后引擎即时生效）" style="font-size:13px;">
+      <div style="display:flex;gap:8px;margin-top:12px;">
+        <button v-if="keyEdit.configured" class="savebar-g tap" style="flex:1;padding:11px;font-size:13px;" @click="clearKeyEdit">清除密钥</button>
+        <button class="savebar-p tap" style="flex:2;padding:11px;font-size:14px;" @click="saveKeyEdit">保存</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- 自定义服务编辑（二级覆盖页） -->
+  <div v-if="pEdit" class="subp p2">
+    <div class="subbar">
+      <button class="backb tap" @click="pEdit = null">‹</button>
+      <span class="subbar-t">{{ pEdit.isNew ? '新建模型服务' : (pEdit.name || pEdit.providerId) }}</span>
+      <span class="subbar-r"></span>
+    </div>
+    <div class="card">
+      <label>服务名称</label>
+      <input v-model="pEdit.name" placeholder="例：智谱开放平台" @blur="pEdit.isNew && pidFromName()">
+      <label>API 类型</label>
+      <select v-model="pEdit.api">
+        <option v-for="a in APIS" :key="a.v" :value="a.v">{{ a.t }}</option>
+      </select>
+      <label>Base URL</label>
+      <input v-model="pEdit.baseUrl" placeholder="https://open.bigmodel.cn/api/paas/v4">
+      <label>API Key（可选，仅存本机）</label>
+      <input v-model="pEdit.apiKey" type="password" placeholder="sk-…">
+      <div class="srow" style="padding:10px 0 0;">
+        <div class="srow-txt">
+          <div class="srow-t" style="font-size:14px;">Key 放 Authorization 头</div>
+          <div class="srow-d">关闭时按 OpenAI 惯例放 x-api-key（LM Studio 等需要开）</div>
+        </div>
+        <div :class="['sw', 'tap', { on: pEdit.authHeader }]" @click="pEdit.authHeader = !pEdit.authHeader"><div class="knob"></div></div>
+      </div>
+    </div>
+
+    <div class="secl">模型列表 <em>{{ pEdit.models.length }} 个</em>
+      <span class="secl-r"><button class="minib tap" :disabled="fetching" @click="fetchModelList">{{ fetching ? '获取中…' : '⤓ 在线获取' }}</button></span>
+    </div>
+    <div v-if="fetchErr" class="msg bad" style="margin:0 0 8px;">{{ fetchErr }}</div>
+    <div class="grp-card">
+      <div v-for="(m, i) in pEdit.models" :key="m.id + i" class="srow">
+        <div class="srow-txt">
+          <div class="srow-t">{{ m.id }}</div>
+          <div class="srow-d">{{ m.name || '' }}</div>
+        </div>
+        <button class="minib tap" style="color:var(--bad);" @click="rmModelRow(i)">✕</button>
+      </div>
+      <div v-if="!pEdit.models.length" class="empty">手动添加或在线获取</div>
+    </div>
+    <div class="card" style="padding:12px;">
+      <div style="display:flex;gap:8px;">
+        <input v-model="mAddId" placeholder="模型 id（如 glm-4.7）" style="font-size:13px;">
+        <input v-model="mAddName" placeholder="显示名（可选）" style="font-size:13px;">
+        <button class="minib tap" @click="addModelRow">＋</button>
+      </div>
+    </div>
+
+    <!-- 在线获取结果 -->
+    <template v-if="fetchList">
+      <div class="secl">在线列表 <em>点选加入</em></div>
+      <div class="grp-card">
+        <div v-for="m in fetchList" :key="m.id" class="srow tap" @click="pickFetch(m)">
+          <div class="srow-txt">
+            <div class="srow-t">{{ m.id }}</div>
+            <div class="srow-d">{{ m.name || '' }}</div>
+          </div>
+          <span class="pill dim-pill">＋ 加入</span>
+        </div>
+      </div>
+    </template>
+
+    <div style="display:flex;gap:10px;margin-top:14px;">
+      <button v-if="!pEdit.isNew" class="savebar-g tap" style="flex:1;padding:13px;" :style="pDelConfirm ? { background:'var(--bad)', color:'#fff', borderColor:'var(--bad)' } : {}" @click="delProvider">{{ pDelConfirm ? '再点确认删除' : '删除服务' }}</button>
+      <button class="savebar-p tap" style="flex:2;" @click="saveProvider">💾 保存服务</button>
+    </div>
     <div style="height:24px;"></div>
   </div>
 
@@ -738,6 +944,18 @@ label { display:block; font-size:13px; color:var(--muted); margin:12px 0 6px; }
 .mini-hint { font-style:normal; font-size:11px; color:var(--muted); font-weight:400; }
 
 /* 技能弹层 */
+.p2 { z-index:68; }
+.curm { display:flex; align-items:center; gap:12px; }
+.curm-n { font-size:16px; font-weight:800; }
+.curm-p { font-size:12px; color:var(--muted); margin-top:2px; }
+.thinkline { display:flex; align-items:center; gap:8px; margin-top:12px; padding-top:11px; border-top:1px dashed var(--line); }
+.thinklabel { font-size:12px; color:var(--muted); font-weight:700; flex-shrink:0; }
+.thinkpills { display:flex; gap:5px; flex-wrap:wrap; }
+.tp { border:1px solid var(--line); background:var(--card); border-radius:99px; padding:5px 11px; font-size:12px; font-weight:600; color:var(--muted); }
+.tp.on { background:var(--hill); border-color:var(--hill); color:#fff; }
+.prow-h { font-size:12px; font-weight:700; color:var(--muted); margin:12px 4px 6px; letter-spacing:.5px; }
+.prow-h em { font-style:normal; font-weight:400; margin-left:6px; opacity:.7; }
+
 .skview { position:fixed; inset:0; z-index:70; background:rgba(24,30,20,.5); display:flex; align-items:flex-end; animation:fadein .15s ease; }
 .skview-b { background:var(--card); border-radius:20px 20px 0 0; width:100%; max-height:80vh; display:flex; flex-direction:column; padding:14px 14px 10px; animation:upin .2s ease; }
 .skview-h { display:flex; align-items:center; gap:10px; padding-bottom:10px; border-bottom:1px solid var(--line); }
