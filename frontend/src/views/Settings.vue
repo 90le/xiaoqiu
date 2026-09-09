@@ -114,7 +114,8 @@ async function vpEnroll() {
   try {
     const rec = await call0('mic_record', { seconds: 2 })
     if (!rec.ok) throw new Error(rec.error?.message || '录音失败')
-    const r = await call0('voiceprint_enroll', { file: rec.data })
+    const wav = String(rec.data).split(' ')[0] // mic_record 返回"路径 字节数B"——只取路径
+    const r = await call0('voiceprint_enroll', { file: wav })
     if (!r.ok) throw new Error(r.error?.message || '录入失败（说清楚一点）')
     vpOk.value = true
     vpMsg.value = `✅ 第 ${r.data.count} 遍${r.data.active ? ' · 校验已开启' : ''}`
@@ -126,7 +127,8 @@ async function vpTest() {
   vpBusy.value = true; vpMsg.value = ''
   try {
     const rec = await call0('mic_record', { seconds: 2 })
-    const r = await call0('voiceprint_verify', { file: rec.data })
+    const wav = String(rec.data).split(' ')[0]
+    const r = await call0('voiceprint_verify', { file: wav })
     if (!r.ok) throw new Error(r.error?.message || '验证失败')
     vpOk.value = r.data.pass
     vpMsg.value = `${r.data.pass ? '✅ 是你' : '❌ 不太像'}（相似度 ${r.data.score}）`
