@@ -18,6 +18,13 @@ let speakToken = 0
 let speakResolver = null
 let streamWatchStop = null
 
+/** 带超时 fetch：后台 WebView 网络栈可能挂起（实测 chat_fast 无限挂），AbortController 兜底 */
+function fetchT(url, opts = {}, ms = 30000) {
+  const ac = new AbortController()
+  const t = setTimeout(() => { try { ac.abort() } catch {} }, ms)
+  return fetch(url, { ...opts, signal: ac.signal }).finally(() => clearTimeout(t))
+}
+
 const bus = (payload) => {
   try {
     return fetch('/api/voice_bus', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
@@ -67,13 +74,18 @@ export async function vsTurn(text, from) {
   vs.state = 'thinking'; glow('think')
   let data = null
   try {
-    const r = await fetch('/api/chat_fast', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ q: text, context: recentCtx() }) })
+    const r = await fetchT('/api/chat_fast', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ q: text, context: recentCtx() }) }, 25000)
     const d = (await r.json())?.structuredContent
     if (d?.ok) data = d.data
-  } catch {}
+  } catch (e) { console.log('[VS] 快脑失败: ' + (e && e.name)) }
   console.log('[VS] 意图: ' + (data ? data.type : 'null'))
   if (data && data.type === 'chat') { await reply(data.answer); return }
+  if (!data) { // 快脑超时/失败：轻任务直接重说，重任务原话直发慢脑
+    if (text.length <= 6) { await speak('没想明白，再说一次'); done(); return }
+    await exec(null, text)
+    return
+  }
   await exec(data, (data && data.prompt) ? data.prompt : text)
 }
 
@@ -133,8 +145,8 @@ async function humanize(text, kind) {
   const t = String(text || '').trim()
   if (!t || t.length <= 90) return t || '好了'
   try {
-    const r = await fetch('/api/ai_humanize', { method: 'POST', headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ kind: kind || 'reply', text: t.slice(0, 4000) }) })
+    const r = await fetchT('/api/ai_humanize', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ kind: kind || 'reply', text: t.slice(0, 4000) }) }, 15000)
     const d = (await r.json())?.structuredContent
     if (d?.ok && d?.data) return String(d.data)
   } catch {}
