@@ -28,6 +28,7 @@ function catOf(name) {
 }
 const CATNAME = Object.fromEntries(CATS.map(c => [c[0], c[1]]))
 
+onMounted(load) // ← 上版漏了这行：页面从不加载（用户只看到搜索框）
 async function load() {
   const r = await call('tools_list', { fmt: 'full' })
   const raw = r.ok ? (Array.isArray(r.data) ? r.data : []) : []
