@@ -64,6 +64,7 @@ public class WakeService extends Service {
     @Override public IBinder onBind(Intent i) { return null; }
 
     private volatile boolean sessionActive = false; // 会话循环占用中（主监听让位）
+    private volatile Thread sessionThread = null;   // 看门狗用：会话线程死了自动解除占用
     @Override public void onCreate() {
         // 前台服务：息屏不被 MIUI 冻结/回收（常驻通知=唤醒待命中的存在感）
         try {
@@ -101,14 +102,14 @@ public class WakeService extends Service {
                 if ("start".equals(cmd)) {
                     if (!sessionActive) { // 🎙点火：从主监听切进会话循环
                         sessionActive = true;
-                        new Thread(() -> { try { if (ar != null) { ar.stop(); ar.release(); ar = null; } } catch (Exception ignore) {} sessionLoop(i.getStringExtra("from") == null ? "mic" : i.getStringExtra("from"), ""); }, "mic-session").start();
+                        new Thread(() -> { sessionThread = Thread.currentThread(); try { if (ar != null) { ar.stop(); ar.release(); ar = null; } } catch (Exception ignore) {} sessionLoop(i.getStringExtra("from") == null ? "mic" : i.getStringExtra("from"), ""); }, "mic-session").start();
                     }
                 } else { sessionStop = true; }
             }
         }, new android.content.IntentFilter("com.pihost.SESSION_CMD"));
         registerReceiver(new android.content.BroadcastReceiver() {
             @Override public void onReceive(Context c2, android.content.Intent i) {
-                pendingSpeak = new String[]{ i.getStringExtra("text"), i.getStringExtra("token") };
+                pendingSpeak = new String[]{ i.getStringExtra("text"), i.getStringExtra("token"), i.getStringExtra("humanize") };
             }
         }, new android.content.IntentFilter("com.pihost.VOICE_SPEAK"));
         NotificationManager nm = (NotificationManager) getSystemService(NOTIFICATION_SERVICE);
@@ -153,7 +154,15 @@ public class WakeService extends Service {
                         if (!announced) { Log.i("PiBridge", "唤醒监听就绪（持续监听管线：环形缓冲+VAD+整句转写）"); announced = true; }
                     }
                     if (Tools.ttsSpeaking || VoiceCore.running || Tools.micBusy) { Thread.sleep(250); continue; }
-                    if (sessionActive) { Thread.sleep(200); continue; } // 会话循环占用：主监听让位
+                    if (sessionActive) {
+                        Thread st = sessionThread;
+                        if (st == null || !st.isAlive()) { // 看门狗：会话线程已死但占用未清→强制解除（唤醒不了的根治）
+                            Log.w("PiBridge", "会话占用泄漏，看门狗解除");
+                            sessionActive = false;
+                            try { sendBroadcast(new android.content.Intent("com.pihost.WAKE_GLOW_OFF")); } catch (Exception ignore) {}
+                        }
+                        Thread.sleep(200); continue;
+                    }
                     try { // 媒体互斥：手机在放音乐/视频时，唤醒让位（不抢麦克风不误识别）
                         android.media.AudioManager am = (android.media.AudioManager) getSystemService(AUDIO_SERVICE);
                         if (am != null && am.isMusicActive()) { Thread.sleep(500); continue; }
@@ -313,6 +322,7 @@ public class WakeService extends Service {
     /** 统一语音会话循环：录音(VAD)→交脑(VOICE_TURN)→等引擎(VOICE_DONE/VOICE_SPEAK)→续听。
      *  意图分流/prompt优化/结论播报全部在页面引擎；本进程只做 耳+嘴+打断。 */
     private void sessionLoop(String from, String carryIn) {
+        sessionThread = Thread.currentThread();
         sessionActive = true;
         ctxBuf.setLength(0);
         sendBroadcast(new android.content.Intent("com.pihost.WAKE_GLOW_ON"));
@@ -336,6 +346,7 @@ public class WakeService extends Service {
                     }
                 }
                 noiseRounds = 0;
+                try { sendBroadcast(new android.content.Intent("com.pihost.VOICE_HEARD").putExtra("text", heard)); } catch (Exception ignore) {}
                 if (heard.matches(".*(结束对话|结束|说完了|退下|没事了|不用了|再见).*")) {
                     speakMarked(BYE_BYE[new java.util.Random().nextInt(BYE_BYE.length)]);
                     break;
@@ -399,7 +410,7 @@ public class WakeService extends Service {
                 while (!turnDone && !sessionStop && running && System.currentTimeMillis() - t0 < 150000) {
                     if (sessionStop || !running) break;
                     String[] sp = pendingSpeak;
-                    if (sp != null) { pendingSpeak = null; speakTurn(sp[0], sp[1]); }
+                    if (sp != null) { pendingSpeak = null; speakTurn(sp[0], sp[1], sp.length > 2 && "1".equals(sp[2])); }
                     long el = System.currentTimeMillis() - t0;
                     if (!soothe1 && el > 45000) { soothe1 = true; speakMarked("还在办着，别急"); } // 安抚1
                     if (!soothe2 && el > 100000) { soothe2 = true; speakMarked("快好了，再等等"); } // 安抚2
@@ -414,7 +425,7 @@ public class WakeService extends Service {
         } catch (Exception e) {
             Log.w("PiBridge", "sessionLoop: " + e);
         } finally {
-            sessionStop = false; sessionActive = false;
+            sessionStop = false; sessionActive = false; sessionThread = null;
             sendBroadcast(new android.content.Intent("com.pihost.SESSION_END").putExtra("reason", "bye"));
             sendBroadcast(new android.content.Intent("com.pihost.WAKE_GLOW_OFF"));
         }
@@ -422,8 +433,17 @@ public class WakeService extends Service {
 
     /** 引理发来的播报：快缓存秒播/本地TTS顶上，完成后回执 TTS_STATE(off)+token → 引擎解锁。
      *  播报期间并发监听 RMS=打断（停播即解锁，本轮引擎流程自然收尾）。 */
-    private void speakTurn(String text, String token) {
+    private void speakTurn(String text, String token, boolean humanize) {
         markSpoken(text); // 回声免疫登记
+        if (humanize && text.length() > 90) { // 服务端总结（后台页面 humanize 不可靠）
+            try {
+                JSONObject hz = Tools.call("ai_humanize", new JSONObject().put("kind", "reply").put("text", text));
+                if (hz != null && hz.optBoolean("ok") && hz.optJSONObject("data") != null) {
+                    String h = hz.optJSONObject("data").optString("data", hz.optJSONObject("data").optString("say", ""));
+                    if (!h.isEmpty() && !h.startsWith("ERR")) { text = h; markSpoken(text); }
+                }
+            } catch (Exception ignore) {}
+        }
         try {
             File f = fastFileOf(text);
             if (f != null && f.isFile()) { playFastFile(f, token); return; }

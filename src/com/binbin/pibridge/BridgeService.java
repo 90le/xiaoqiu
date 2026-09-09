@@ -102,15 +102,27 @@ public class BridgeService extends Service {
         // 执行进度：药丸实时显示当前工具
         registerReceiver(new android.content.BroadcastReceiver() {
             @Override public void onReceive(Context c, android.content.Intent i) {
-                WakeGlow.setLabel("⚙️ " + i.getStringExtra("text"));
+                String t = i.getStringExtra("text");
+                WakeGlow.setLabel("⚙️ " + (t == null ? "" : t));
+                MainActivity.injectJs("window.__voiceTool && window.__voiceTool(" + org.json.JSONObject.quote(t == null ? "" : t) + ")");
             }
         }, new android.content.IntentFilter("com.pihost.VOICE_PROG"));
-        // 特效状态变色（引擎 → WakeGlow）
+        // 特效状态变色（引擎 → WakeGlow）+ 同步页内横幅
         registerReceiver(new android.content.BroadcastReceiver() {
             @Override public void onReceive(Context c, android.content.Intent i) {
-                WakeGlow.setMode(i.getStringExtra("mode"));
+                String m = i.getStringExtra("mode");
+                WakeGlow.setMode(m);
+                MainActivity.injectJs("window.__voicePhase && window.__voicePhase(" + org.json.JSONObject.quote(m == null ? "" : m) + ")");
             }
         }, new android.content.IntentFilter("com.pihost.GLOW_MODE"));
+        // 用户说的话（转写完成即显示——药丸+页内横幅）
+        registerReceiver(new android.content.BroadcastReceiver() {
+            @Override public void onReceive(Context c, android.content.Intent i) {
+                String t = i.getStringExtra("text");
+                WakeGlow.setLabel("🎙 " + (t == null ? "" : t));
+                MainActivity.injectJs("window.__voiceHeard && window.__voiceHeard(" + org.json.JSONObject.quote(t == null ? "" : t) + ")");
+            }
+        }, new android.content.IntentFilter("com.pihost.VOICE_HEARD"));
         // 唤醒复杂任务：静默注入 App 当前对话（不打开界面）
         registerReceiver(new android.content.BroadcastReceiver() {
             @Override public void onReceive(Context c, android.content.Intent i) {

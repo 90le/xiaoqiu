@@ -1134,6 +1134,7 @@ public class Tools {
                 else if ("speak".equals(act)) {
                     i = new android.content.Intent("com.pihost.VOICE_SPEAK");
                     i.putExtra("text", a.optString("text", "")).putExtra("token", a.optString("token", ""));
+                    if (a.optBoolean("humanize")) i.putExtra("humanize", "1");
                 }
                 else if ("ack".equals(act)) {
                     i = new android.content.Intent("com.pihost.VOICE_ACK");

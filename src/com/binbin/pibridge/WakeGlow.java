@@ -69,6 +69,7 @@ public class WakeGlow {
             b.setPadding(28, 18, 28, 18);
             b.setOnClickListener(v -> {
                 try { c.sendBroadcast(new android.content.Intent("com.pihost.VOICE_STOP")); } catch (Exception ignore) {}
+                hide(); // 立即消失（不等会话循环退出——"点了没反应"的体验根治）
             });
             WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
                     WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,

@@ -1,6 +1,6 @@
 <script setup>
 import { chat, api } from './useChat.js'
-import { ref, watch, onMounted, onUnmounted } from 'vue'
+import { ref, computed, watch, onMounted, onUnmounted } from 'vue'
 import Dashboard from './views/Dashboard.vue'
 import Chat from './views/Chat.vue'
 import Device from './views/Device.vue'
@@ -39,6 +39,18 @@ window.__voiceTurn = (t, f, pre, pp) => VS.vsTurn(t, f, pre, pp) // 一轮听写
 window.__ttsDone = (tk) => VS.vsTtsDone(tk)      // 播报完成（TTS_STATE off）
 window.__voiceEnd = () => VS.vsEnd()             // 会话收尾（SESSION_END）
 window.__xiaoqiuTask = (t) => VS.vsTurn(t, 'wake') // 悬浮球旧入口兼容（走引擎全套）
+// 页内状态横幅数据源（:kws 广播同步）
+const vPhase = ref(''), vHeard = ref(''), vTool = ref('')
+window.__voicePhase = (m) => { vPhase.value = m || '' }
+window.__voiceHeard = (t) => { vHeard.value = t || ''; vTool.value = '' }
+window.__voiceTool = (t) => { vTool.value = t || '' }
+const PHASE_TXT = { listen: '🎤 请说', think: '🤔 想想', exec: '⚙️ 执行中', speak: '💬 回答中' }
+const bannerShow = computed(() => vPhase.value && vPhase.value !== 'off')
+const bannerTxt = computed(() => {
+  if (vTool.value) return '⚙️ ' + vTool.value
+  if (vHeard.value) return '🎙 ' + vHeard.value
+  return PHASE_TXT[vPhase.value] || vPhase.value
+})
 
 onMounted(() => {
   window.addEventListener('xq-open-drawer', openDrawerReq)
@@ -94,6 +106,8 @@ function go(id) { view.value = id; location.hash = '#' + id; drawer.value = fals
 
 
   </div>
+  <!-- 语音会话状态横幅（页内，跟随 :kws 阶段） -->
+  <div v-if="bannerShow" class="vbanner">{{ bannerTxt }}</div>
 </template>
 
 <style scoped>
@@ -120,4 +134,9 @@ function go(id) { view.value = id; location.hash = '#' + id; drawer.value = fals
 .page { padding: 14px 14px 10px; max-width: 720px; margin: 0 auto; }
 .drawer-enter-active, .drawer-leave-active { transition: all .2s ease; }
 .drawer-enter-from, .drawer-leave-to { opacity: 0; transform: translateX(-16px); }
+</style>
+
+<style scoped>
+.vbanner { position: fixed; top: 8px; left: 50%; transform: translateX(-50%); z-index: 200; background: rgba(34,48,31,.92); color: #fff; font-size: 13px; font-weight: 600; padding: 8px 18px; border-radius: 99px; box-shadow: 0 4px 14px rgba(0,0,0,.3); max-width: 86vw; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; animation: vbdown .18s ease; pointer-events: none; }
+@keyframes vbdown { from { transform: translate(-50%,-16px); opacity: 0; } }
 </style>

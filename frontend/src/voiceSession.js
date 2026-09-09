@@ -42,6 +42,16 @@ function speak(text) {
     bus({ action: 'speak', text: t, token })
   })
 }
+/** 原文直发+humanize 标志（:kws 服务端总结） */
+function speakRaw(text, humanize) {
+  const t = String(text || '').slice(0, 2000)
+  if (!t) return Promise.resolve()
+  const token = 'tk' + (++speakToken)
+  return new Promise((resolve) => {
+    speakResolver = { token, resolve }
+    bus({ action: 'speak', text: t, token, humanize: !!humanize })
+  })
+}
 export function vsTtsDone(token) {
   console.log('[VS] ttsDone: ' + token)
   if (speakResolver && speakResolver.token === token) { const r = speakResolver; speakResolver = null; r.resolve() }
@@ -116,9 +126,8 @@ async function exec(data, prompt, skipAck) {
   vs.state = 'conclusion'; glow('speak')
   const text = lastAssistantText()
   if (text) {
-    const say = await humanize(text, 'reply')
-    await speak(say)
-    extract(vs.lastHeard, say) // 自动沉淀
+    await speakRaw(text, true) // 服务端总结（:kws ai_humanize——后台页面 humanize 不可靠的根治）
+    extract(vs.lastHeard, text.slice(0, 300)) // 自动沉淀
   }
   done()
 }
