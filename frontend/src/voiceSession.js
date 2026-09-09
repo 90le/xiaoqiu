@@ -26,7 +26,7 @@ function fetchT(url, opts = {}, ms = 30000) {
 }
 
 const bus = (payload) => {
-  try { return fetchT('/api/voice_bus', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }, 5000) }
+  try { return fetchT('/api/voice_bus', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }, 5000).catch(() => {}) }
   catch { return Promise.resolve() }
 }
 const glow = (mode) => { bus({ action: 'glow', mode }) }
