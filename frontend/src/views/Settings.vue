@@ -110,6 +110,25 @@ const fastModelLabel = computed(() => {
   return (fastModelOpts.value.find(o => o.v === v) || {}).t?.split(' · ')[0] || v
 })
 const fastTesting = ref(false), fastTestMsg = ref('')
+const FAST_THINK_BASE = [
+  { v: 'off', t: '关' }, { v: 'minimal', t: '极简' }, { v: 'low', t: '低' },
+  { v: 'medium', t: '中' }, { v: 'high', t: '高' }, { v: 'xhigh', t: '极高' }, { v: 'max', t: '最大' },
+]
+// 选中模型的思考能力（reasoning 标志；引擎 models 列表提供）
+const fastReasoning = computed(() => {
+  const v = cfg.value.fast_model
+  if (!v) return true // 默认 glm-5.3 支持
+  const m = (chat.models || []).find(x => x.id === v)
+  return m ? !!m.reasoning : true
+})
+// 引擎若给 availableThinkingLevels 用之；否则 reasoning=true 全档可选、false 仅关
+const fastThinkLevels = computed(() => {
+  const v = cfg.value.fast_model
+  const m = (chat.models || []).find(x => x.id === v)
+  const avail = m?.availableThinkingLevels || m?.thinkingLevels
+  const okSet = Array.isArray(avail) && avail.length ? new Set(avail) : null
+  return FAST_THINK_BASE.map(l => ({ ...l, ok: okSet ? okSet.has(l.v) : (fastReasoning.value || l.v === 'off') }))
+})
 async function testFast() {
   fastTesting.value = true; fastTestMsg.value = ''
   try {
@@ -726,12 +745,12 @@ async function loadCfg() {
             <span style="align-self:center;font-size:12px;color:var(--muted);">tokens</span>
           </div>
         </div>
-        <div class="srow">
-          <div class="srow-txt">
-            <div class="srow-t">思考模式</div>
-            <div class="srow-d">开=更聪明但慢1-3秒；默认关（语音要快）</div>
+        <div class="srow" style="flex-direction:column;align-items:stretch;gap:6px;">
+          <div class="srow-t">思考等级 <em class="mini-hint">{{ fastReasoning ? '默认关（语音要快）；开=更聪明慢1-3秒' : '当前模型不支持思考' }}</em></div>
+          <div v-if="fastReasoning" class="thinkpills2">
+            <button v-for="l in fastThinkLevels" :key="l.v" :class="['tp2', 'tap', { on: (cfg.fast_thinking_level || 'off') === l.v, dis: !l.ok }]"
+              :title="l.ok ? '' : '该模型不支持此档位'" @click="l.ok && (cfg.fast_thinking_level = l.v, save('fast_thinking_level', l.v))">{{ l.t }}</button>
           </div>
-          <div :class="['sw', 'tap', { on: cfg.fast_thinking === 'true' }]" @click="cfg.fast_thinking = cfg.fast_thinking === 'true' ? 'false' : 'true'; save('fast_thinking', cfg.fast_thinking)"><div class="knob"></div></div>
         </div>
         <div class="srow">
           <div class="srow-txt"><div class="srow-t">连通测试</div><div class="srow-d">{{ fastTestMsg || '发一句测试意图' }}</div></div>

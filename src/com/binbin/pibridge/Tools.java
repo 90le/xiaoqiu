@@ -303,7 +303,9 @@ public class Tools {
         try {
             String model = loadCfg().optString("fast_model", "");
             boolean think = "true".equals(loadCfg().optString("fast_thinking", "false"));
+            think = "true".equals(loadCfg().optString("fast_thinking", "false")); // 兼容旧开关
             r.put("thinking", think);
+            r.put("think_level", loadCfg().optString("fast_thinking_level", "off")); // 7档（对齐模型大脑）
             r.put("max_tokens", Math.max(512, loadCfg().optInt("fast_max_tokens", 32768))); // 用户：输出上限默认32k（模型都是1M上下文，别卡小）
             if (model.isEmpty()) { r.put("model", "glm-5.3").put("url", "https://open.bigmodel.cn/api/coding/paas/v4/chat/completions").put("key", fastKey()); return r; }
             // 自定义模型路由（models.json providers）
@@ -348,6 +350,17 @@ public class Tools {
         }
     }
 
+    /** 思考参数构造：off→disabled；档位→enabled+level（glm-5.3 thinkingLevelMap 同构：low/high/max 等透传） */
+    static JSONObject thinkBody(JSONObject mc) throws Exception {
+        String lv = mc.optString("think_level", "off");
+        if (lv.isEmpty() || "off".equals(lv) || !mc.optBoolean("thinking", false) && "off".equals(lv))
+            return new JSONObject().put("type", "disabled");
+        if (!mc.optBoolean("thinking", false)) return new JSONObject().put("type", "disabled");
+        JSONObject t = new JSONObject().put("type", "enabled");
+        if (!"minimal".equals(lv) && !"medium".equals(lv)) t.put("level", lv); // 模型 levelMap 不含的档不传（回落默认）
+        return t;
+    }
+
     static String llmRaw(String system, String user) {
         try {
             JSONObject mc = fastModelCfg();
@@ -359,7 +372,7 @@ public class Tools {
                             .put(new JSONObject().put("role", "system").put("content", system))
                             .put(new JSONObject().put("role", "user").put("content", user)))
                     .put("max_tokens", mc.optInt("max_tokens", 32768)).put("temperature", 0.4)
-                    .put("thinking", new JSONObject().put("type", mc.optBoolean("thinking", false) ? "enabled" : "disabled"));
+                    .put("thinking", thinkBody(mc));
             javax.net.ssl.HttpsURLConnection c = (javax.net.ssl.HttpsURLConnection)
                     new java.net.URL(mc.optString("url", "https://open.bigmodel.cn/api/coding/paas/v4/chat/completions")).openConnection();
             c.setRequestMethod("POST"); c.setConnectTimeout(5000); c.setReadTimeout(20000); c.setDoOutput(true);
@@ -660,7 +673,7 @@ public class Tools {
                     .put(new JSONObject().put("role", "system").put("content", sys))
                     .put(new JSONObject().put("role", "user").put("content", userMsg)))
                 .put("max_tokens", mc.optInt("max_tokens", 32768)).put("temperature", 0.4)
-                .put("thinking", new JSONObject().put("type", mc.optBoolean("thinking", false) ? "enabled" : "disabled"));
+                .put("thinking", thinkBody(mc));
             String content = null;
             for (int attempt = 0; attempt < 2 && (content == null || content.isEmpty()); attempt++) {
                 if (attempt > 0) {
