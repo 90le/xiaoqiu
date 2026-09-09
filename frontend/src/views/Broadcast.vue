@@ -25,6 +25,10 @@ const digest = ref(''), busy = ref(false), out = ref('')
 
 async function load() {
   cfg.value = await cfgAll()
+  if (String(cfg.value.notify_announce_pkgs ?? '').trim() === '') { // 首次：写入默认白名单（此后可自由清空）
+    cfg.value.notify_announce_pkgs = 'com.tencent.mm'
+    await cfgSet('notify_announce_pkgs', 'com.tencent.mm')
+  }
   const r = await call('notify_read', { limit: 50 })
   logs.value = r.ok && Array.isArray(r.data) ? r.data : (r.ok && r.data?.items) || []
 }
@@ -36,7 +40,7 @@ async function setMode(m) { cfg.value.notify_announce_mode = m; await save('noti
 
 /* ── 名单（逗号分隔包名 ↔ 数组） ── */
 const whiteList = computed({
-  get: () => (String(cfg.value.notify_announce_pkgs ?? '').trim() || 'com.tencent.mm').split(',').map(s => s.trim()).filter(Boolean),
+  get: () => String(cfg.value.notify_announce_pkgs ?? '').split(',').map(s => s.trim()).filter(Boolean),
   set: (v) => { cfg.value.notify_announce_pkgs = v.join(','); save('notify_announce_pkgs', v.join(',')) },
 })
 const blackList = computed({
@@ -44,11 +48,14 @@ const blackList = computed({
   set: (v) => { cfg.value.notify_announce_black_pkgs = v.join(','); save('notify_announce_black_pkgs', v.join(',')) },
 })
 async function addPkg(target, pkg) {
+  if (!pkg) return
   const list = target === 'white' ? [...whiteList.value] : [...blackList.value]
-  if (list.includes(pkg)) return
-  list.push(pkg)
-  if (target === 'white') whiteList.value = list; else blackList.value = list
+  const hit = list.includes(pkg)
+  const next = hit ? list.filter(p => p !== pkg) : [...list, pkg]
+  if (target === 'white') whiteList.value = next; else blackList.value = next
+  flash(hit ? '已移出' + (target === 'white' ? '白' : '黑') + '名单' : '已加入' + (target === 'white' ? '白' : '黑') + '名单')
 }
+function flash(t) { out.value = t; setTimeout(() => out.value = '', 1600) }
 async function removePkg(target, pkg) {
   if (target === 'white') whiteList.value = whiteList.value.filter(p => p !== pkg)
   else blackList.value = blackList.value.filter(p => p !== pkg)
@@ -62,7 +69,14 @@ async function openPicker(target) {
 }
 async function loadApps(q) {
   const r = await call('apps_list', { filter: q || '', limit: 200 })
-  apps.value = r.ok && Array.isArray(r.data) ? r.data : (r.ok && r.data?.apps) || []
+  const raw = r.ok ? (Array.isArray(r.data) ? r.data : r.data?.items || r.data?.apps || []) : []
+  apps.value = raw.map(it => {
+    if (typeof it === 'string') {
+      const m = it.match(/^(.*?)\s*\((.+)\)\s*$/)   // "微信 (com.tencent.mm)"
+      return m ? { label: m[1], pkg: m[2] } : { label: it, pkg: it }
+    }
+    return { label: it.label || it.name || it.app, pkg: it.pkg || it.package || it.packageName }
+  })
 }
 watch(appQ, q => { if (appPicker.value && (q === '' || q.length >= 1)) loadApps(q) })
 
@@ -73,9 +87,8 @@ function markOf(l) {
   const kw = String(cfg.value.notify_announce_exclude ?? '验证码,快递,取件').split(',').filter(k => k.trim())
   const body = (l.title || '') + (l.text || '')
   for (const k of kw) if (k.trim() && body.includes(k.trim())) return { t: '🚫', why: '关键词「' + k.trim() + '」' }
-  if (mode.value === 'blacklist') {
-    return blackList.value.includes(pkg) ? { t: '🚫', why: '黑名单' } : { t: '✅', why: '将播报' }
-  }
+  if (blackList.value.includes(pkg)) return { t: '🚫', why: '黑名单' } // 黑名单两种模式下都置顶可见
+  if (mode.value === 'blacklist') return { t: '✅', why: '将播报' }
   return whiteList.value.includes(pkg) ? { t: '✅', why: '白名单' } : { t: '⬜', why: '不在名单' }
 }
 function getPackageNameSelf() { return 'com.pihost' }
@@ -275,11 +288,12 @@ async function doDigest() {
           <input :value="cfg.notify_announce_engine || ''" placeholder="留空跟随全局" @change="e => { cfg.notify_announce_engine = e.target.value; save('notify_announce_engine', e.target.value) }">
         </div>
       </div>
-      <div v-if="out" class="msg ok">{{ out }}</div>
+      
     </template>
 
     <!-- 通知流 -->
     <template v-else-if="page === 'feed'">
+      <div v-if="out" class="msg ok" style="position:sticky;top:56px;z-index:2;background:var(--hill-soft);">{{ out }}</div>
       <div class="hint">按当前模式实时计算每条通知的命运。点行尾按钮一键配置来源。</div>
       <div class="grp-card">
         <div v-for="(l, i) in logs" :key="i" class="feedrow">
@@ -289,8 +303,8 @@ async function doDigest() {
             <div class="srow-d">{{ l.text }}<br><span class="mono-s">{{ l.pkg }}</span> · {{ new Date(l.time).toLocaleTimeString() }}</div>
           </div>
           <div class="feedacts">
-            <button class="minib tap" title="加入白名单" @click="addPkg('white', l.pkg)">✅</button>
-            <button class="minib tap" title="加入黑名单" @click="addPkg('black', l.pkg)">🚫</button>
+            <button :class="['minib', 'tap', { ong: whiteList.includes(l.pkg) }]" title="切换白名单" @click="addPkg('white', l.pkg)">✅</button>
+            <button :class="['minib', 'tap', { onr: blackList.includes(l.pkg) }]" title="切换黑名单" @click="addPkg('black', l.pkg)">🚫</button>
           </div>
         </div>
         <div v-if="!logs.length" class="empty">暂无通知记录</div>
@@ -358,6 +372,8 @@ async function doDigest() {
 .srow-txt { flex: 1; min-width: 0; }
 .srow-t { font-size: 14px; font-weight: 700; }
 .srow-d { font-size: 12px; color: var(--muted); margin-top: 3px; line-height: 1.5; word-break: break-all; }
+.minib.ong { background: var(--hill-soft); border-color: var(--hill); color: var(--hill); }
+.minib.onr { background: #F8E8E5; border-color: var(--bad); color: var(--bad); }
 .minib { border: 1px solid var(--line); background: var(--card); border-radius: 9px; padding: 5px 10px; font-size: 12px; font-weight: 600; color: var(--ink); }
 .mini-hint { font-style: normal; font-size: 11px; color: var(--muted); font-weight: 400; }
 .mono-s { font-family: ui-monospace, monospace; font-size: 11px; color: var(--muted); }
