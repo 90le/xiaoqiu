@@ -162,27 +162,37 @@ public class Tools {
             return false;
         }
     }
-    /** wav 文件 → 说话人向量 */
+    /** wav 文件 → 说话人向量（真采样率；未就绪补 0.8s 静音；零范数=null） */
     static float[] spkEmbed(File wav) {
         if (!initVoiceprint()) return null;
         try {
             int[] rate = {16000};
             float[] s = com.binbin.pibridge.WavUtil.readWavF(wav, rate);
-            if (s == null || s.length < rate[0] / 2) return null;
-            com.k2fsa.sherpa.onnx.OnlineStream st = spkX.createStream();
-            st.acceptWaveform(s, 0);
-            while (!spkX.isReady(st)) break; // 单包即成
-            return spkX.compute(st);
+            return spkEmbedSamples(s, rate[0]);
         } catch (Throwable t) { Log.w("PiBridge", "spkEmbed: " + t); return null; }
     }
-    /** 采样直入 → 向量（唤醒门禁用） */
+    static float[] spkEmbedSamples(float[] s, int rate) {
+        if (s == null || s.length < rate / 2) return null;
+        com.k2fsa.sherpa.onnx.OnlineStream st = spkX.createStream();
+        st.acceptWaveform(s, rate);
+        if (!spkX.isReady(st)) { // 帧不够 → 补 0.8s 静音
+            float[] s2 = new float[s.length + rate * 4 / 5];
+            System.arraycopy(s, 0, s2, 0, s.length);
+            st = spkX.createStream();
+            st.acceptWaveform(s2, rate);
+        }
+        if (!spkX.isReady(st)) { Log.w("PiBridge", "声纹: 帧仍不足"); return null; }
+        float[] e = spkX.compute(st);
+        if (e == null || e.length == 0) return null;
+        double norm = 0; for (float v : e) norm += (double) v * v;
+        norm = Math.sqrt(norm);
+        if (norm < 1e-3) { Log.w("PiBridge", "声纹: 零向量（" + e.length + "维）"); return null; } // 全零=未就绪产物，拒收
+        return e;
+    }
+    /** 采样直入 → 向量（唤醒门禁用；真采样率+就绪+零范数防护） */
     static float[] spkEmbedF(float[] s) {
         if (!initVoiceprint() || s == null || s.length < 8000) return null;
-        try {
-            com.k2fsa.sherpa.onnx.OnlineStream st = spkX.createStream();
-            st.acceptWaveform(s, 0);
-            return spkX.compute(st);
-        } catch (Throwable t) { return null; }
+        try { return spkEmbedSamples(s, 16000); } catch (Throwable t) { return null; }
     }
     static java.io.File vpFile() { return new java.io.File(ctx.getFilesDir(), "voiceprint.bin"); }
     static void vpSave(float[][] embs) {
@@ -1848,7 +1858,12 @@ public class Tools {
                 java.util.List<float[]> list = new java.util.ArrayList<>();
                 try (java.io.DataInputStream ds = new java.io.DataInputStream(new java.io.FileInputStream(pool))) {
                     int n = ds.readInt();
-                    for (int k = 0; k < n && k < 7; k++) { int d = ds.readInt(); float[] x = new float[d]; for (int i = 0; i < d; i++) x[i] = ds.readFloat(); list.add(x); }
+                    for (int k = 0; k < n && k < 7; k++) {
+                        int d = ds.readInt(); float[] x = new float[d];
+                        for (int i = 0; i < d; i++) x[i] = ds.readFloat();
+                        double nn = 0; for (float v : x) nn += (double) v * v;
+                        if (Math.sqrt(nn) > 1e-3) list.add(x); // 滤掉历史零向量
+                    }
                 } catch (Exception ignore) {}
                 list.add(e);
                 try (java.io.DataOutputStream ds = new java.io.DataOutputStream(new java.io.FileOutputStream(pool))) {

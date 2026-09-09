@@ -442,17 +442,8 @@ public class WakeService extends Service {
                 try { fr = Tools.call("chat_fast", new JSONObject().put("q", heard).put("context", ctxBuf.toString())); } catch (Exception ignore) {}
                 JSONObject fd = (fr != null && fr.optBoolean("ok")) ? fr.optJSONObject("data") : null;
                 if (fd != null && "chat".equals(fd.optString("type"))) {
-                    // 闲聊快答：全程 :kws（转写→快脑→拟人化→TTS），页面零参与
-                    String ans = fd.optString("answer", "");
-                    if (ans.length() > 90) {
-                        try {
-                            JSONObject hz = Tools.call("ai_humanize", new JSONObject().put("kind", "reply").put("text", ans));
-                            if (hz != null && hz.optBoolean("ok") && hz.optJSONObject("data") != null) {
-                                String h = hz.optJSONObject("data").optString("data", hz.optJSONObject("data").optString("say", ""));
-                                if (!h.isEmpty() && !h.startsWith("ERR")) ans = h;
-                            }
-                        } catch (Exception ignore) {}
-                    }
+                    // 闲聊快答：全程 :kws；口语化统一走 voiceFriendly（尊重"口语化改写"开关+格式清洗+长文改写）
+                    String ans = Tools.voiceFriendly(fd.optString("answer", ""));
                     setGlow("speak");
                     speakMarked(ans.length() > 400 ? ans.substring(0, 400) : ans);
                     waitSpeakMs(90000);
@@ -518,16 +509,8 @@ public class WakeService extends Service {
     /** 引理发来的播报：快缓存秒播/本地TTS顶上，完成后回执 TTS_STATE(off)+token → 引擎解锁。
      *  播报期间并发监听 RMS=打断（停播即解锁，本轮引擎流程自然收尾）。 */
     private void speakTurn(String text, String token, boolean humanize) {
-        markSpoken(text); // 回声免疫登记
-        if (humanize && text.length() > 90) { // 服务端总结（后台页面 humanize 不可靠）
-            try {
-                JSONObject hz = Tools.call("ai_humanize", new JSONObject().put("kind", "reply").put("text", text));
-                if (hz != null && hz.optBoolean("ok") && hz.optJSONObject("data") != null) {
-                    String h = hz.optJSONObject("data").optString("data", hz.optJSONObject("data").optString("say", ""));
-                    if (!h.isEmpty() && !h.startsWith("ERR")) { text = h; markSpoken(text); }
-                }
-            } catch (Exception ignore) {}
-        }
+        if (humanize) { String h = Tools.voiceFriendly(text); if (h != null && !h.isEmpty()) text = h; }
+        markSpoken(text); // 回声免疫登记（登记最终播报稿）
         try {
             File f = fastFileOf(text);
             if (f != null && !f.isFile() && !"xiaomi".equals(Tools.loadCfg().optString("tts_engine", "auto"))) {
