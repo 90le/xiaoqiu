@@ -77,6 +77,7 @@ const levels = computed(() => {
 const thinkLabel = (v) => (THINKING_ALL.find(l => l.v === v) || {}).label || v || '—'
 // 模型使用次数（webui modelUsage 同款：localStorage 轻量记账，下拉按热度排序）
 const MU_KEY = 'xq_model_usage'
+function saveTts(v) { try { localStorage.setItem('xq_tts2', v) } catch {} }
 function recordModelUsage(id) { try { const u = JSON.parse(localStorage.getItem(MU_KEY) || '{}'); u[id] = (u[id] || 0) + 1; localStorage.setItem(MU_KEY, JSON.stringify(u)) } catch {} }
 const modelUsage = JSON.parse(localStorage.getItem(MU_KEY) || '{}')
 const modelFilter = ref('')
@@ -794,7 +795,7 @@ onUnmounted(() => { delete window.__voiceResult; delete window.__voiceStatus })
         <span v-if="busy" class="working"><span class="wspin"></span>处理中<template v-if="qTotal"> ⏳{{ qTotal }}</template></span>
       </template>
       <span class="sp"></span>
-      <button class="fb tap" :title="ttsOn ? '朗读开' : '朗读关'" @click="ttsOn = !ttsOn; localStorage.setItem('xq_tts2', ttsOn)">{{ ttsOn ? '🔊' : '🔇' }}</button>
+      <button class="fb tap" :title="ttsOn ? '朗读开' : '朗读关'" @click="ttsOn = !ttsOn; saveTts(ttsOn)">{{ ttsOn ? '🔊' : '🔇' }}</button>
     </div>
 
     <!-- 语音状态浮条 -->
