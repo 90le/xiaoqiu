@@ -91,6 +91,12 @@ public class BridgeService extends Service {
                 MainActivity.injectJs("window.__ttsDone && window.__ttsDone(" + org.json.JSONObject.quote(tk == null ? "" : tk) + ")");
             }
         }, new android.content.IntentFilter("com.pihost.TTS_STATE"));
+        // 执行进度：药丸实时显示当前工具
+        registerReceiver(new android.content.BroadcastReceiver() {
+            @Override public void onReceive(Context c, android.content.Intent i) {
+                WakeGlow.setLabel("⚙️ " + i.getStringExtra("text"));
+            }
+        }, new android.content.IntentFilter("com.pihost.VOICE_PROG"));
         // 特效状态变色（引擎 → WakeGlow）
         registerReceiver(new android.content.BroadcastReceiver() {
             @Override public void onReceive(Context c, android.content.Intent i) {

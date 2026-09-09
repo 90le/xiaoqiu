@@ -322,10 +322,15 @@ public class WakeService extends Service {
                 android.content.Intent ti = new android.content.Intent("com.pihost.VOICE_TURN");
                 ti.putExtra("text", heard).putExtra("from", from);
                 sendBroadcast(ti);
-                long t0 = System.currentTimeMillis();
+                                long t0 = System.currentTimeMillis();
+                boolean soothe1 = false, soothe2 = false;
                 while (!turnDone && !sessionStop && running && System.currentTimeMillis() - t0 < 150000) {
+                    if (sessionStop || !running) break;
                     String[] sp = pendingSpeak;
                     if (sp != null) { pendingSpeak = null; speakTurn(sp[0], sp[1]); }
+                    long el = System.currentTimeMillis() - t0;
+                    if (!soothe1 && el > 45000) { soothe1 = true; speakMarked("还在办着，别急"); } // 安抚1
+                    if (!soothe2 && el > 100000) { soothe2 = true; speakMarked("快好了，再等等"); } // 安抚2
                     Thread.sleep(60);
                 }
                 if (sessionStop || !running) break;

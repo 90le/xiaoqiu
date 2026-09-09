@@ -1117,7 +1117,7 @@ public class Tools {
         }});
 
         def("voice_bus", "统一语音会话总线（页面引擎→原生广播）",
-            schema(props("action", prop("string", "done|session|speak|glow"),
+            schema(props("action", prop("string", "done|session|speak|prog|glow"),
                     "cmd", prop("string", "session: start/stop"),
                     "from", prop("string", "wake|mic"),
                     "text", prop("string", "speak: 文本"),
@@ -1134,6 +1134,10 @@ public class Tools {
                 else if ("speak".equals(act)) {
                     i = new android.content.Intent("com.pihost.VOICE_SPEAK");
                     i.putExtra("text", a.optString("text", "")).putExtra("token", a.optString("token", ""));
+                }
+                else if ("prog".equals(act)) {
+                    i = new android.content.Intent("com.pihost.VOICE_PROG");
+                    i.putExtra("text", a.optString("text", ""));
                 }
                 else if ("glow".equals(act)) {
                     i = new android.content.Intent("com.pihost.GLOW_MODE");

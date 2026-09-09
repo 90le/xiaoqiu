@@ -26,9 +26,8 @@ function fetchT(url, opts = {}, ms = 30000) {
 }
 
 const bus = (payload) => {
-  try {
-    return fetch('/api/voice_bus', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) })
-  } catch { return Promise.resolve() }
+  try { return fetchT('/api/voice_bus', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(payload) }, 5000) }
+  catch { return Promise.resolve() }
 }
 const glow = (mode) => { bus({ action: 'glow', mode }) }
 
@@ -103,7 +102,14 @@ async function exec(data, prompt) {
   const ok = api.prompt(prompt) // 优化后指令 → 当前活动会话
   console.log('[VS] prompt(' + ok + '): ' + prompt.slice(0, 30))
   if (!ok) { await speak('连接断了，打开小丘再试一次'); done(); return }
-  await streamEnd()
+  // 执行期进度：每个新工具开始 → 药丸显示"⚙️ 工具名"（用户知道在干活）
+  let lastTool = ''
+  const stopProg = watch(() => chat.state?.streamingMessage, (m) => {
+    const tools = (m?.content || []).filter(b => b.type === 'toolCall')
+    const t = tools[tools.length - 1]?.name
+    if (t && t !== lastTool) { lastTool = t; bus({ action: 'prog', text: t }) }
+  })
+  try { await streamEnd() } finally { stopProg() }
   console.log('[VS] 流结束')
   vs.state = 'conclusion'; glow('speak')
   const text = lastAssistantText()

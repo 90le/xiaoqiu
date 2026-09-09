@@ -56,7 +56,7 @@ public class WakeGlow {
     public static void setMode(String m) {
         if (m == null) m = "listen";
         mode = m;
-        // off 由 hide() 承担
+        labelOverride = ""; // 换状态清进度标签
     }
     private static int cHead(String m) {
         if ("think".equals(m)) return 0x4a9eff;
@@ -71,6 +71,9 @@ public class WakeGlow {
         if ("exec".equals(m)) return 0.004f;     // 执行：中速对冲
         return 0.004f;                            // 听：巡游
     }
+
+    private static volatile String labelOverride = "";
+    public static void setLabel(String t) { labelOverride = t == null ? "" : t; }
 
     private static String label(String m) {
         if ("think".equals(m)) return "🤔 想想…";
@@ -105,7 +108,7 @@ public class WakeGlow {
 
             int hc = cHead(mode);
             // 顶部状态药丸（进行中/进度可视）
-            String lb = label(mode);
+            String lb = labelOverride.isEmpty() ? label(mode) : labelOverride;
             if (!lb.isEmpty()) {
                 Paint tp = new Paint(Paint.ANTI_ALIAS_FLAG);
                 tp.setColor(0xE6171A21);
