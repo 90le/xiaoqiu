@@ -79,7 +79,9 @@ export async function vsTurn(text, from) {
 
 async function reply(answer) {
   vs.state = 'replying'; glow('speak')
-  await speak(await humanize(answer, 'reply'))
+  const say = await humanize(answer, 'reply')
+  await speak(say)
+  extract(vs.lastHeard, say) // 自动沉淀（后台，不阻塞）
   done()
 }
 async function exec(data, prompt) {
@@ -93,7 +95,11 @@ async function exec(data, prompt) {
   console.log('[VS] 流结束')
   vs.state = 'conclusion'; glow('speak')
   const text = lastAssistantText()
-  if (text) await speak(await humanize(text, 'reply')) // 结论式：不是朗诵
+  if (text) {
+    const say = await humanize(text, 'reply')
+    await speak(say)
+    extract(vs.lastHeard, say) // 自动沉淀
+  }
   done()
 }
 function done() {
@@ -134,6 +140,14 @@ async function humanize(text, kind) {
   } catch {}
   return t.slice(0, 120) + '……'
 }
+/** 对话后自动沉淀（mem0 模式：快脑提取→同key更新；失败静默） */
+function extract(text, replyText) {
+  try {
+    fetch('/api/memory_extract', { method: 'POST', headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ text: String(text || '').slice(0, 500), reply: String(replyText || '').slice(0, 300) }) }).catch(() => {})
+  } catch {}
+}
+
 function recentCtx() {
   const msgs = (chat.state?.messages || []).slice(-6)
   return msgs.map(m => (m.role === 'user' ? '用户:' : '小丘:') +

@@ -589,6 +589,10 @@ public class Tools {
     static JSONArray veCache; static String veCacheKey; static long veCacheTime; // vision_elements 同图缓存
     static String rpcStash; // pi_rpc 会话轮换时的状态摘要
     static final Object piRpcLock = new Object(); // pi_rpc 串行锁
+    static String firstSeg(String key) { int i = key.indexOf('.'); return i > 0 ? key.substring(0, i) : "fact"; }
+    /** 提取类长输出（400字内，多条行） */
+    static String llmShortLong(String sys, String userMsg, int maxTok) { return llmShort(sys, userMsg, maxTok, 500); }
+
     /** 记忆分类推断：条目显式 cat > key 前缀 */
     static String memCat(String k, JSONObject e) {
         String c = e.optString("cat", "");
@@ -1693,6 +1697,33 @@ public class Tools {
             }
             return ok(new JSONObject().put("count", out.length()).put("items", out));
         }});
+        def("memory_extract", "对话后自动沉淀记忆：从一段对话提取值得长期记住的用户事实/偏好（无则不动）",
+            schema(props("text", prop("string", "用户说的话"), "reply", prop("string", "助手回答摘要 可空"))),
+            new H() { public JSONObject run(JSONObject a) throws Exception {
+                if ("false".equals(loadCfg().optString("memory_auto", "true"))) return ok(new JSONObject().put("saved", 0).put("off", true));
+                String conv = "用户：" + a.optString("text", "") + "\n小丘：" + a.optString("reply", "");
+                if (conv.trim().length() < 12) return ok(new JSONObject().put("saved", 0));
+                String r = llmShortLong("从下面的对话里提取【值得长期记住的用户信息】：偏好/习惯/事实/人物关系/常用路径等。\n" +
+                        "规则：只提取关于用户的稳定信息（一次性问题不算）；没有值得记的就只输出 NONE；最多3条。\n" +
+                        "输出格式（每行一条，严格遵守）：cat.key: 内容\n其中 cat 是 user/fact/person/app/skill 之一，key 用简短英文标识。\n例如：user.pref.concise: 用户喜欢简洁回答",
+                        conv, 400);
+                if (r == null || r.contains("NONE") || r.startsWith("ERR")) return ok(new JSONObject().put("saved", 0));
+                int n = 0;
+                for (String line : r.split("\n")) {
+                    line = line.trim();
+                    if (line.isEmpty() || line.startsWith("cat.")) continue;
+                    int ci = line.indexOf(':');
+                    if (ci < 5) continue;
+                    String key = line.substring(0, ci).trim();
+                    String val = line.substring(ci + 1).trim();
+                    if (key.isEmpty() || val.isEmpty() || val.length() > 200) continue;
+                    if (!key.matches("[a-zA-Z0-9._-]{3,60}")) continue;
+                    Tools.call("memory_save", new JSONObject().put("key", key).put("value", val).put("cat", firstSeg(key)).put("src", "auto"));
+                    n++;
+                }
+                if (n > 0) Log.i("PiBridge", "🧠 自动沉淀 " + n + " 条");
+                return ok(new JSONObject().put("saved", n));
+            }});
         def("memory_pin", "置顶/取消核心记忆（核心记忆每次对话自动注入上下文=小丘对你的核心认知）",
             schema(props("key", prop("string", "标识"), "on", prop("boolean", "true=置顶 false=取消")), "key", "on"),
             new H() { public JSONObject run(JSONObject a) throws Exception {
