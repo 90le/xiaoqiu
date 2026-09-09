@@ -85,6 +85,13 @@ public class WakeService extends Service {
         registerReceiver(new android.content.BroadcastReceiver() {
             @Override public void onReceive(Context c2, android.content.Intent i) { turnDone = true; }
         }, new android.content.IntentFilter("com.pihost.VOICE_DONE"));
+        // 全局停止钮：停播+立即收尾
+        registerReceiver(new android.content.BroadcastReceiver() {
+            @Override public void onReceive(Context c2, android.content.Intent i) {
+                Tools.stopTts();
+                sessionStop = true;
+            }
+        }, new android.content.IntentFilter("com.pihost.VOICE_STOP"));
         registerReceiver(new android.content.BroadcastReceiver() {
             @Override public void onReceive(Context c2, android.content.Intent i) {
                 String cmd = i.getStringExtra("cmd");
@@ -264,6 +271,18 @@ public class WakeService extends Service {
         return s;
     }
 
+    private final StringBuilder ctxBuf = new StringBuilder(); // 会话内快脑上下文（最近几轮）
+    private void appendCtx(String line) {
+        ctxBuf.append(line).append("\n");
+        // 只留最近 ~1200 字
+        if (ctxBuf.length() > 1200) ctxBuf.delete(0, ctxBuf.length() - 1200);
+    }
+    private void setGlow(String mode) {
+        try { sendBroadcast(new android.content.Intent("com.pihost.GLOW_MODE").putExtra("mode", mode)); } catch (Exception ignore) {}
+    }
+    /** 等本地/文件播报完（带起播窗） */
+    private void waitSpeakMs(long maxMs) { waitLocalSpeak(maxMs); }
+
     private static final String[] WAKE_REPLIES = {"在！", "我在！", "诶！", "嗯！"};
     private static final String[] BYE_TIMEOUT = {"嗯，我先退下", "我先歇着啦"};
     private static final String[] BYE_BYE = {"好嘞", "嗯呐"};
@@ -291,6 +310,7 @@ public class WakeService extends Service {
      *  意图分流/prompt优化/结论播报全部在页面引擎；本进程只做 耳+嘴+打断。 */
     private void sessionLoop(String from, String carryIn) {
         sessionActive = true;
+        ctxBuf.setLength(0);
         sendBroadcast(new android.content.Intent("com.pihost.WAKE_GLOW_ON"));
         try {
             speakMarked(WAKE_REPLIES[new java.util.Random().nextInt(WAKE_REPLIES.length)]);
@@ -316,11 +336,43 @@ public class WakeService extends Service {
                     speakMarked(BYE_BYE[new java.util.Random().nextInt(BYE_BYE.length)]);
                     break;
                 }
-                Log.i("PiBridge", "🔔 交脑: " + heard);
-                // 交页面引擎：VOICE_TURN → 引擎 (chat_fast/播报/执行/结论) → VOICE_DONE
+                // ── 快脑分流（:kws 直答，不依赖后台页面——后台 WebView 不可靠的根治）──
+                setGlow("think");
+                JSONObject fr = null;
+                try { fr = Tools.call("chat_fast", new JSONObject().put("q", heard).put("context", ctxBuf.toString())); } catch (Exception ignore) {}
+                JSONObject fd = (fr != null && fr.optBoolean("ok")) ? fr.optJSONObject("data") : null;
+                if (fd != null && "chat".equals(fd.optString("type"))) {
+                    // 闲聊快答：全程 :kws（转写→快脑→拟人化→TTS），页面零参与
+                    String ans = fd.optString("answer", "");
+                    if (ans.length() > 90) {
+                        try {
+                            JSONObject hz = Tools.call("ai_humanize", new JSONObject().put("kind", "reply").put("text", ans));
+                            if (hz != null && hz.optBoolean("ok") && hz.optJSONObject("data") != null) {
+                                String h = hz.optJSONObject("data").optString("data", hz.optJSONObject("data").optString("say", ""));
+                                if (!h.isEmpty() && !h.startsWith("ERR")) ans = h;
+                            }
+                        } catch (Exception ignore) {}
+                    }
+                    setGlow("speak");
+                    speakMarked(ans.length() > 400 ? ans.substring(0, 400) : ans);
+                    waitSpeakMs(90000);
+                    appendCtx("用户:" + heard + "\n小丘:" + ans);
+                    setGlow("listen");
+                    continue; // 本轮闭环，续听
+                }
+                // ── 任务：确认语 :kws 说（快脑生成的 reply），执行交页面 ──
+                String ack = (fd != null && !fd.optString("reply", "").isEmpty()) ? fd.optString("reply") : "好嘞，这就办";
+                String optPrompt = (fd != null && !fd.optString("prompt", "").isEmpty()) ? fd.optString("prompt") : heard;
+                appendCtx("用户:" + heard + "\n小丘:" + ack);
+                setGlow("speak");
+                speakMarked(ack);
+                waitSpeakMs(30000);
+                setGlow("exec");
+                Log.i("PiBridge", "🔔 任务交脑(已预分类): " + optPrompt);
                 turnDone = false; pendingSpeak = null;
                 android.content.Intent ti = new android.content.Intent("com.pihost.VOICE_TURN");
-                ti.putExtra("text", heard).putExtra("from", from);
+                ti.putExtra("text", heard).putExtra("from", from)
+                  .putExtra("pre", true).putExtra("prompt", optPrompt);
                 sendBroadcast(ti);
                                 long t0 = System.currentTimeMillis();
                 boolean soothe1 = false, soothe2 = false;

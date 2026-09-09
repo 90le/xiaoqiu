@@ -67,9 +67,10 @@ export function vsEnd() {
 }
 
 /* ── 一轮 ── */
-export async function vsTurn(text, from) {
-  console.log('[VS] turn: ' + text)
+export async function vsTurn(text, from, pre, prePrompt) {
+  console.log('[VS] turn: ' + text + (pre ? ' (预分类)' : ''))
   vs.lastHeard = text; vs.turnN++
+  if (pre) { await exec(null, prePrompt || text); return } // :kws 已分流+已说确认语，直接执行
   vs.state = 'thinking'; glow('think')
   let data = null
   try {

@@ -76,7 +76,9 @@ public class BridgeService extends Service {
         registerReceiver(new android.content.BroadcastReceiver() {
             @Override public void onReceive(Context c, android.content.Intent i) {
                 String t = i.getStringExtra("text"), f = i.getStringExtra("from");
-                MainActivity.injectJs("window.__voiceTurn && window.__voiceTurn(" + org.json.JSONObject.quote(t == null ? "" : t) + "," + org.json.JSONObject.quote(f == null ? "" : f) + ")");
+                boolean pre = i.getBooleanExtra("pre", false);
+                String pp = i.getStringExtra("prompt");
+                MainActivity.injectJs("window.__voiceTurn && window.__voiceTurn(" + org.json.JSONObject.quote(t == null ? "" : t) + "," + org.json.JSONObject.quote(f == null ? "" : f) + "," + pre + "," + org.json.JSONObject.quote(pp == null ? "" : pp) + ")");
             }
         }, new android.content.IntentFilter("com.pihost.VOICE_TURN"));
         registerReceiver(new android.content.BroadcastReceiver() {
@@ -91,6 +93,12 @@ public class BridgeService extends Service {
                 MainActivity.injectJs("window.__ttsDone && window.__ttsDone(" + org.json.JSONObject.quote(tk == null ? "" : tk) + ")");
             }
         }, new android.content.IntentFilter("com.pihost.TTS_STATE"));
+        // 全局停止钮 → 页面引擎收尾
+        registerReceiver(new android.content.BroadcastReceiver() {
+            @Override public void onReceive(Context c, android.content.Intent i) {
+                MainActivity.injectJs("window.__voiceEnd && window.__voiceEnd('stop')");
+            }
+        }, new android.content.IntentFilter("com.pihost.VOICE_STOP"));
         // 执行进度：药丸实时显示当前工具
         registerReceiver(new android.content.BroadcastReceiver() {
             @Override public void onReceive(Context c, android.content.Intent i) {

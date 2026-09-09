@@ -38,17 +38,53 @@ public class WakeGlow {
                         PixelFormat.TRANSLUCENT);
                 lp.gravity = Gravity.FILL;
                 wm.addView(view, lp);
+                addStopBtn(c, wm);
             } catch (Exception e) { android.util.Log.w("PiBridge", "glow show: " + e); }
         }});
     }
+
+    private static android.view.View stopBtn;
 
     public static void hide() {
         main.post(new Runnable() { public void run() {
             try {
                 if (view != null && wm != null) { wm.removeView(view); }
             } catch (Exception ignore) {}
-            view = null; wm = null;
+            try {
+                if (stopBtn != null && wm != null) { wm.removeView(stopBtn); }
+            } catch (Exception ignore) {}
+            view = null; stopBtn = null; wm = null;
         }});
+    }
+
+    /** 全局停止钮：会话期间悬浮底部（可点），停播+结束会话 */
+    private static void addStopBtn(final Context c, WindowManager w) {
+        try {
+            android.widget.Button b = new android.widget.Button(c);
+            b.setText("⏹ 结束会话");
+            b.setTextColor(0xFFDCDDDE);
+            b.setTextSize(13);
+            b.setAllCaps(false);
+            b.setBackgroundDrawable(roundBg());
+            b.setPadding(28, 18, 28, 18);
+            b.setOnClickListener(v -> {
+                try { c.sendBroadcast(new android.content.Intent("com.pihost.VOICE_STOP")); } catch (Exception ignore) {}
+            });
+            WindowManager.LayoutParams lp = new WindowManager.LayoutParams(
+                    WindowManager.LayoutParams.WRAP_CONTENT, WindowManager.LayoutParams.WRAP_CONTENT,
+                    WindowManager.LayoutParams.TYPE_APPLICATION_OVERLAY,
+                    WindowManager.LayoutParams.FLAG_NOT_FOCUSABLE,
+                    PixelFormat.TRANSLUCENT);
+            lp.gravity = Gravity.BOTTOM | Gravity.CENTER_HORIZONTAL;
+            lp.y = 150;
+            w.addView(b, lp);
+            stopBtn = b;
+        } catch (Exception e) { android.util.Log.w("PiBridge", "stopbtn: " + e); }
+    }
+    private static android.graphics.drawable.GradientDrawable roundBg() {
+        android.graphics.drawable.GradientDrawable g = new android.graphics.drawable.GradientDrawable();
+        g.setColor(0xDD232633); g.setCornerRadius(99f); g.setStroke(2, 0xFF8B5CF6);
+        return g;
     }
 
     // 状态色语义：听=绿 思=蓝 执行=琥珀 说=紫

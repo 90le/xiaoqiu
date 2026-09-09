@@ -190,7 +190,7 @@ public class WavUtil {
                     if (state == 0 && System.currentTimeMillis() - t0 > noSpeechMs) return null; // 无人声超时=本轮没说话
                 } else {
                     pcm.write(bytes, 0, bytes.length);
-                    if (peak < 800) { if (++silentAfter >= 12) break; } // 静音1.2秒=说完
+                    if (peak < 800) { if (++silentAfter >= 9) break; } // 静音0.9秒=说完（提速执行感）
                     else silentAfter = 0;
                 }
             }
