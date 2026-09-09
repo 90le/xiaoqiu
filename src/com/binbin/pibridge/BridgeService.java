@@ -116,6 +116,29 @@ public class BridgeService extends Service {
         watchdog();
     }
 
+    /** 播报来源统一过滤：白名单模式（默认·兼容旧行为）｜黑名单模式（全播但黑名单拦） */
+    static boolean announceAllowed(String pkg) {
+        try {
+            org.json.JSONObject cfg = Tools.loadCfg();
+            if ("blacklist".equals(cfg.optString("notify_announce_mode", "whitelist"))) {
+                return !cfg.optString("notify_announce_black_pkgs", "").contains(pkg);
+            }
+            return cfg.optString("notify_announce_pkgs", "com.tencent.mm").contains(pkg);
+        } catch (Exception e) { return false; }
+    }
+    /** 免打扰时段（notify_silent="23:00-07:00"，跨午夜支持；空=关） */
+    static boolean inSilentHours() {
+        try {
+            String sh = Tools.loadCfg().optString("notify_silent", "");
+            if (sh.isEmpty()) return false;
+            String[] p = sh.split("-");
+            int now = Integer.parseInt(new java.text.SimpleDateFormat("HHmm").format(new java.util.Date()));
+            int a = Integer.parseInt(p[0].trim().replace(":", ""));
+            int b = Integer.parseInt(p[1].trim().replace(":", ""));
+            return a <= b ? (now >= a && now < b) : (now >= a || now < b);
+        } catch (Exception e) { return false; }
+    }
+
     private void startMcp() {
         mcp = new Mcp();
         new Thread(mcp, "mcp-http").start();
@@ -246,8 +269,8 @@ public class BridgeService extends Service {
                         if (tt <= lastSeen[0]) continue;
                         newest = Math.max(newest, tt);
                         if (getPackageName().equals(o.optString("pkg"))) continue; // 防反馈链
-                        String allow = Tools.loadCfg().optString("notify_announce_pkgs", "com.tencent.mm");
-                        if (!allow.contains(o.optString("pkg"))) continue;
+                        if (!announceAllowed(o.optString("pkg"))) continue; // 双模式统一过滤
+                        if (inSilentHours()) continue; // 免打扰时段：静默（lastSeen 已推进，出窗不补播风暴）
                         String body = o.optString("title") + o.optString("text");
                         String[] excl = Tools.loadCfg().optString("notify_announce_exclude", "验证码,快递,取件").split(",");
                         boolean skip = false;
