@@ -137,13 +137,15 @@ function done() {
   bus({ action: 'done' }) // :kws 续听
 }
 
-/** 流结束：事件驱动（ws 消息推进 watch），发送即完成则立即解 */
+/** 流结束：必须先等到"开始流式"（曾因起跑竞态秒判完成→假 done→6s收尾）。
+ *  一直没开始（发送失败/引擎忙）由 :kws 150s 护栏兜底。 */
 function streamEnd() {
   return new Promise((resolve) => {
-    if (!chat.state?.streamingMessage) { resolve(); return }
-    const stop = watch(() => !!chat.state?.streamingMessage, (v, ov) => {
-      if (!v && ov) { stop(); streamWatchStop = null; resolve() }
-    })
+    let started = false
+    const stop = watch(() => !!chat.state?.streamingMessage, (v) => {
+      if (v) { started = true; return }
+      if (!v && started) { stop(); streamWatchStop = null; resolve() } // 真结束
+    }, { immediate: true })
     streamWatchStop = stop
   })
 }

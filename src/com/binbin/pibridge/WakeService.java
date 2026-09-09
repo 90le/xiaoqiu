@@ -409,15 +409,14 @@ public class WakeService extends Service {
                 String optPrompt = (fd != null && !fd.optString("prompt", "").isEmpty()) ? fd.optString("prompt") : heard;
                 appendCtx("用户:" + heard + "\n小丘:" + ack);
                 setGlow("speak");
-                speakMarked(ack);
-                waitSpeakMs(30000);
+                speakMarked(ack); // 确认语开说
                 setGlow("exec");
                 Log.i("PiBridge", "🔔 任务交脑(已预分类): " + optPrompt);
                 turnDone = false; pendingSpeak = null; progCount = 0; lastProgSpeak = System.currentTimeMillis() + 8000; // 起步 8s 内不抢确认语
                 android.content.Intent ti = new android.content.Intent("com.pihost.VOICE_TURN");
                 ti.putExtra("text", heard).putExtra("from", from)
                   .putExtra("pre", true).putExtra("prompt", optPrompt);
-                sendBroadcast(ti);
+                sendBroadcast(ti); // 交脑与确认语【并行】——执行不等播完（提速 2-3s）
                 // 握手自愈：4 秒无页面回执 = 界面被回收 → 拉起 App 重发（任务不丢）
                 turnAck = false;
                 long ackT0 = System.currentTimeMillis();
@@ -512,8 +511,15 @@ public class WakeService extends Service {
 
     /** 固定语播报+回声登记 */
     private void speakMarked(String t) { markSpoken(t); Tools.speakFast(t); }
-    /** 转写（本地/云端自动） */
+    /** 转写：会话内云优先（快+准），失败落本地 */
     private String transcribe(File wav) {
+        try {
+            String cs = Tools.cloudStt(wav);
+            if (cs != null && !cs.isEmpty()) {
+                Log.d("PiBridge", "会话转写(云): " + cs);
+                return cs.replaceAll("<\\|[^>]*\\|>", "").replace(" ", "").trim();
+            }
+        } catch (Exception ignore) {}
         try {
             JSONObject env = Tools.call("stt_transcribe", new JSONObject().put("file", wav.getAbsolutePath()));
             if (env != null && env.optBoolean("ok")) {
