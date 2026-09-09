@@ -589,6 +589,40 @@ public class Tools {
     static JSONArray veCache; static String veCacheKey; static long veCacheTime; // vision_elements 同图缓存
     static String rpcStash; // pi_rpc 会话轮换时的状态摘要
     static final Object piRpcLock = new Object(); // pi_rpc 串行锁
+    /** 记忆分类推断：条目显式 cat > key 前缀 */
+    static String memCat(String k, JSONObject e) {
+        String c = e.optString("cat", "");
+        if (!c.isEmpty()) return c;
+        if (k.startsWith("voice.")) return "voice";
+        if (k.startsWith("app.")) return "app";
+        if (k.startsWith("user.")) return "user";
+        if (k.startsWith("person.")) return "person";
+        if (k.startsWith("fact.")) return "fact";
+        if (k.startsWith("skill.")) return "skill";
+        return "other";
+    }
+    /** 核心记忆串（pin 条目，注入上下文=Letta core blocks 模式）。无 pin 返回 "" */
+    static String coreMemBlock() {
+        try {
+            File f = new File(ctx.getFilesDir(), "memory.json");
+            if (!f.canRead()) return "";
+            JSONObject mem = new JSONObject(new String(java.nio.file.Files.readAllBytes(f.toPath()), "UTF-8"));
+            StringBuilder sb = new StringBuilder();
+            java.util.Iterator<String> it = mem.keys();
+            int n = 0;
+            while (it.hasNext() && n < 12) {
+                String k = it.next();
+                JSONObject e = mem.optJSONObject(k);
+                if (e == null || !e.has("pin")) continue;
+                String v = e.optString("v", "");
+                if (v.isEmpty()) continue;
+                sb.append("- ").append(v.length() > 60 ? v.substring(0, 60) : v).append("\n");
+                n++;
+            }
+            return sb.length() == 0 ? "" : "\n[小丘对用户的核心认知]\n" + sb;
+        } catch (Exception e) { return ""; }
+    }
+
     static org.json.JSONArray relatedMemories(String pkg) {
         org.json.JSONArray rel = new org.json.JSONArray();
         if (pkg == null || pkg.isEmpty() || pkg.equals("?")) return rel;
@@ -1119,6 +1153,10 @@ public class Tools {
                     return ok(new JSONObject().put("type", "chat").put("answer", tstr));
                 }
                 String ctx = a.optString("context", "");
+                { // 核心记忆注入（pin 条目=小丘对用户的核心认知，所有快脑调用自动携带）
+                    String cm = coreMemBlock();
+                    if (!cm.isEmpty()) ctx = cm + "\n" + ctx;
+                }
                 String ctxBlock = ctx.isEmpty() ? "" : "\n【最近对话上下文】\n" + ctx + "\n";
                 String sysPrompt = "你是「小丘」的快脑（意图脑）。当前时间：" + now + "。结合上下文理解用户这句话的意图，只输出一行JSON不要其他内容：\n"
                   + "A.闲聊/常识/计算/翻译/时间日期等无需动手的 → {\"type\":\"chat\",\"answer\":\"<口语一两句直接回答>\"}\n"
@@ -1649,10 +1687,52 @@ public class Tools {
                 JSONObject e = mem.optJSONObject(k);
                 if (e == null) continue;
                 String v = e.optString("v");
-                out.put(new JSONObject().put("key", k).put("v", v.length() > 80 ? v.substring(0, 80) + "…" : v).put("t", e.optLong("t")));
+                JSONObject r = new JSONObject().put("key", k).put("v", v.length() > 80 ? v.substring(0, 80) + "…" : v).put("t", e.optLong("t"));
+                r.put("cat", memCat(k, e)).put("pin", e.has("pin")).put("src", e.optString("src", "manual"));
+                out.put(r);
             }
             return ok(new JSONObject().put("count", out.length()).put("items", out));
         }});
+        def("memory_pin", "置顶/取消核心记忆（核心记忆每次对话自动注入上下文=小丘对你的核心认知）",
+            schema(props("key", prop("string", "标识"), "on", prop("boolean", "true=置顶 false=取消")), "key", "on"),
+            new H() { public JSONObject run(JSONObject a) throws Exception {
+                File f = new File(ctx.getFilesDir(), "memory.json");
+                try {
+                    JSONObject mem = new JSONObject(new String(java.nio.file.Files.readAllBytes(f.toPath()), "UTF-8"));
+                    JSONObject e = mem.optJSONObject(a.optString("key"));
+                    if (e == null) return err("NOT_FOUND", "无此记忆");
+                    if (a.optBoolean("on")) e.put("pin", true); else e.remove("pin");
+                    write(f, mem.toString());
+                    return ok(new JSONObject().put("key", a.optString("key")).put("pin", e.has("pin")));
+                } catch (Exception e) { return err("EMPTY", "记忆库为空"); }
+            }});
+        def("memory_edit", "编辑记忆内容",
+            schema(props("key", prop("string", "标识"), "value", prop("string", "新内容")), "key", "value"),
+            new H() { public JSONObject run(JSONObject a) throws Exception {
+                return Tools.call("memory_save", new JSONObject().put("key", a.optString("key")).put("value", a.optString("value")));
+            }});
+        def("memory_clean", "批量清理记忆",
+            schema(props("cat", prop("string", "按分类：voice/app/user/fact/person/skill，空=全部"), "olderThanDays", prop("number", "只清 N 天前的，0=不限")), "cat"),
+            new H() { public JSONObject run(JSONObject a) throws Exception {
+                File f = new File(ctx.getFilesDir(), "memory.json");
+                try {
+                    JSONObject mem = new JSONObject(new String(java.nio.file.Files.readAllBytes(f.toPath()), "UTF-8"));
+                    String cat = a.optString("cat", "");
+                    long cut = a.optInt("olderThanDays", 0) > 0 ? System.currentTimeMillis() - a.optInt("olderThanDays") * 86400000L : Long.MAX_VALUE;
+                    java.util.Iterator<String> it = mem.keys();
+                    int n = 0;
+                    while (it.hasNext()) {
+                        String k = it.next();
+                        JSONObject e = mem.optJSONObject(k);
+                        if (e == null || e.has("pin")) continue; // 置顶永不清
+                        if (!cat.isEmpty() && !memCat(k, e).equals(cat)) continue;
+                        if (e.optLong("t", 0) > cut) continue;
+                        it.remove(); n++;
+                    }
+                    write(f, mem.toString());
+                    return ok(new JSONObject().put("cleaned", n).put("total", mem.length()));
+                } catch (Exception e) { return ok(new JSONObject().put("cleaned", 0)); }
+            }});
         def("memory_read", "读取知识", schema(props("key", prop("string", "标识")), "key"), new H() { public JSONObject run(JSONObject a) throws Exception {
             File f = new File(ctx.getFilesDir(), "memory.json");
             try {
@@ -1670,7 +1750,13 @@ public class Tools {
                 File f = new File(ctx.getFilesDir(), "memory.json");
                 JSONObject mem = new JSONObject();
                 try { mem = new JSONObject(new String(java.nio.file.Files.readAllBytes(f.toPath()), "UTF-8")); } catch (Exception ignore) {}
-                mem.put(key, new JSONObject().put("v", a.optString("value")).put("t", System.currentTimeMillis()));
+                JSONObject e = new JSONObject().put("v", a.optString("value")).put("t", System.currentTimeMillis());
+                if (!a.optString("cat", "").isEmpty()) e.put("cat", a.optString("cat"));
+                if (!a.optString("src", "").isEmpty()) e.put("src", a.optString("src"));
+                if (a.has("pin") && a.optBoolean("pin")) e.put("pin", true);
+                JSONObject oldE = mem.optJSONObject(key);
+                if (oldE != null && oldE.has("pin")) e.put("pin", true); // 更新保留置顶
+                mem.put(key, e);
                 write(f, mem.toString());
                 return ok(new JSONObject().put("key", key).put("total", mem.length()));
             }});
@@ -1679,6 +1765,10 @@ public class Tools {
                     "new", prop("boolean", "true=先开新会话")), "prompt"),
             new H() { public JSONObject run(JSONObject a) throws Exception {
                 String prompt = a.optString("prompt");
+                { // 核心记忆注入（慢脑同享）
+                    String cm = coreMemBlock();
+                    if (!cm.isEmpty()) prompt = cm + "\n" + prompt;
+                }
                 int waitS = a.optInt("wait_sec", 120);
 
                 String home = "/data/data/com.pihost/files/home";
