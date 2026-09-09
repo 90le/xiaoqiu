@@ -69,8 +69,9 @@ export function vsEnd() {
 /* ── 一轮 ── */
 export async function vsTurn(text, from, pre, prePrompt) {
   console.log('[VS] turn: ' + text + (pre ? ' (预分类)' : ''))
+  bus({ action: 'ack' }) // 回执：告诉 :kws 页面活着（握手自愈协议）
   vs.lastHeard = text; vs.turnN++
-  if (pre) { await exec(null, prePrompt || text); return } // :kws 已分流+已说确认语，直接执行
+  if (pre) { await exec(null, prePrompt || text, true); return } // :kws 已说确认语，跳过重复
   vs.state = 'thinking'; glow('think')
   let data = null
   try {
@@ -96,9 +97,9 @@ async function reply(answer) {
   extract(vs.lastHeard, say) // 自动沉淀（后台，不阻塞）
   done()
 }
-async function exec(data, prompt) {
-  vs.state = 'executing'; glow('speak')
-  await speak((data && data.reply) || '好嘞，这就办') // 快脑动态确认（"我来查天气"）
+async function exec(data, prompt, skipAck) {
+  vs.state = 'executing'
+  if (!skipAck) { glow('speak'); await speak((data && data.reply) || '好嘞，这就办') } // :kws 未说时页面安排
   glow('exec')
   const ok = api.prompt(prompt) // 优化后指令 → 当前活动会话
   console.log('[VS] prompt(' + ok + '): ' + prompt.slice(0, 30))

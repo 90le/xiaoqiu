@@ -85,6 +85,9 @@ public class WakeService extends Service {
         registerReceiver(new android.content.BroadcastReceiver() {
             @Override public void onReceive(Context c2, android.content.Intent i) { turnDone = true; }
         }, new android.content.IntentFilter("com.pihost.VOICE_DONE"));
+        registerReceiver(new android.content.BroadcastReceiver() {
+            @Override public void onReceive(Context c2, android.content.Intent i) { turnAck = true; }
+        }, new android.content.IntentFilter("com.pihost.VOICE_ACK"));
         // 全局停止钮：停播+立即收尾
         registerReceiver(new android.content.BroadcastReceiver() {
             @Override public void onReceive(Context c2, android.content.Intent i) {
@@ -289,6 +292,7 @@ public class WakeService extends Service {
 
     // ── 会话总线状态（:kws 侧，主线程广播接收器写，会话线程轮询读）──
     private volatile boolean turnDone = false;
+    private volatile boolean turnAck = false;
     private volatile boolean sessionStop = false;
     private volatile String[] pendingSpeak = null; // {text, token}
 
@@ -374,6 +378,22 @@ public class WakeService extends Service {
                 ti.putExtra("text", heard).putExtra("from", from)
                   .putExtra("pre", true).putExtra("prompt", optPrompt);
                 sendBroadcast(ti);
+                // 握手自愈：4 秒无页面回执 = 界面被回收 → 拉起 App 重发（任务不丢）
+                turnAck = false;
+                long ackT0 = System.currentTimeMillis();
+                while (!turnAck && System.currentTimeMillis() - ackT0 < 4000) Thread.sleep(100);
+                if (!turnAck && running && !sessionStop) {
+                    Log.i("PiBridge", "页面无回执，拉起 App 自愈");
+                    speakMarked("界面没开，我打开小丘来办");
+                    waitSpeakMs(8000);
+                    try {
+                        Intent ai = new Intent(this, MainActivity.class);
+                        ai.addFlags(Intent.FLAG_ACTIVITY_NEW_TASK);
+                        startActivity(ai);
+                    } catch (Exception ignore) {}
+                    Thread.sleep(3000); // 等页面就绪
+                    sendBroadcast(ti); // 重发（页面活了会回执+执行）
+                }
                                 long t0 = System.currentTimeMillis();
                 boolean soothe1 = false, soothe2 = false;
                 while (!turnDone && !sessionStop && running && System.currentTimeMillis() - t0 < 150000) {
