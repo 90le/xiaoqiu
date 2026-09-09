@@ -51,6 +51,7 @@ async function appapi(name, args) {
     return (await r.json()).structuredContent
   } catch (e) { return { ok: false, error: { message: '网络错误' } } }
 }
+const cfg = ref({}) // 快脑等原生配置项（cfg_get 全量）
 async function setCfg(k, v) { await appapi('cfg_set', { key: k, value: v }) }
 function flash(msg, ok = true) {
   voiceMsg.value = msg; voiceOk.value = ok
@@ -519,6 +520,7 @@ onUnmounted(() => {
 })
 async function loadCfg() {
   const d = await appapi('cfg_get')
+  if (d.ok && d.data) cfg.value = d.data
   if (d.ok && d.data) {
     const c = d.data
     if (c.tts_engine) ttsEngine.value = c.tts_engine
