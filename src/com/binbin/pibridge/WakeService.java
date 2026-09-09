@@ -118,6 +118,7 @@ public class WakeService extends Service {
             @Override public void onReceive(Context c2, android.content.Intent i) {
                 Tools.stopTts();
                 sessionStop = true;
+                WavUtil.abortAll(); // 录音中也能立即停（不等 6-12s 录完）
             }
         }, new android.content.IntentFilter("com.pihost.VOICE_STOP"));
         registerReceiver(new android.content.BroadcastReceiver() {
@@ -207,6 +208,20 @@ public class WakeService extends Service {
                             for (int i = 0; i < n; i++) kwsBuf[i] = chunk[i] / 32768.0f;
                             String kwHit = Tools.kwsFeedStream(kwsSt, kwsBuf, n);
                             if (kwHit != null && !kwHit.isEmpty() && !sessionActive) {
+                                // 声纹门禁：已录入≥3样本时，校验触发音频是不是主人（防他人/电视唤醒）
+                                float[] master = Tools.vpLoad();
+                                if (master != null) {
+                                    int need = (int) Math.min(sr * 3 / 2, total); // 最近1.5s
+                                    float[] seg = new float[need];
+                                    for (int i = 0; i < need; i++) seg[i] = ring[(int)((wpos - need + i + ringN * 4L) % ringN)] / 32768.0f;
+                                    float[] e = Tools.spkEmbedF(seg);
+                                    float sim = Tools.cosine(e, master);
+                                    if (sim < 0.5f) {
+                                        Log.i("PiBridge", "🛡 声纹不匹配 (" + sim + ")，忽略本次唤醒");
+                                        continue;
+                                    }
+                                    Log.i("PiBridge", "✅ 声纹通过 (" + sim + ")");
+                                }
                                 Log.i("PiBridge", "🔔 KWS 命中: " + kwHit + "（零转写延迟）");
                                 if (ar != null) { try { ar.stop(); ar.release(); ar = null; } catch (Exception ignore) {} }
                                 sendBroadcast(new android.content.Intent("com.pihost.WAKE_ANIM"));

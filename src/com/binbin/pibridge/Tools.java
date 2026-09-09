@@ -138,6 +138,85 @@ public class Tools {
             return new JSONObject(bo.toString("UTF-8")).optString("text", "");
         } catch (Exception e) { Log.w("PiBridge", "云ASR 失败: " + e); return null; }
     }
+    // ═══ 声纹（唤醒主人校验：sherpa speaker embedding）═══
+    private static com.k2fsa.sherpa.onnx.SpeakerEmbeddingExtractor spkX;
+    static boolean initVoiceprint() {
+        if (spkX != null) return true;
+        try {
+            java.io.File mf = new java.io.File(ctx.getFilesDir(), "voiceprint-model.onnx");
+            if (!mf.isFile()) return false;
+            android.content.SharedPreferences sp = ctx.getSharedPreferences("kws", 0);
+            if (sp.getInt("spkCrashes", 0) >= 2) return false;
+            if (sp.getBoolean("spkIniting", false)) {
+                sp.edit().putInt("spkCrashes", sp.getInt("spkCrashes", 0) + 1).putBoolean("spkIniting", false).apply();
+                if (sp.getInt("spkCrashes", 0) >= 2) { Log.w("PiBridge", "声纹模型二次崩，熔断"); return false; }
+            }
+            sp.edit().putBoolean("spkIniting", true).apply();
+            com.k2fsa.sherpa.onnx.SpeakerEmbeddingExtractorConfig cfg =
+                    new com.k2fsa.sherpa.onnx.SpeakerEmbeddingExtractorConfig(mf.getAbsolutePath(), 1, false, "cpu");
+            spkX = new com.k2fsa.sherpa.onnx.SpeakerEmbeddingExtractor(ctx.getAssets(), cfg);
+            sp.edit().putBoolean("spkIniting", false).apply();
+            Log.i("PiBridge", "✅ 声纹模型就绪 dim=" + spkX.dim());
+            return true;
+        } catch (Throwable t) {
+            Log.w("PiBridge", "声纹 init: " + t);
+            try { ctx.getSharedPreferences("kws", 0).edit().putBoolean("spkIniting", false).apply(); } catch (Exception ignore) {}
+            return false;
+        }
+    }
+    /** wav 文件 → 说话人向量 */
+    static float[] spkEmbed(File wav) {
+        if (!initVoiceprint()) return null;
+        try {
+            int[] rate = {16000};
+            float[] s = com.binbin.pibridge.WavUtil.readWavF(wav, rate);
+            if (s == null || s.length < rate[0] / 2) return null;
+            com.k2fsa.sherpa.onnx.OnlineStream st = spkX.createStream();
+            st.acceptWaveform(s, 0);
+            while (!spkX.isReady(st)) break; // 单包即成
+            return spkX.compute(st);
+        } catch (Throwable t) { Log.w("PiBridge", "spkEmbed: " + t); return null; }
+    }
+    /** 采样直入 → 向量（唤醒门禁用） */
+    static float[] spkEmbedF(float[] s) {
+        if (!initVoiceprint() || s == null || s.length < 8000) return null;
+        try {
+            com.k2fsa.sherpa.onnx.OnlineStream st = spkX.createStream();
+            st.acceptWaveform(s, 0);
+            return spkX.compute(st);
+        } catch (Throwable t) { return null; }
+    }
+    static java.io.File vpFile() { return new java.io.File(ctx.getFilesDir(), "voiceprint.bin"); }
+    static void vpSave(float[][] embs) {
+        try {
+            int d = embs[0].length;
+            float[] mean = new float[d];
+            for (float[] e : embs) for (int i = 0; i < d; i++) mean[i] += e[i] / embs.length;
+            java.io.FileOutputStream fo = new java.io.FileOutputStream(vpFile());
+            java.io.DataOutputStream ds = new java.io.DataOutputStream(fo);
+            ds.writeInt(d);
+            for (float v : mean) ds.writeFloat(v);
+            ds.close();
+        } catch (Exception ignore) {}
+    }
+    static float[] vpLoad() {
+        try {
+            if (!vpFile().isFile()) return null;
+            java.io.DataInputStream ds = new java.io.DataInputStream(new java.io.FileInputStream(vpFile()));
+            int d = ds.readInt();
+            float[] m = new float[d];
+            for (int i = 0; i < d; i++) m[i] = ds.readFloat();
+            ds.close();
+            return m;
+        } catch (Exception e) { return null; }
+    }
+    static float cosine(float[] a, float[] b) {
+        if (a == null || b == null || a.length != b.length) return -1;
+        float dot = 0, na = 0, nb = 0;
+        for (int i = 0; i < a.length; i++) { dot += a[i] * b[i]; na += a[i] * a[i]; nb += b[i] * b[i]; }
+        return (float) (dot / (Math.sqrt(na) * Math.sqrt(nb) + 1e-8));
+    }
+
     // ═══ 全局唤醒词（sherpa KWS）═══
     public static volatile boolean micBusy = false; // 按住说话等场景让出麦克风
     public static volatile boolean ttsSpeaking = false; // TTS 播报中（唤醒监听让位）
@@ -1761,6 +1840,49 @@ public class Tools {
                 }
                 if (n > 0) Log.i("PiBridge", "🧠 自动沉淀 " + n + " 条");
                 return ok(new JSONObject().put("saved", n));
+            }});
+        def("voiceprint_enroll", "录入声纹样本（唤醒主人校验用）：传 wav 路径，说一遍唤醒词",
+            schema(props("file", prop("string", "wav 路径（mic_record 产物）")), "file"),
+            new H() { public JSONObject run(JSONObject a) throws Exception {
+                float[] e = spkEmbed(new java.io.File(a.optString("file")));
+                if (e == null) return err("EMBED_FAIL", "提取失败（模型未就绪或音频太短）");
+                java.io.File pool = new java.io.File(ctx.getFilesDir(), "voiceprint-pool.bin");
+                java.util.List<float[]> list = new java.util.ArrayList<>();
+                try (java.io.DataInputStream ds = new java.io.DataInputStream(new java.io.FileInputStream(pool))) {
+                    int n = ds.readInt();
+                    for (int k = 0; k < n && k < 7; k++) { int d = ds.readInt(); float[] x = new float[d]; for (int i = 0; i < d; i++) x[i] = ds.readFloat(); list.add(x); }
+                } catch (Exception ignore) {}
+                list.add(e);
+                try (java.io.DataOutputStream ds = new java.io.DataOutputStream(new java.io.FileOutputStream(pool))) {
+                    ds.writeInt(list.size());
+                    for (float[] x : list) { ds.writeInt(x.length); for (float v : x) ds.writeFloat(v); }
+                }
+                vpSave(list.toArray(new float[0][]));
+                return ok(new JSONObject().put("count", list.size()).put("dim", e.length)
+                        .put("active", list.size() >= 3));
+            }});
+        def("voiceprint_verify", "声纹验证（试一试）：传 wav，返回与主人声纹的相似度",
+            schema(props("file", prop("string", "wav 路径")), "file"),
+            new H() { public JSONObject run(JSONObject a) throws Exception {
+                float[] e = spkEmbed(new java.io.File(a.optString("file")));
+                float[] m = vpLoad();
+                if (e == null || m == null) return err("NOVP", e == null ? "提取失败" : "尚未录入声纹");
+                float s = cosine(e, m);
+                return ok(new JSONObject().put("score", Math.round(s * 1000) / 1000.0).put("pass", s >= 0.55));
+            }});
+        def("voiceprint_status", "声纹状态",
+            schema(props()), new H() { public JSONObject run(JSONObject a) throws Exception {
+                java.io.File pool = new java.io.File(ctx.getFilesDir(), "voiceprint-pool.bin");
+                int n = 0;
+                try (java.io.DataInputStream ds = new java.io.DataInputStream(new java.io.FileInputStream(pool))) { n = ds.readInt(); } catch (Exception ignore) {}
+                return ok(new JSONObject().put("samples", n).put("enrolled", vpFile().isFile())
+                        .put("model", new java.io.File(ctx.getFilesDir(), "voiceprint-model.onnx").isFile())
+                        .put("active", n >= 3 && vpFile().isFile()));
+            }});
+        def("voiceprint_clear", "清除声纹",
+            schema(props()), new H() { public JSONObject run(JSONObject a) throws Exception {
+                try { vpFile().delete(); new java.io.File(ctx.getFilesDir(), "voiceprint-pool.bin").delete(); } catch (Exception ignore) {}
+                return ok(new JSONObject().put("cleared", true));
             }});
         def("memory_pin", "置顶/取消核心记忆（核心记忆每次对话自动注入上下文=小丘对你的核心认知）",
             schema(props("key", prop("string", "标识"), "on", prop("boolean", "true=置顶 false=取消")), "key", "on"),

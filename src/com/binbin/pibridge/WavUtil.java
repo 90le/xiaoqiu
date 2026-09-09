@@ -161,8 +161,12 @@ public class WavUtil {
     /** 连续对话录音：等说话→自动断句（静音1.2秒）→返回wav；6秒无人声返回null */
     public static File recordAutoStop(Context c, int maxSec) throws Exception { return recordAutoStop(c, maxSec, 6000); }
 
+    public static volatile boolean abortRecord = false; // 会话停止钮：立即中止录音
+    public static void abortAll() { abortRecord = true; }
+
     /** noSpeechMs：等待人声的超时（超时返回 null=本轮没人说话）——唤醒会话用 3000（3秒静默收尾） */
     public static File recordAutoStop(Context c, int maxSec, int noSpeechMs) throws Exception {
+        abortRecord = false;
         int minBuf = AudioRecord.getMinBufferSize(RATE, AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT);
         AudioRecord ar = new AudioRecord(MediaRecorder.AudioSource.MIC, RATE,
                 AudioFormat.CHANNEL_IN_MONO, AudioFormat.ENCODING_PCM_16BIT,
@@ -176,6 +180,7 @@ public class WavUtil {
         int state = 0, speechWin = 0, silentAfter = 0; // 0=等说话 1=说话中
         try {
             while (System.currentTimeMillis() - t0 < maxSec * 1000L) {
+                if (abortRecord) { try { ar.stop(); ar.release(); } catch (Exception ignore) {} return null; } // 停止钮：录音即断
                 int n = ar.read(chunk, 0, chunk.length);
                 if (n <= 0) continue;
                 int peak = 0;
@@ -202,6 +207,9 @@ public class WavUtil {
         writeWav(wav, pcm.toByteArray(), RATE, 1, 16);
         return wav;
     }
+
+    /** wav → float[]（readWav 别名，声纹用） */
+    public static float[] readWavF(File f, int[] rateOut) throws IOException { return readWav(f, rateOut); }
 
     public static float[] readWav(File f, int[] rateOut) throws IOException {
         FileInputStream fi = new FileInputStream(f);

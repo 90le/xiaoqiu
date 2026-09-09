@@ -101,6 +101,49 @@ async function testVoice(engine) {
   setTimeout(() => { testing.value = '' }, 3000)
 }
 
+/* ── 声纹 ── */
+const vp = ref({ samples: 0, active: false, model: false, dots: '' })
+const vpBusy = ref(false), vpMsg = ref(''), vpOk = ref(true)
+async function vpLoad() {
+  const r = await call0('voiceprint_status', {})
+  if (r.ok) { vp.value = { ...r.data, dots: '●'.repeat(Math.min(8, r.data.samples || 0)) + '○'.repeat(Math.max(0, 3 - (r.data.samples || 0))) } }
+  else vp.value.model = false
+}
+async function vpEnroll() {
+  vpBusy.value = true; vpMsg.value = ''; 
+  try {
+    const rec = await call0('mic_record', { seconds: 2 })
+    if (!rec.ok) throw new Error(rec.error?.message || '录音失败')
+    const r = await call0('voiceprint_enroll', { file: rec.data })
+    if (!r.ok) throw new Error(r.error?.message || '录入失败（说清楚一点）')
+    vpOk.value = true
+    vpMsg.value = `✅ 第 ${r.data.count} 遍${r.data.active ? ' · 校验已开启' : ''}`
+    await vpLoad()
+  } catch (e) { vpOk.value = false; vpMsg.value = '❌ ' + e.message }
+  vpBusy.value = false
+}
+async function vpTest() {
+  vpBusy.value = true; vpMsg.value = ''
+  try {
+    const rec = await call0('mic_record', { seconds: 2 })
+    const r = await call0('voiceprint_verify', { file: rec.data })
+    if (!r.ok) throw new Error(r.error?.message || '验证失败')
+    vpOk.value = r.data.pass
+    vpMsg.value = `${r.data.pass ? '✅ 是你' : '❌ 不太像'}（相似度 ${r.data.score}）`
+  } catch (e) { vpOk.value = false; vpMsg.value = '❌ ' + e.message }
+  vpBusy.value = false
+}
+async function vpClear() {
+  await call0('voiceprint_clear', {})
+  vpMsg.value = '已清除'; await vpLoad()
+}
+async function call0(name, args) {
+  try {
+    const r = await fetch('/api/' + name, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify(args || {}) })
+    return (await r.json()).structuredContent || { ok: false }
+  } catch { return { ok: false } }
+}
+
 /* ── 唤醒 ── */
 const wakeOn = ref(false), wakeMsg = ref('')
 async function loadWake() {
@@ -442,6 +485,7 @@ watch(() => chat.settings, () => {
   if (!vDirty.value) { vSynced = false; syncVision() }
 })
 watch(page, p => { if (p === 'models') { engineApi.listProviders(); engineApi.listModelsConfig() } })
+watch(page, p => { if (p === 'voice') vpLoad() })
 onMounted(() => {
   syncPromptDraft()
   window.addEventListener('popstate', onPop)
@@ -687,6 +731,24 @@ async function loadCfg() {
           <button class="mini-btn tap" @click="testVoice('xiaomi')">🔊 小米本地</button>
         </div>
         <div v-if="voiceMsg" :class="['msg', voiceOk ? 'ok' : 'bad']" style="margin-top:8px;">{{ voiceMsg }}</div>
+      </div>
+
+      <div class="secl">声纹训练 <em>只认你的声音</em>
+        <span class="secl-r"><button class="minib tap" @click="vpClear" v-if="vp.active">清除</button></span>
+      </div>
+      <div class="grp-card">
+        <div class="srow" style="flex-direction:column;align-items:stretch;gap:8px;">
+          <div class="srow-t">唤醒主人校验
+            <span :class="['pill', vp.active ? 'ok-pill' : 'dim-pill']">{{ vp.active ? '✅ 已生效' : (vp.samples ? `已录 ${vp.samples}/3` : '未录入') }}</span>
+          </div>
+          <div class="srow-d" style="white-space:normal;">录 3-8 遍"小丘"（每遍点一次按钮，正常说话 2 秒）。≥3 遍自动开启：别人和电视喊不醒你的小丘。</div>
+          <div style="display:flex;gap:8px;">
+            <button class="mini-btn tap" :disabled="vpBusy" @click="vpEnroll">{{ vpBusy ? '🎙 录制中…说"小丘"' : (vp.samples >= 8 ? '已满 8 遍' : '🎙 录一遍') }}</button>
+            <button class="mini-btn tap" :disabled="vpBusy || !vp.active" @click="vpTest">{{ vpBusy ? '…' : '🧪 试一试' }}</button>
+          </div>
+          <div v-if="vpMsg" :class="['msg', vpOk ? 'ok' : 'bad']" style="margin-top:4px;">{{ vpMsg }}</div>
+          <div v-if="vp.dots" style="font-size:18px;letter-spacing:4px;">{{ vp.dots }}</div>
+        </div>
       </div>
 
       <div class="secl">全局唤醒</div>
