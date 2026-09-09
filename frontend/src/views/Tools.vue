@@ -36,6 +36,8 @@ function catOf(name) {
 }
 const CATNAME = Object.fromEntries(CATS.map(x => [x[0], x[1]]))
 
+onMounted(load) // ⚠️ 永久钉在这：区间替换曾两次吞掉此行
+
 /* 标题/副标题提取：'查电池：电量、充电状态' → ['查电池','电量、充电状态'] */
 function splitDesc(desc) {
   const d = String(desc || '')
