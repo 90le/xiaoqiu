@@ -350,14 +350,14 @@ public class Tools {
         }
     }
 
-    /** 思考参数构造：off→disabled；档位→enabled+level（glm-5.3 thinkingLevelMap 同构：low/high/max 等透传） */
+    /** 思考参数构造（完全照 pi thinkingLevelMap 语义）：
+     *  off → 返回 null=整个 thinking 字段不发（模型默认——glm-5.3 系思考关不掉，pi 同款 off:null 映射）
+     *  low/high/max → enabled+level 透传；极简/中/极高（map=null 档）→ enabled 不带 level 回落模型默认 */
     static JSONObject thinkBody(JSONObject mc) throws Exception {
-        String lv = mc.optString("think_level", "off");
-        if (lv.isEmpty() || "off".equals(lv) || !mc.optBoolean("thinking", false) && "off".equals(lv))
-            return new JSONObject().put("type", "disabled");
-        if (!mc.optBoolean("thinking", false)) return new JSONObject().put("type", "disabled");
+        String lv = mc.optString("think_level", "");
+        if (lv.isEmpty() || "off".equals(lv)) return null;
         JSONObject t = new JSONObject().put("type", "enabled");
-        if (!"minimal".equals(lv) && !"medium".equals(lv)) t.put("level", lv); // 模型 levelMap 不含的档不传（回落默认）
+        if ("low".equals(lv) || "high".equals(lv) || "max".equals(lv)) t.put("level", lv);
         return t;
     }
 

@@ -223,20 +223,7 @@ public class WakeService extends Service {
                             for (int i = 0; i < n; i++) kwsBuf[i] = chunk[i] / 32768.0f;
                             String kwHit = Tools.kwsFeedStream(kwsSt, kwsBuf, n);
                             if (kwHit != null && !kwHit.isEmpty() && !sessionActive) {
-                                // 声纹门禁：已录入≥3样本时，校验触发音频是不是主人（防他人/电视唤醒）
-                                float[] master = Tools.vpLoad();
-                                if (master != null) {
-                                    int need = (int) Math.min(sr * 3 / 2, total); // 最近1.5s
-                                    float[] seg = new float[need];
-                                    for (int i = 0; i < need; i++) seg[i] = ring[(int)((wpos - need + i + ringN * 4L) % ringN)] / 32768.0f;
-                                    float[] e = Tools.spkEmbedF(seg);
-                                    float sim = Tools.cosine(e, master);
-                                    if (sim < 0.5f) {
-                                        Log.i("PiBridge", "🛡 声纹不匹配 (" + sim + ")，忽略本次唤醒");
-                                        continue;
-                                    }
-                                    Log.i("PiBridge", "✅ 声纹通过 (" + sim + ")");
-                                }
+                                if (!voiceGate(ring, wpos, total, sr, ringN, kwHit)) continue;
                                 Log.i("PiBridge", "🔔 KWS 命中: " + kwHit + "（零转写延迟）");
                                 if (ar != null) { try { ar.stop(); ar.release(); ar = null; } catch (Exception ignore) {} }
                                 sendBroadcast(new android.content.Intent("com.pihost.WAKE_ANIM"));
@@ -275,7 +262,7 @@ public class WakeService extends Service {
                             short[] seg = new short[len];
                             for (int i = 0; i < len; i++) seg[i] = ring[(sPos + i) % ringN];
                             state = 0;
-                            handleUtterance(seg, sr);
+                            handleUtterance(seg, sr, ring, wpos, total, ringN);
                         }
                     }
                 } catch (Exception e) { Log.w("PiBridge", "wake loop: " + e); Thread.sleep(800); }
@@ -290,7 +277,7 @@ public class WakeService extends Service {
     }
 
     /** 整句转写 → 唤醒匹配 → 携带指令执行/对话 */
-    private void handleUtterance(short[] seg, int sr) {
+    private void handleUtterance(short[] seg, int sr, short[] ring, int wpos, long total, int ringN) {
         try {
             byte[] pcm = new byte[seg.length * 2];
             for (int i = 0; i < seg.length; i++) { pcm[i*2] = (byte)(seg[i] & 255); pcm[i*2+1] = (byte)((seg[i] >> 8) & 255); }
@@ -324,7 +311,8 @@ public class WakeService extends Service {
                 Log.i("PiBridge", "🛡 回声/保护窗拦截: " + txt); // 自己说话的回声不唤醒（根治自循环）
                 return;
             }
-            Log.i("PiBridge", "🔔 唤醒命中: " + txt);
+            Log.i("PiBridge", "🔔 唤醒命中(ASR): " + txt);
+            if (!voiceGate(ring, wpos, total, sr, ringN, "asr")) return; // ASR 兜底路同装声纹门禁
             sendBroadcast(new android.content.Intent("com.pihost.WAKE_ANIM"));
             if (ar != null) { ar.stop(); ar.release(); ar = null; }
             // 提取唤醒词后跟的首段指令（有则直接作为第一轮，免重录）
@@ -557,6 +545,31 @@ public class WakeService extends Service {
         }
         while (Tools.ttsSpeaking && System.currentTimeMillis() - t0 < maxMs) {
             try { Thread.sleep(80); } catch (Exception ignore) {}
+        }
+    }
+
+    /** 声纹门禁（KWS 与 ASR 兜底两路共用）：已录入则校验触发音频是不是主人。阈值 cfg voiceprint_threshold 默认 0.60 */
+    boolean voiceGate(short[] ring, int wpos, long total, int sr, int ringN, String src) {
+        try {
+            float[] master = Tools.vpLoad();
+            if (master == null) return true; // 未录入=不设防
+            int need = (int) Math.min(sr * 3 / 2, Math.max(0, total));
+            if (need < sr / 2) return true;
+            float[] seg = new float[need];
+            for (int i = 0; i < need; i++) seg[i] = ring[(int)((wpos - need + i + ringN * 4L) % ringN)] / 32768.0f;
+            float[] e = Tools.spkEmbedF(seg);
+            float sim = Tools.cosine(e, master);
+            double th = 0.60;
+            try { th = Double.parseDouble(Tools.loadCfg().optString("voiceprint_threshold", "0.60")); } catch (Exception ignore) {}
+            if (sim < th) {
+                Log.i("PiBridge", "🛡 声纹不匹配 (" + String.format("%.3f", sim) + " < " + th + ") [" + src + "]，忽略");
+                return false;
+            }
+            Log.i("PiBridge", "✅ 声纹通过 (" + String.format("%.3f", sim) + ") [" + src + "]");
+            return true;
+        } catch (Throwable t) {
+            Log.w("PiBridge", "声纹门禁异常(放行): " + t);
+            return true;
         }
     }
 

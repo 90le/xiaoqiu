@@ -110,6 +110,11 @@ const fastModelLabel = computed(() => {
   return (fastModelOpts.value.find(o => o.v === v) || {}).t?.split(' · ')[0] || v
 })
 const fastTesting = ref(false), fastTestMsg = ref('')
+const fastSheet = ref(false), fastQ = ref('')
+const fastFiltered = computed(() => {
+  const q = fastQ.value.trim().toLowerCase()
+  return (chat.models || []).filter(m => !q || (m.name + ' ' + m.id + ' ' + (m.provider || '')).toLowerCase().includes(q))
+})
 const FAST_THINK_BASE = [
   { v: 'off', t: '关' }, { v: 'minimal', t: '极简' }, { v: 'low', t: '低' },
   { v: 'medium', t: '中' }, { v: 'high', t: '高' }, { v: 'xhigh', t: '极高' }, { v: 'max', t: '最大' },
@@ -121,17 +126,31 @@ const fastReasoning = computed(() => {
   const m = (chat.models || []).find(x => x.id === v)
   return m ? !!m.reasoning : true
 })
-// 档位能力（对齐模型大脑）：智谱家族硬表（pi 源码 thinkingLevelMap 实证）
-const ZHIPU_LEVELS = ['low', 'high', 'max'] // glm-5.3/flash：off恒可选+这3档；minimal/medium/xhigh 均映射null=不支持
+// 档位能力（完全照抄模型大脑/对话页逻辑）：
+// 引擎 availableThinkingLevels 权威（glm-5.3 实测 [low,high,max]，off 不可选=思考关不掉）
 const fastThinkLevels = computed(() => {
   const v = cfg.value.fast_model || 'glm-5.3'
   const m = (chat.models || []).find(x => x.id === v)
-  const avail = m?.availableThinkingLevels // 引擎给了就用（会话当前模型场景）
-  let okSet
-  if (Array.isArray(avail) && avail.length) okSet = new Set(['off', ...avail])
-  else if (m && m.reasoning === false) okSet = new Set(['off']) // 非推理模型：只能关
-  else okSet = new Set(['off', ...ZHIPU_LEVELS]) // 家族默认（glm-5.3/flash 实证表）
+  let avail = null
+  const sess = chat.state
+  if (sess?.model?.id === v && Array.isArray(sess?.availableThinkingLevels) && sess.availableThinkingLevels.length) {
+    avail = sess.availableThinkingLevels // 快脑模型=会话模型：引擎权威（与模型大脑同源）
+  } else if (Array.isArray(m?.thinkingLevels) && m.thinkingLevels.length) {
+    avail = m.thinkingLevels
+  } else if (m && m.reasoning === false) {
+    avail = ['off'] // 非推理模型：只能关
+  } else {
+    avail = ['low', 'high', 'max'] // 智谱家族实证（pi thinkingLevelMap：off=null 关不掉）
+  }
+  const okSet = new Set(avail)
   return FAST_THINK_BASE.map(l => ({ ...l, ok: okSet.has(l.v) }))
+})
+const fastThinkSupported = computed(() => fastThinkLevels.value.some(l => l.ok && l.v !== 'off'))
+// 有效档：cfg 不在可选集时回落第一可用（模型大脑同款语义——关不可选时落最低档）
+const fastEffLevel = computed(() => {
+  const cur = cfg.value.fast_thinking_level || ''
+  const ok = fastThinkLevels.value.filter(l => l.ok)
+  return ok.find(l => l.v === cur) ? cur : (ok.find(l => l.v !== 'off')?.v || 'off')
 })
 async function testFast() {
   fastTesting.value = true; fastTestMsg.value = ''
@@ -739,7 +758,7 @@ async function loadCfg() {
             </div>
             <div class="srow-d">{{ cfg.fast_model || '默认 glm-5.3（coding 通道）' }}</div>
           </div>
-          <button class="pickv tap" @click="openPicker('快脑模型', fastModelOpts, cfg.fast_model || '', v => { cfg.fast_model = v; save('fast_model', v) })">{{ fastModelLabel }} ›</button>
+          <button class="pickv tap" @click="fastSheet = true">{{ fastModelLabel }} ›</button>
         </div>
         <div v-if="hintOpen === 'fastm'" class="hintline">快脑专职：意图分流/口语化改写/进度措辞/声纹无关。与任务模型（模型大脑页）互不影响。选自定义模型自动走其 baseUrl+密钥。</div>
         <div class="srow" style="flex-direction:column;align-items:stretch;gap:8px;">
@@ -750,10 +769,12 @@ async function loadCfg() {
           </div>
         </div>
         <div class="srow" style="flex-direction:column;align-items:stretch;gap:6px;">
-          <div class="srow-t">思考等级 <em class="mini-hint">{{ fastReasoning ? '灰=该模型不支持（按模型能力自动匹配，同模型大脑）' : '当前模型不支持思考' }}</em></div>
-          <div v-if="fastReasoning" class="thinkpills2">
-            <button v-for="l in fastThinkLevels" :key="l.v" :class="['tp2', 'tap', { on: (cfg.fast_thinking_level || 'off') === l.v, dis: !l.ok }]"
-              :title="l.ok ? '' : '该模型不支持此档位'" @click="l.ok && (cfg.fast_thinking_level = l.v, save('fast_thinking_level', l.v))">{{ l.t }}</button>
+          <div class="srow-t">思考等级 <em class="mini-hint">{{ fastThinkSupported ? '灰=不支持（引擎权威，同模型大脑）' : '当前模型不支持思考' }}</em></div>
+          <div v-if="fastThinkSupported" class="thinkline">
+            <div class="thinkpills">
+              <button v-for="l in fastThinkLevels" :key="l.v" :class="['tp', 'tap', { on: fastEffLevel === l.v, dis: !l.ok }]"
+                :title="l.ok ? '' : '该模型不支持此档位'" @click="l.ok && (cfg.fast_thinking_level = l.v, save('fast_thinking_level', l.v))">{{ l.t }}</button>
+            </div>
           </div>
         </div>
         <div class="srow">
@@ -1167,6 +1188,29 @@ async function loadCfg() {
     <div style="height:24px;"></div>
   </div>
 
+  <!-- 快脑模型选择（模型大脑同款） -->
+  <div v-if="fastSheet" class="skview" @click="fastSheet = false">
+    <div class="skview-b" @click.stop style="max-height:75vh;overflow-y:auto;">
+      <div class="searchbox" style="margin:2px 0 8px;">
+        <span class="search-ic">🔍</span>
+        <input v-model="fastQ" placeholder="搜索模型" class="search-in">
+        <button v-if="fastQ" class="search-x tap" @click="fastQ = ''">✕</button>
+      </div>
+      <div class="mrow vrow tap" @click="cfg.fast_model = ''; save('fast_model', ''); fastSheet = false">
+        <div class="srow-txt"><div class="srow-t">🧠 默认 glm-5.3 <span class="mini-hint">coding 通道</span></div></div>
+        <span v-if="!cfg.fast_model" class="pill ok-pill">当前 ✓</span>
+      </div>
+      <div v-for="m in fastFiltered" :key="m.id" class="mrow vrow tap" @click="cfg.fast_model = m.id; save('fast_model', m.id); fastSheet = false">
+        <div class="srow-txt">
+          <div class="srow-t">{{ m.name }}<span class="mbadges"><i v-if="m.vision">👁</i><i v-if="m.reasoning">🧠</i></span></div>
+          <div class="srow-d mono-s">{{ m.id }} · {{ m.provider }}</div>
+        </div>
+        <span v-if="(cfg.fast_model || '') === m.id" class="pill ok-pill">当前 ✓</span>
+      </div>
+      <div v-if="!fastFiltered.length" class="empty" style="padding:20px;">无匹配模型</div>
+    </div>
+  </div>
+
   <!-- 技能说明弹层 -->
   <div v-if="skillView" class="skview" @click="skillView = null">
     <div class="skview-b" @click.stop>
@@ -1306,6 +1350,9 @@ label { display:block; font-size:13px; color:var(--muted); margin:12px 0 6px; }
 .pk-row { display:flex; justify-content:space-between; align-items:center; padding:13px 16px; border-bottom:1px solid var(--line); font-size:14px; }
 .pk-row:last-child { border-bottom:0; }
 .pk-row.on { color:var(--hill); font-weight:700; background:var(--hill-soft); }
+
+.vrow { padding: 11px 14px; border-bottom: 1px solid var(--line); }
+.vrow:last-child { border-bottom: 0; }
 
 /* 技能弹层 */
 .p2 { z-index:68; }
