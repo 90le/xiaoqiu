@@ -277,7 +277,9 @@ public class Tools {
             "没听清，需要我做什么直接说", "小丘的连接断了，打开小丘再试一次"
     };
     static java.io.File fastFile(String p) {
-        return new java.io.File(ctx.getFilesDir(), "wake-sounds/" + (p.hashCode() & 0x7fffffff) + ".wav");
+        String v = "";
+        try { v = loadCfg().optString("tts_voice", "tongtong"); } catch (Exception ignore) {}
+        return new java.io.File(ctx.getFilesDir(), "wake-sounds/" + (p.hashCode() & 0x7fffffff) + "-" + v + ".wav");
     }
     /** 预生成缺失的回应音频（服务启动后台跑一次；换音色后可删目录重生成） */
     public static void pregenFastSounds() {
@@ -296,10 +298,18 @@ public class Tools {
             }
         }, "pregen-tts").start();
     }
-    /** 秒播预生成回应；无缓存则本地TTS顶上+后台补缓存 */
+    /** 秒播预生成回应；无缓存按设置引擎：xiaomi=本地 / auto·cloud=云合成优先（用户配置的音色），失败落本地 */
     public static void speakFast(String phrase) {
         try {
             java.io.File f = fastFile(phrase);
+            if (!f.isFile() && !"xiaomi".equals(loadCfg().optString("tts_engine", "auto"))) {
+                byte[] w = synthCloud(phrase); // 同步云合成（cfg 音色）
+                if (w != null) {
+                    f.getParentFile().mkdirs();
+                    java.io.FileOutputStream fo = new java.io.FileOutputStream(f);
+                    fo.write(w); fo.close();
+                }
+            }
             if (f.isFile()) {
                 ttsSpeaking = true;
                 MediaPlayer mp = new MediaPlayer();

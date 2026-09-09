@@ -474,9 +474,17 @@ public class WakeService extends Service {
         }
         try {
             File f = fastFileOf(text);
+            if (f != null && !f.isFile() && !"xiaomi".equals(Tools.loadCfg().optString("tts_engine", "auto"))) {
+                byte[] w = Tools.synthCloud(text); // 设置引擎=auto/cloud → 云合成（cfg 音色）
+                if (w != null) {
+                    f.getParentFile().mkdirs();
+                    java.io.FileOutputStream fo = new java.io.FileOutputStream(f);
+                    fo.write(w); fo.close();
+                }
+            }
             if (f != null && f.isFile()) { playFastFile(f, token); return; }
         } catch (Exception ignore) {}
-        Tools.speakLocal(text);
+        Tools.speakLocal(text); // 兜底：本地（xiaomi 引擎或云失败）
         waitLocalSpeak(60000);
         sendBroadcast(new android.content.Intent("com.pihost.TTS_STATE").putExtra("on", false).putExtra("token", token));
     }
