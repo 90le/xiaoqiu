@@ -36,11 +36,11 @@ async function setMode(m) { cfg.value.notify_announce_mode = m; await save('noti
 
 /* ── 名单（逗号分隔包名 ↔ 数组） ── */
 const whiteList = computed({
-  get: () => (cfg.value.notify_announce_pkgs || 'com.tencent.mm').split(',').map(s => s.trim()).filter(Boolean),
+  get: () => (String(cfg.value.notify_announce_pkgs ?? '').trim() || 'com.tencent.mm').split(',').map(s => s.trim()).filter(Boolean),
   set: (v) => { cfg.value.notify_announce_pkgs = v.join(','); save('notify_announce_pkgs', v.join(',')) },
 })
 const blackList = computed({
-  get: () => (cfg.value.notify_announce_black_pkgs || '').split(',').map(s => s.trim()).filter(Boolean),
+  get: () => String(cfg.value.notify_announce_black_pkgs ?? '').split(',').map(s => s.trim()).filter(Boolean),
   set: (v) => { cfg.value.notify_announce_black_pkgs = v.join(','); save('notify_announce_black_pkgs', v.join(',')) },
 })
 async function addPkg(target, pkg) {
@@ -70,7 +70,7 @@ watch(appQ, q => { if (appPicker.value && (q === '' || q.length >= 1)) loadApps(
 function markOf(l) {
   const pkg = l.pkg || ''
   if (getPackageNameSelf() === pkg) return { t: '⬜', why: '自己' }
-  const kw = (cfg.value.notify_announce_exclude || '验证码,快递,取件').split(',').filter(k => k.trim())
+  const kw = String(cfg.value.notify_announce_exclude ?? '验证码,快递,取件').split(',').filter(k => k.trim())
   const body = (l.title || '') + (l.text || '')
   for (const k of kw) if (k.trim() && body.includes(k.trim())) return { t: '🚫', why: '关键词「' + k.trim() + '」' }
   if (mode.value === 'blacklist') {
@@ -97,23 +97,28 @@ const kwDraft = ref('')
 async function addKw() {
   const k = kwDraft.value.trim()
   if (!k) return
-  const cur = (cfg.value.notify_announce_exclude || '').split(',').map(s => s.trim()).filter(Boolean)
+  const cur = String(cfg.value.notify_announce_exclude ?? '').split(',').map(s => s.trim()).filter(Boolean)
   if (!cur.includes(k)) { cur.push(k); cfg.value.notify_announce_exclude = cur.join(','); await save('notify_announce_exclude', cur.join(',')) }
   kwDraft.value = ''
 }
 async function delKw(k) {
-  const cur = (cfg.value.notify_announce_exclude || '').split(',').map(s => s.trim()).filter(Boolean).filter(x => x !== k)
+  const cur = String(cfg.value.notify_announce_exclude ?? '').split(',').map(s => s.trim()).filter(Boolean).filter(x => x !== k)
   cfg.value.notify_announce_exclude = cur.join(',')
   await save('notify_announce_exclude', cur.join(','))
 }
 const silentOn = computed({
-  get: () => !!(cfg.value.notify_silent || '').trim(),
+  get: () => String(cfg.value.notify_silent || '').trim() !== '',
   set: async (v) => {
     cfg.value.notify_silent = v ? silentRange.value : ''
     await save('notify_silent', cfg.value.notify_silent)
   },
 })
 const silentRange = ref({ start: '23:00', end: '07:00' })
+try { // 从存档恢复时段
+  const sv = String(cfg.value.notify_silent || '')
+  const mm = sv.match(/(\d{1,2}:\d{2})-(\d{1,2}:\d{2})/)
+  if (mm) silentRange.value = { start: mm[1], end: mm[2] }
+} catch {}
 async function saveSilent() {
   const v = silentOn.value ? silentRange.value.start + '-' + silentRange.value.end : ''
   cfg.value.notify_silent = v
@@ -145,7 +150,7 @@ async function doDigest() {
       <div class="grp tap" @click="openPage('dnd')">
         <span class="grp-ic">🌙</span>
         <span class="grp-txt"><span class="grp-t">免打扰</span>
-          <span class="grp-s">{{ silentOn ? '静默 ' + silentRange.start + '-' + silentRange.end : '关键词 ' + ((cfg.notify_announce_exclude || '').split(',').filter(x => x.trim()).length + ' 条') }}</span></span>
+          <span class="grp-s">{{ silentOn ? '静默 ' + silentRange.start + '-' + silentRange.end : '关键词 ' + (String(cfg.notify_announce_exclude ?? '').split(',').filter(x => x.trim()).length + ' 条') }}</span></span>
         <span class="grp-ar">›</span>
       </div>
       <div class="grp tap" @click="openPage('behavior')">
@@ -223,7 +228,7 @@ async function doDigest() {
       <div class="card">
         <div class="hint">标题或内容包含关键词的通知不播（验证码/取件码等隐私&噪声）</div>
         <div class="kwline">
-          <span v-for="k in (cfg.notify_announce_exclude || '').split(',').filter(x => x.trim())" :key="k" class="kwchip tap" @click="delKw(k.trim())">{{ k.trim() }} ✕</span>
+          <span v-for="k in String(cfg.notify_announce_exclude ?? '').split(',').filter(x => x.trim())" :key="k" class="kwchip tap" @click="delKw(k.trim())">{{ k.trim() }} ✕</span>
         </div>
         <div class="row2">
           <input v-model="kwDraft" placeholder="输入关键词回车添加" @keydown.enter="addKw">
