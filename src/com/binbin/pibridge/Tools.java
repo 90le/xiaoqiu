@@ -304,7 +304,8 @@ public class Tools {
             String model = loadCfg().optString("fast_model", "");
             boolean think = "true".equals(loadCfg().optString("fast_thinking", "false"));
             r.put("thinking", think);
-            if (model.isEmpty()) { r.put("model", "glm-5.3-flash").put("url", "https://open.bigmodel.cn/api/coding/paas/v4/chat/completions").put("key", fastKey()); return r; }
+            r.put("max_tokens", Math.max(512, loadCfg().optInt("fast_max_tokens", 32768))); // 用户：输出上限默认32k（模型都是1M上下文，别卡小）
+            if (model.isEmpty()) { r.put("model", "glm-5.3").put("url", "https://open.bigmodel.cn/api/coding/paas/v4/chat/completions").put("key", fastKey()); return r; }
             // 自定义模型路由（models.json providers）
             try {
                 File mf = new File(ctx.getFilesDir(), "home/.pi/agent/models.json");
@@ -357,7 +358,7 @@ public class Tools {
                     .put("messages", new org.json.JSONArray()
                             .put(new JSONObject().put("role", "system").put("content", system))
                             .put(new JSONObject().put("role", "user").put("content", user)))
-                    .put("max_tokens", 1500).put("temperature", 0.4)
+                    .put("max_tokens", mc.optInt("max_tokens", 32768)).put("temperature", 0.4)
                     .put("thinking", new JSONObject().put("type", mc.optBoolean("thinking", false) ? "enabled" : "disabled"));
             javax.net.ssl.HttpsURLConnection c = (javax.net.ssl.HttpsURLConnection)
                     new java.net.URL(mc.optString("url", "https://open.bigmodel.cn/api/coding/paas/v4/chat/completions")).openConnection();
@@ -650,15 +651,16 @@ public class Tools {
     /** maxOutLen：输出长度上限（120=唤醒短语级；摘要类用 400） */
     public static String llmShort(String sys, String userMsg, int maxTok, int maxOutLen) {
         try {
-            String key = fastKey();
-            if (key == null) return null;
+            JSONObject mc = fastModelCfg();
+            String key = mc.optString("key", "");
+            if (key == null || key.isEmpty()) return null;
             JSONObject body = new JSONObject()
-                .put("model", "glm-5.3-flash")
+                .put("model", mc.optString("model", "glm-5.3"))
                 .put("messages", new org.json.JSONArray()
                     .put(new JSONObject().put("role", "system").put("content", sys))
                     .put(new JSONObject().put("role", "user").put("content", userMsg)))
-                .put("max_tokens", maxTok).put("temperature", 0.4)
-                .put("thinking", new JSONObject().put("type", "disabled"));
+                .put("max_tokens", mc.optInt("max_tokens", 32768)).put("temperature", 0.4)
+                .put("thinking", new JSONObject().put("type", mc.optBoolean("thinking", false) ? "enabled" : "disabled"));
             String content = null;
             for (int attempt = 0; attempt < 2 && (content == null || content.isEmpty()); attempt++) {
                 if (attempt > 0) {
@@ -667,7 +669,7 @@ public class Tools {
                     body = new JSONObject(bs); // 400时去掉thinking重试
                 }
                 javax.net.ssl.HttpsURLConnection c = (javax.net.ssl.HttpsURLConnection)
-                    new java.net.URL("https://open.bigmodel.cn/api/coding/paas/v4/chat/completions").openConnection();
+                    new java.net.URL(mc.optString("url", "https://open.bigmodel.cn/api/coding/paas/v4/chat/completions")).openConnection();
                 c.setRequestMethod("POST"); c.setConnectTimeout(5000); c.setReadTimeout(10000); c.setDoOutput(true);
                 c.setRequestProperty("Authorization", "Bearer " + key);
                 c.setRequestProperty("Content-Type", "application/json");
@@ -1330,7 +1332,8 @@ public class Tools {
                     "context", prop("string", "可选：最近对话上下文摘要（快脑据此理解指代和意图）")), "q"),
             new H() { public JSONObject run(JSONObject a) throws Exception {
                 String q = a.optString("q");
-                String key = fastKey();
+                JSONObject fmc = fastModelCfg();
+                String key = fmc.optString("key", ""); if (key.isEmpty()) key = fastKey();
                 if (key == null) return err("NO_KEY", "未配置 API Key");
                 String now = new java.text.SimpleDateFormat("yyyy-MM-dd HH:mm EEEE", java.util.Locale.CHINA).format(new java.util.Date());
                 // 时间日期快速回答（代码级拦截，零延迟零成本，不走LLM路由）
@@ -1350,13 +1353,13 @@ public class Tools {
                   + ctxBlock
                   + "规则：上下文里的指代（它/那个/继续）必须结合理解；语音输入可能有错字要纠正；answer/reply/prompt用中文。";
                 JSONObject body = new JSONObject()
-                        .put("model", "glm-5.3-flash")
+                        .put("model", fmc.optString("model", "glm-5.3"))
                         .put("messages", new org.json.JSONArray()
                                 .put(new JSONObject().put("role", "system").put("content", sysPrompt))
                                 .put(new JSONObject().put("role", "user").put("content", q)))
                         .put("max_tokens", 800).put("temperature", 0.3);
                 javax.net.ssl.HttpsURLConnection c = (javax.net.ssl.HttpsURLConnection)
-                        new java.net.URL("https://open.bigmodel.cn/api/coding/paas/v4/chat/completions").openConnection();
+                        new java.net.URL(fmc.optString("url", "https://open.bigmodel.cn/api/coding/paas/v4/chat/completions")).openConnection();
                 c.setRequestMethod("POST"); c.setConnectTimeout(5000); c.setReadTimeout(20000); c.setDoOutput(true);
                 c.setRequestProperty("Authorization", "Bearer " + key);
                 c.setRequestProperty("Content-Type", "application/json");

@@ -105,7 +105,7 @@ async function testVoice(engine) {
 const fastModelOpts = computed(() => (chat.models || []).map(m => ({ v: m.id, t: (m.name || m.id) + ' · ' + (m.provider || '') })))
 const fastModelLabel = computed(() => {
   const v = cfg.value.fast_model
-  if (!v) return '默认'
+  if (!v) return 'glm-5.3'
   return (fastModelOpts.value.find(o => o.v === v) || {}).t?.split(' · ')[0] || v
 })
 const fastTesting = ref(false), fastTestMsg = ref('')
@@ -712,11 +712,18 @@ async function loadCfg() {
             <div class="srow-t">模型
               <span class="qm tap" @click.stop="toggleHint('fastm')">?</span>
             </div>
-            <div class="srow-d">{{ cfg.fast_model || '默认 glm-5.3-flash（coding 通道）' }}</div>
+            <div class="srow-d">{{ cfg.fast_model || '默认 glm-5.3（coding 通道）' }}</div>
           </div>
           <button class="pickv tap" @click="openPicker('快脑模型', fastModelOpts, cfg.fast_model || '', v => { cfg.fast_model = v; save('fast_model', v) })">{{ fastModelLabel }} ›</button>
         </div>
         <div v-if="hintOpen === 'fastm'" class="hintline">快脑专职：意图分流/口语化改写/进度措辞/声纹无关。与任务模型（模型大脑页）互不影响。选自定义模型自动走其 baseUrl+密钥。</div>
+        <div class="srow" style="flex-direction:column;align-items:stretch;gap:8px;">
+          <div class="srow-t">输出上限 tokens <em class="mini-hint">默认 32768（模型都是 1M 上下文，别卡小）</em></div>
+          <div class="row2">
+            <input type="number" :value="cfg.fast_max_tokens || 32768" @change="e => { cfg.fast_max_tokens = Number(e.target.value); save('fast_max_tokens', String(e.target.value)) }">
+            <span style="align-self:center;font-size:12px;color:var(--muted);">tokens</span>
+          </div>
+        </div>
         <div class="srow">
           <div class="srow-txt">
             <div class="srow-t">思考模式</div>
