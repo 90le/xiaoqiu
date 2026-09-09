@@ -145,33 +145,53 @@ public class Tools {
     private static OnlineStream kwsStream;
 
     static boolean initKwsOnce(File dir) {
-        if (kws != null) return true;
-        Log.i("PiBridge", "KWS init: 构造前（fp32 + 独立进程隔离）");
+        // 2026-09-09 重试：当年崩溃根因=给 assets 构造器传文件系统绝对路径（本 aar 只有 AssetManager 版构造器）
+        // 现模型已内置 APK assets/sherpa-kws/，走正确的 asset 相对路径。
+        // 熔断器：native 崩=进程死 → 下次启动检测"initing 未清"计数+1，≥2 次永久回退 ASR 唤醒。
         try {
-            // fp32 优先（int8 量化版有崩溃嫌疑）
-            File enc = new File(dir, "encoder-epoch-12-avg-2-chunk-16-left-64.onnx");
-            if (!enc.isFile()) enc = new File(dir, "encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx");
-            File dec = new File(dir, "decoder-epoch-12-avg-2-chunk-16-left-64.onnx");
-            if (!dec.isFile()) dec = new File(dir, "decoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx");
-            File joi = new File(dir, "joiner-epoch-12-avg-2-chunk-16-left-64.onnx");
-            if (!joi.isFile()) joi = new File(dir, "joiner-epoch-12-avg-2-chunk-16-left-64.int8.onnx");
+            android.content.SharedPreferences sp = ctx.getSharedPreferences("kws", 0);
+            if (sp.getInt("crashes", 0) >= 2) { Log.w("PiBridge", "KWS 熔断（曾崩" + sp.getInt("crashes", 0) + "次），ASR 模式"); return false; }
+            if (sp.getBoolean("initing", false)) {
+                sp.edit().putInt("crashes", sp.getInt("crashes", 0) + 1).putBoolean("initing", false).apply();
+                if (sp.getInt("crashes", 0) >= 2) { Log.w("PiBridge", "KWS 第二次崩溃，永久熔断"); return false; }
+            }
+            sp.edit().putBoolean("initing", true).apply();
             OnlineTransducerModelConfig tr = new OnlineTransducerModelConfig(
-                    enc.getAbsolutePath(), dec.getAbsolutePath(), joi.getAbsolutePath(),
+                    "sherpa-kws/encoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx",
+                    "sherpa-kws/decoder-epoch-12-avg-2-chunk-16-left-64.int8.onnx",
+                    "sherpa-kws/joiner-epoch-12-avg-2-chunk-16-left-64.int8.onnx",
                     new com.k2fsa.sherpa.onnx.QnnConfig());
             OnlineModelConfig mc = new OnlineModelConfig();
             mc.setTransducer(tr);
-            mc.setTokens(new File(dir, "tokens.txt").getAbsolutePath());
-            mc.setNumThreads(1);
+            mc.setTokens("sherpa-kws/tokens.txt");
+            mc.setNumThreads(2);
             KeywordSpotterConfig cfg = new KeywordSpotterConfig(new FeatureConfig(), mc, 4,
-                    new File(dir, "keywords.txt").getAbsolutePath(), 2.0f, 0.25f, 1);
-            Log.i("PiBridge", "KWS init: 构造中…");
+                    "sherpa-kws/keywords.txt", 2.0f, 0.25f, 1);
+            Log.i("PiBridge", "KWS init: 构造中（assets 路径）…");
             kws = new KeywordSpotter(ctx.getAssets(), cfg);
-            Log.i("PiBridge", "KWS init: 构造完成");
+            sp.edit().putBoolean("initing", false).apply();
+            Log.i("PiBridge", "✅ KWS 构造成功——流式唤醒上线");
             return true;
-        } catch (Throwable e) { Log.w("PiBridge", "KWS 初始化失败: " + e); return false; }
+        } catch (Throwable e) {
+            Log.w("PiBridge", "KWS 初始化失败: " + e);
+            try { ctx.getSharedPreferences("kws", 0).edit().putBoolean("initing", false).apply(); } catch (Exception ignore) {}
+            return false;
+        }
     }
     static OnlineStream kwsCreateStream() { try { return kws.createStream(null); } catch (Exception e) { return null; } }
     static void kwsSetStream(OnlineStream s) { kwsStream = s; }
+    /** 流式喂音（外部持有 stream），命中返回词条 */
+    static String kwsFeedStream(OnlineStream s, float[] samples, int n) {
+        try {
+            s.acceptWaveform(samples, 0);
+            while (kws.isReady(s)) kws.decode(s);
+            KeywordSpotterResult r = kws.getResult(s);
+            String kw = r == null ? "" : r.getKeyword();
+            if (kw != null && !kw.isEmpty()) { kws.reset(s); return kw; }
+        } catch (Throwable e) { Log.w("PiBridge", "kwsFeedStream: " + e); }
+        return "";
+    }
+    static void kwsReset(OnlineStream s) { try { kws.reset(s); } catch (Throwable ignore) {} }
     static void kwsClearStream() { kwsStream = null; }
     /** 喂音频，命中唤醒词返回词条，否则空串 */
     static String kwsFeed(float[] samples) {

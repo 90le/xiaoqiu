@@ -82,6 +82,18 @@ public class WakeService extends Service {
         super.onCreate();
         Log.i("PiBridge", "WakeService onCreate");
         Tools.init(this); // :kws 独立进程必须自行初始化 Tools（ctx/引擎/配置）
+        // 冷启动预热：TTS 预绑定 + 一次微型云 STT 暖 TLS/DNS（首次唤醒 -1~2s）
+        new Thread(() -> {
+            try { Thread.sleep(3000); } catch (Exception ignore) {}
+            try { Tools.speakLocal(""); } catch (Exception ignore) {} // 触发 miTts/tts 懒加载绑定
+            try {
+                java.io.File w = java.io.File.createTempFile("warmup", ".wav", getCacheDir());
+                com.binbin.pibridge.WavUtil.writeWav(w, new byte[3200], 16000, 1, 16); // 0.1s 静音
+                Tools.cloudStt(w);
+                w.delete();
+                Log.i("PiBridge", "预热完成（TLS/TTS 已暖）");
+            } catch (Throwable ignore) {}
+        }, "warmup").start();
         // 统一会话总线接收（页面引擎 → 本进程）
         registerReceiver(new android.content.BroadcastReceiver() {
             @Override public void onReceive(Context c2, android.content.Intent i) { turnDone = true; }
@@ -156,6 +168,10 @@ public class WakeService extends Service {
             long lastBeat = 0;
             File dir = new File(getFilesDir(), "sherpa/kws/sherpa-onnx-kws-zipformer-wenetspeech-3.3M-2024-01-01");
             boolean announced = false;
+            // 流式 KWS（assets 模型 + 熔断保护）：命中即唤醒，零转写延迟
+            boolean kwsOn = Tools.initKwsOnce(dir);
+            com.k2fsa.sherpa.onnx.OnlineStream kwsSt = kwsOn ? Tools.kwsCreateStream() : null;
+            float[] kwsBuf = new float[chunk.length];
             while (running) {
                 try {
                     if (ar == null) {
@@ -183,6 +199,23 @@ public class WakeService extends Service {
                     if (n <= 0) { Thread.sleep(50); continue; }
                     for (int i = 0; i < n; i++) { ring[wpos] = chunk[i]; wpos = (wpos + 1) % ringN; }
                     total += n;
+                    if (kwsSt != null) { // 流式喂 KWS：命中=零延迟唤醒
+                        if (Tools.ttsSpeaking || System.currentTimeMillis() - lastSpokenAt < 1800) {
+                            // 回声保护窗内：重置流防自唤醒
+                            try { Tools.kwsReset(kwsSt); } catch (Exception ignore) {}
+                        } else {
+                            for (int i = 0; i < n; i++) kwsBuf[i] = chunk[i] / 32768.0f;
+                            String kwHit = Tools.kwsFeedStream(kwsSt, kwsBuf, n);
+                            if (kwHit != null && !kwHit.isEmpty() && !sessionActive) {
+                                Log.i("PiBridge", "🔔 KWS 命中: " + kwHit + "（零转写延迟）");
+                                if (ar != null) { try { ar.stop(); ar.release(); ar = null; } catch (Exception ignore) {} }
+                                sendBroadcast(new android.content.Intent("com.pihost.WAKE_ANIM"));
+                                sessionLoop("wake", "");
+                                Thread.sleep(400);
+                                continue;
+                            }
+                        }
+                    }
                     if (total - lastBeat > sr * 2) { writeState(this, true); lastBeat = total; }
                     double sumSq = 0;
                     for (int i = 0; i < n; i++) { double sv = chunk[i]; sumSq += sv * sv; }
@@ -256,6 +289,7 @@ public class WakeService extends Service {
             if (!hit && !localTxt.isEmpty()) hit = wakeHit(localTxt); // 云端没中→本地转写再判（口音关键兜底）
             if (!hit) return;
             Log.d("PiBridge", "唤醒命中源: " + (fromCloud ? "云" : "本"));
+            if (sessionActive) return; // 会话中不重复触发（KWS 主路+ASR 兜底并存）
             if (Tools.ttsSpeaking || System.currentTimeMillis() - lastSpokenAt < 1800 || isEcho(txt)) {
                 Log.i("PiBridge", "🛡 回声/保护窗拦截: " + txt); // 自己说话的回声不唤醒（根治自循环）
                 return;
