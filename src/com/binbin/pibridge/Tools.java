@@ -306,7 +306,8 @@ public class Tools {
                     .put("messages", new org.json.JSONArray()
                             .put(new JSONObject().put("role", "system").put("content", system))
                             .put(new JSONObject().put("role", "user").put("content", user)))
-                    .put("max_tokens", 500).put("temperature", 0.4);
+                    .put("max_tokens", 1500).put("temperature", 0.4)
+                    .put("thinking", new JSONObject().put("type", "disabled")); // 不关思考→content空→改写失效
             javax.net.ssl.HttpsURLConnection c = (javax.net.ssl.HttpsURLConnection)
                     new java.net.URL("https://open.bigmodel.cn/api/coding/paas/v4/chat/completions").openConnection();
             c.setRequestMethod("POST"); c.setConnectTimeout(5000); c.setReadTimeout(20000); c.setDoOutput(true);
@@ -1234,7 +1235,7 @@ public class Tools {
         }});
 
         def("voice_bus", "统一语音会话总线（页面引擎→原生广播）",
-            schema(props("action", prop("string", "done|session|speak|ack|prog|glow"),
+            schema(props("action", prop("string", "done|session|speak|psay|ack|prog|glow"),
                     "cmd", prop("string", "session: start/stop"),
                     "from", prop("string", "wake|mic"),
                     "text", prop("string", "speak: 文本"),
@@ -1252,6 +1253,10 @@ public class Tools {
                     i = new android.content.Intent("com.pihost.VOICE_SPEAK");
                     i.putExtra("text", a.optString("text", "")).putExtra("token", a.optString("token", ""));
                     if (a.optBoolean("humanize")) i.putExtra("humanize", "1");
+                }
+                else if ("psay".equals(act)) {
+                    i = new android.content.Intent("com.pihost.VOICE_PSAY");
+                    i.putExtra("text", a.optString("text", ""));
                 }
                 else if ("ack".equals(act)) {
                     i = new android.content.Intent("com.pihost.VOICE_ACK");

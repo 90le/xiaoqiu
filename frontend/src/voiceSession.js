@@ -114,12 +114,27 @@ async function exec(data, prompt, skipAck) {
   const ok = api.prompt(prompt) // 优化后指令 → 当前活动会话
   console.log('[VS] prompt(' + ok + '): ' + prompt.slice(0, 30))
   if (!ok) { await speak('连接断了，打开小丘再试一次'); done(); return }
-  // 执行期进度：每个新工具开始 → 药丸显示"⚙️ 工具名"（用户知道在干活）
-  let lastTool = ''
+  // 执行期进度：①工具名上报（药丸）②智能进度播报（12s节流，数据驱动措辞，非固定话术）
+  let lastTool = '', lastProgAt = 0, progN = 0
   const stopProg = watch(() => chat.state?.streamingMessage, (m) => {
-    const tools = (m?.content || []).filter(b => b.type === 'toolCall')
+    const blocks = m?.content || []
+    const tools = blocks.filter(b => b.type === 'toolCall')
     const t = tools[tools.length - 1]?.name
     if (t && t !== lastTool) { lastTool = t; bus({ action: 'prog', text: t }) }
+    // 智能进度：真数据（步数/当前动作/已产字数）+ 变体轮换
+    const now = Date.now()
+    if (now - lastProgAt > 12000 && lastProgAt > 0) {
+      lastProgAt = now
+      const chars = blocks.filter(b => b.type === 'text').reduce((a, b) => a + (b.text || '').length, 0)
+      const zh = TOOL_ZH[t] || '处理'
+      const vs = [
+        tools.length > 1 ? `第${tools.length}步，正在${zh}` : `正在${zh}`,
+        zh + '呢' + (chars > 80 ? `，已经写了大概${Math.round(chars / 100) * 100}字` : ''),
+        tools.length > 2 ? `已完成${tools.length - 1}步，现在${zh}` : `还在${zh}，稍等`,
+        chars > 300 ? `产出约${Math.round(chars / 100) * 100}字了，继续` : `进行中，${zh}`,
+      ]
+      bus({ action: 'psay', text: vs[progN++ % vs.length] })
+    } else if (lastProgAt === 0) lastProgAt = now
   })
   try { await streamEnd() } finally { stopProg() }
   console.log('[VS] 流结束')
@@ -179,6 +194,14 @@ function extract(text, replyText) {
   } catch {}
 }
 
+const TOOL_ZH = {
+  bash: '跑命令', read: '读文件', edit: '改文件', write: '写文件', grep: '搜索代码',
+  web_search: '查资料', fetch_content: '看网页', mcp__xiaoqiu_screenshot: '看屏幕',
+  screenshot: '截屏', vision_ask: '看图', vision_elements: '识别界面',
+  mcp__xiaoqiu_ui_tap_text: '点手机', mcp__xiaoqiu_apps_launch: '开应用',
+  mcp__xiaoqiu_notify_read: '看通知', mcp__xiaoqiu_memory_save: '记事情',
+  terminal: '跑终端',
+}
 function recentCtx() {
   const msgs = (chat.state?.messages || []).slice(-6)
   return msgs.map(m => (m.role === 'user' ? '用户:' : '小丘:') +

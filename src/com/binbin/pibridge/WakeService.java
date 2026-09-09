@@ -113,6 +113,14 @@ public class WakeService extends Service {
                 if (!zh.isEmpty()) { Log.i("PiBridge", "🗣 进度: " + zh); speakMarked(zh); }
             }
         }, new android.content.IntentFilter("com.pihost.VOICE_PROG"));
+        // 智能进度播报（页面引擎据实时数据生成）：短句代播，不打断轮次结构
+        registerReceiver(new android.content.BroadcastReceiver() {
+            @Override public void onReceive(Context c2, android.content.Intent i) {
+                final String t = i.getStringExtra("text");
+                if (t == null || t.isEmpty() || sessionStop) return;
+                new Thread(() -> speakPSay(t)).start();
+            }
+        }, new android.content.IntentFilter("com.pihost.VOICE_PSAY"));
         // 跨进程麦克风互斥：主进程录音（声纹录入等）时暂停唤醒
         registerReceiver(new android.content.BroadcastReceiver() {
             @Override public void onReceive(Context c2, android.content.Intent i) {
@@ -481,14 +489,10 @@ public class WakeService extends Service {
                     sendBroadcast(ti); // 重发（页面活了会回执+执行）
                 }
                                 long t0 = System.currentTimeMillis();
-                boolean soothe1 = false, soothe2 = false;
                 while (!turnDone && !sessionStop && running && System.currentTimeMillis() - t0 < 150000) {
                     if (sessionStop || !running) break;
                     String[] sp = pendingSpeak;
                     if (sp != null) { pendingSpeak = null; speakTurn(sp[0], sp[1], sp.length > 2 && "1".equals(sp[2])); }
-                    long el = System.currentTimeMillis() - t0;
-                    if (!soothe1 && el > 45000) { soothe1 = true; speakMarked("还在办着，别急"); } // 安抚1
-                    if (!soothe2 && el > 100000) { soothe2 = true; speakMarked("快好了，再等等"); } // 安抚2
                     Thread.sleep(60);
                 }
                 if (sessionStop || !running) break;
@@ -558,6 +562,35 @@ public class WakeService extends Service {
 
     /** 固定语播报+回声登记 */
     private void speakMarked(String t) { markSpoken(t); Tools.speakFast(t); }
+    /** 短进度播报：引擎感知（cloud/xiaomi），无回执——fire and forget */
+    private void speakPSay(String text) {
+        try {
+            markSpoken(text);
+            File f = fastFileOf(text);
+            if (f != null && !f.isFile() && !"xiaomi".equals(Tools.loadCfg().optString("tts_engine", "auto"))) {
+                byte[] w = Tools.synthCloud(text);
+                if (w != null) {
+                    f.getParentFile().mkdirs();
+                    java.io.FileOutputStream fo = new java.io.FileOutputStream(f);
+                    fo.write(w); fo.close();
+                }
+            }
+            if (f != null && f.isFile()) {
+                android.media.MediaPlayer mp = android.media.MediaPlayer.create(this, android.net.Uri.fromFile(f));
+                if (mp != null) {
+                    Tools.ttsSpeaking = true;
+                    mp.setOnCompletionListener(m -> { m.release(); Tools.ttsSpeaking = false; });
+                    mp.start();
+                    long t0 = System.currentTimeMillis();
+                    while (mp.isPlaying() && System.currentTimeMillis() - t0 < 30000) Thread.sleep(80);
+                    return;
+                }
+            }
+            Tools.speakLocal(text);
+            waitLocalSpeak(30000);
+        } catch (Exception ignore) {}
+    }
+
     /** 转写：会话内云优先（快+准），失败落本地 */
     private String transcribe(File wav) {
         try {
