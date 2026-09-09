@@ -143,8 +143,6 @@ public class Tools {
     static boolean initVoiceprint() {
         if (spkX != null) return true;
         try {
-            java.io.File mf = new java.io.File(ctx.getFilesDir(), "voiceprint-model.onnx");
-            if (!mf.isFile()) return false;
             android.content.SharedPreferences sp = ctx.getSharedPreferences("kws", 0);
             if (sp.getInt("spkCrashes", 0) >= 2) return false;
             if (sp.getBoolean("spkIniting", false)) {
@@ -153,9 +151,9 @@ public class Tools {
             }
             sp.edit().putBoolean("spkIniting", true).apply();
             com.k2fsa.sherpa.onnx.SpeakerEmbeddingExtractorConfig cfg =
-                    new com.k2fsa.sherpa.onnx.SpeakerEmbeddingExtractorConfig(mf.getAbsolutePath(), 1, false, "cpu");
+                    new com.k2fsa.sherpa.onnx.SpeakerEmbeddingExtractorConfig("sherpa-spk/voiceprint.onnx", 1, false, "cpu");
             spkX = new com.k2fsa.sherpa.onnx.SpeakerEmbeddingExtractor(ctx.getAssets(), cfg);
-            sp.edit().putBoolean("spkIniting", false).apply();
+            sp.edit().putBoolean("spkIniting", false).putInt("spkCrashes", 0).apply(); // 成功=根因已修，清熔断计数
             Log.i("PiBridge", "✅ 声纹模型就绪 dim=" + spkX.dim());
             return true;
         } catch (Throwable t) {
@@ -3063,10 +3061,12 @@ public class Tools {
         }});
         def("mic_record", "麦克风录音 N 秒保存 WAV 16k（语音识别用）",
             schema(props("seconds", prop("number", "录音秒数默认10，上限120"))), new H() { public JSONObject run(JSONObject a) throws Exception {
+                try { ctx.sendBroadcast(new android.content.Intent("com.pihost.MIC_BUSY").putExtra("on", true)); } catch (Exception ignore) {}
             int sec = a.optInt("seconds", 10);
             if (sec < 2) sec = 2; if (sec > 120) sec = 120;
             File wav = WavUtil.record(ctx, sec);
-            return ok(wav.getAbsolutePath() + " " + wav.length() + "B");
+            try { ctx.sendBroadcast(new android.content.Intent("com.pihost.MIC_BUSY").putExtra("on", false)); } catch (Exception ignore) {}
+        return ok(wav.getAbsolutePath() + " " + wav.length() + "B");
         }});
         def("voice_chat", "语音对话（VAD 自动断句 + 持续会话上下文）：说完自动停→识别→pi 回答",
             schema(props("max_seconds", prop("number", "最长录音秒默认20"))), new H() { public JSONObject run(JSONObject a) throws Exception {

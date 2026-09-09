@@ -113,6 +113,13 @@ public class WakeService extends Service {
                 if (!zh.isEmpty()) { Log.i("PiBridge", "🗣 进度: " + zh); speakMarked(zh); }
             }
         }, new android.content.IntentFilter("com.pihost.VOICE_PROG"));
+        // 跨进程麦克风互斥：主进程录音（声纹录入等）时暂停唤醒
+        registerReceiver(new android.content.BroadcastReceiver() {
+            @Override public void onReceive(Context c2, android.content.Intent i) {
+                Tools.micBusy = i.getBooleanExtra("on", false);
+                if (Tools.micBusy) Log.i("PiBridge", "🎙 主进程录音中，唤醒暂停");
+            }
+        }, new android.content.IntentFilter("com.pihost.MIC_BUSY"));
         // 全局停止钮：停播+立即收尾
         registerReceiver(new android.content.BroadcastReceiver() {
             @Override public void onReceive(Context c2, android.content.Intent i) {
