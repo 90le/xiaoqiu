@@ -297,19 +297,70 @@ public class Tools {
     }
 
     /** 通用对话补全（glm-5.3-flash），失败返回 null */
+    /** 快脑模型配置解析：{model, thinking, url, key}——默认 glm-5.3-flash@coding；自定义模型走 models.json 路由 */
+    static JSONObject fastModelCfg() {
+        JSONObject r = new JSONObject();
+        try {
+            String model = loadCfg().optString("fast_model", "");
+            boolean think = "true".equals(loadCfg().optString("fast_thinking", "false"));
+            r.put("thinking", think);
+            if (model.isEmpty()) { r.put("model", "glm-5.3-flash").put("url", "https://open.bigmodel.cn/api/coding/paas/v4/chat/completions").put("key", fastKey()); return r; }
+            // 自定义模型路由（models.json providers）
+            try {
+                File mf = new File(ctx.getFilesDir(), "home/.pi/agent/models.json");
+                JSONObject models = new JSONObject(new String(java.nio.file.Files.readAllBytes(mf.toPath()), "UTF-8"));
+                JSONObject provs = models.optJSONObject("providers");
+                if (provs != null) {
+                    java.util.Iterator<String> it = provs.keys();
+                    while (it.hasNext()) {
+                        String pid = it.next();
+                        JSONObject p = provs.optJSONObject(pid);
+                        JSONArray ms = p != null ? p.optJSONArray("models") : null;
+                        if (ms == null) continue;
+                        for (int i = 0; i < ms.length(); i++) {
+                            if (model.equals(ms.optJSONObject(i).optString("id"))) {
+                                String key = p.optString("apiKey", "");
+                                if (key.isEmpty()) { // 从 auth.json 取
+                                    File af = new File(ctx.getFilesDir(), "home/.pi/agent/auth.json");
+                                    JSONObject auth = new JSONObject(new String(java.nio.file.Files.readAllBytes(af.toPath()), "UTF-8"));
+                                    key = auth.optJSONObject(pid) != null ? auth.optJSONObject(pid).optString("key", "") : "";
+                                }
+                                String base = p.optString("baseUrl", "https://open.bigmodel.cn/api/paas/v4");
+                                if (base.endsWith("/")) base = base.substring(0, base.length() - 1);
+                                return r.put("model", model).put("url", base + "/chat/completions").put("key", key);
+                            }
+                        }
+                    }
+                }
+            } catch (Exception ignore) {}
+            // 内置家族：zhipu 开放平台端点
+            String key = fastKey();
+            try {
+                File af = new File(ctx.getFilesDir(), "home/.pi/agent/auth.json");
+                JSONObject auth = new JSONObject(new String(java.nio.file.Files.readAllBytes(af.toPath()), "UTF-8"));
+                if (auth.optJSONObject("zhipu") != null && !auth.optJSONObject("zhipu").optString("key", "").isEmpty())
+                    key = auth.optJSONObject("zhipu").optString("key");
+            } catch (Exception ignore) {}
+            return r.put("model", model).put("url", "https://open.bigmodel.cn/api/paas/v4/chat/completions").put("key", key);
+        } catch (Exception e) {
+            try { return r.put("model", "glm-5.3-flash").put("url", "https://open.bigmodel.cn/api/coding/paas/v4/chat/completions").put("key", fastKey()); } catch (Exception ignore) { return r; }
+        }
+    }
+
     static String llmRaw(String system, String user) {
         try {
-            String key = fastKey();
-            if (key == null) return null;
+            JSONObject mc = fastModelCfg();
+            String key = mc.optString("key", "");
+            if (key == null || key.isEmpty()) return null;
             JSONObject body = new JSONObject()
-                    .put("model", "glm-5.3-flash")
+                    .put("model", mc.optString("model", "glm-5.3-flash"))
                     .put("messages", new org.json.JSONArray()
                             .put(new JSONObject().put("role", "system").put("content", system))
                             .put(new JSONObject().put("role", "user").put("content", user)))
                     .put("max_tokens", 1500).put("temperature", 0.4)
-                    .put("thinking", new JSONObject().put("type", "disabled")); // 不关思考→content空→改写失效
+                    .put("thinking", new JSONObject().put("type", mc.optBoolean("thinking", false) ? "enabled" : "disabled"));
             javax.net.ssl.HttpsURLConnection c = (javax.net.ssl.HttpsURLConnection)
-                    new java.net.URL("https://open.bigmodel.cn/api/coding/paas/v4/chat/completions").openConnection();
+                    new java.net.URL(mc.optString("url", "https://open.bigmodel.cn/api/coding/paas/v4/chat/completions")).openConnection();
             c.setRequestMethod("POST"); c.setConnectTimeout(5000); c.setReadTimeout(20000); c.setDoOutput(true);
             c.setRequestProperty("Authorization", "Bearer " + key);
             c.setRequestProperty("Content-Type", "application/json");
@@ -595,6 +646,7 @@ public class Tools {
 
     /** 快脑短文本生成核心：thinking禁用（改写不需推理）+失败重试1次；失败返回ERR:串 */
     public static String llmShort(String sys, String userMsg, int maxTok) { return llmShort(sys, userMsg, maxTok, 120); }
+    // llmShort 也走 fast_model 配置：经 llmRaw（已 cfg 感知），仅收敛输出上限
     /** maxOutLen：输出长度上限（120=唤醒短语级；摘要类用 400） */
     public static String llmShort(String sys, String userMsg, int maxTok, int maxOutLen) {
         try {

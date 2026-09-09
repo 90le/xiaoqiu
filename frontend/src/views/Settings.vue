@@ -101,6 +101,24 @@ async function testVoice(engine) {
   setTimeout(() => { testing.value = '' }, 3000)
 }
 
+/* ── 语音大脑（快脑）── */
+const fastModelOpts = computed(() => (chat.models || []).map(m => ({ v: m.id, t: (m.name || m.id) + ' · ' + (m.provider || '') })))
+const fastModelLabel = computed(() => {
+  const v = cfg.value.fast_model
+  if (!v) return '默认'
+  return (fastModelOpts.value.find(o => o.v === v) || {}).t?.split(' · ')[0] || v
+})
+const fastTesting = ref(false), fastTestMsg = ref('')
+async function testFast() {
+  fastTesting.value = true; fastTestMsg.value = ''
+  try {
+    const r = await fetch('/api/chat_fast', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ q: '我明天要去北京出差三天' }) })
+    const d = (await r.json())?.structuredContent
+    fastTestMsg.value = d?.ok ? `✅ ${d.data?.type === 'task' ? '识别为任务：' + (d.data?.prompt || '').slice(0, 30) : '闲聊：' + (d.data?.answer || '').slice(0, 30)}` : '❌ ' + (d?.error?.message || '失败')
+  } catch (e) { fastTestMsg.value = '❌ ' + e.message }
+  fastTesting.value = false
+}
+
 /* ── 声纹 ── */
 const vp = ref({ samples: 0, active: false, model: false, dots: '' })
 const vpBusy = ref(false), vpMsg = ref(''), vpOk = ref(true)
@@ -487,7 +505,7 @@ watch(() => chat.settings, () => {
   if (!vDirty.value) { vSynced = false; syncVision() }
 })
 watch(page, p => { if (p === 'models') { engineApi.listProviders(); engineApi.listModelsConfig() } })
-watch(page, p => { if (p === 'voice') vpLoad() })
+watch(page, p => { if (p === 'voice') { vpLoad(); if (!(chat.models || []).length) engineApi.listModels && engineApi.listModels() } })
 onMounted(() => {
   syncPromptDraft()
   window.addEventListener('popstate', onPop)
@@ -687,6 +705,31 @@ async function loadCfg() {
 
     <!-- ── 🎙 语音与唤醒 ── -->
     <template v-else-if="page === 'voice'">
+      <div class="secl">语音大脑（快脑） <em>意图识别/口语化/进度用</em></div>
+      <div class="grp-card">
+        <div class="srow">
+          <div class="srow-txt">
+            <div class="srow-t">模型
+              <span class="qm tap" @click.stop="toggleHint('fastm')">?</span>
+            </div>
+            <div class="srow-d">{{ cfg.fast_model || '默认 glm-5.3-flash（coding 通道）' }}</div>
+          </div>
+          <button class="pickv tap" @click="openPicker('快脑模型', fastModelOpts, cfg.fast_model || '', v => { cfg.fast_model = v; save('fast_model', v) })">{{ fastModelLabel }} ›</button>
+        </div>
+        <div v-if="hintOpen === 'fastm'" class="hintline">快脑专职：意图分流/口语化改写/进度措辞/声纹无关。与任务模型（模型大脑页）互不影响。选自定义模型自动走其 baseUrl+密钥。</div>
+        <div class="srow">
+          <div class="srow-txt">
+            <div class="srow-t">思考模式</div>
+            <div class="srow-d">开=更聪明但慢1-3秒；默认关（语音要快）</div>
+          </div>
+          <div :class="['sw', 'tap', { on: cfg.fast_thinking === 'true' }]" @click="cfg.fast_thinking = cfg.fast_thinking === 'true' ? 'false' : 'true'; save('fast_thinking', cfg.fast_thinking)"><div class="knob"></div></div>
+        </div>
+        <div class="srow">
+          <div class="srow-txt"><div class="srow-t">连通测试</div><div class="srow-d">{{ fastTestMsg || '发一句测试意图' }}</div></div>
+          <button class="minib tap" :disabled="fastTesting" @click="testFast">{{ fastTesting ? '…' : '▶' }}</button>
+        </div>
+      </div>
+
       <div class="secl">语音识别</div>
       <div class="grp-card">
         <div class="srow">
