@@ -3115,7 +3115,14 @@ public class Tools {
                 return ok(new JSONObject().put("file", f.getName()).put("latency", "≤1分钟").put("log", "Termux: $PREFIX/tmp/queue-runner.log"));
             }});
 
-        def("tools_list", "列出全部可用工具", schema(props()), new H() { public JSONObject run(JSONObject a) {
+        def("tools_list", "列出全部可用工具（fmt=full 返回含参数 schema 的富对象，供表单化 UI）", schema(props("fmt", prop("string", "full=返回{name,desc,schema}"))), new H() { public JSONObject run(JSONObject a) {
+            if ("full".equals(a.optString("fmt"))) {
+                JSONArray arr = new JSONArray();
+                for (Map.Entry<String, Tool> e : REG.entrySet()) {
+                    try { arr.put(new JSONObject().put("name", e.getKey()).put("desc", e.getValue().desc).put("schema", e.getValue().schema)); } catch (Exception ignore) {}
+                }
+                return ok(arr);
+            }
             JSONArray arr = new JSONArray();
             for (Map.Entry<String, Tool> e : REG.entrySet()) arr.put(e.getKey() + " — " + e.getValue().desc);
             return ok(arr);

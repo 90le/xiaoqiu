@@ -1,97 +1,293 @@
 <script setup>
-import { ref, onMounted, computed } from 'vue'
+import { ref, computed, onMounted } from 'vue'
 import { call, outText } from '../api.js'
 
-const tools = ref([])
+/* ═══ 数据 ═══ */
+const tools = ref([])     // [{name, desc, schema:{properties:{}, required:[]}}]
 const kw = ref('')
-const openName = ref('')
-const argsText = ref('{}')
-const result = ref('')
-const busy = ref(false)
+const cur = ref(null)     // 当前打开的工具 {name, desc, schema, args:{}, result, busy}
+const favs = ref(JSON.parse(localStorage.getItem('xq_tool_favs') || '[]'))
+const recents = ref(JSON.parse(localStorage.getItem('xq_tool_recents') || '[]'))
+const hist = ref([])
 
-const FAMS = [
-  ['ui_', '🖐 无障碍操作'],
-  ['vd', '🖥 隐形副屏'],
-  ['notify', '🔔 通知'],
-  ['memory', '🧠 记忆'],
-  ['macro', '🔁 宏'],
-  ['tts', '🔊 语音'],
-  ['vision', '👁 视觉'],
-  ['ocr', '👁 视觉'],
-  ['sysctl', '⚙️ 系统设置'],
-  ['settings_', '⚙️ 系统设置'],
-  ['l2_', '🛡 特权通道'],
-  ['app', '📱 应用'],
-  ['alarm', '⏰ 闹钟定时'],
-  ['intent', '🎯 Intent'],
-  ['chat', '🧠 快脑'],
-  ['pi_rpc', '🧠 慢脑'],
-  ['voice', '🗣 播报'],
-  ['ai_', '🧠 AI'],
+/* 语义能力域（前缀→域，借鉴旧版但重排+扩展） */
+const CATS = [
+  ['hand', '🖐 手机控制', [['ui_', '无障碍操作'], ['vd', '隐形副屏'], ['sysctl', '系统开关'], ['settings_', '系统设置'], ['brightness', '亮度'], ['volume', '音量'], ['flashlight', '手电筒'], ['vibrate', '震动'], ['screenshot', '截屏'], ['ime_switch', '输入法']]],
+  ['eye', '👁 视觉理解', [['vision', '视觉定位'], ['ocr', '文字识别'], ['shot_diff', '截图比对'], ['ui_screen_read', '控件树'], ['ui_find', '查找元素'], ['ui_wait', '等待元素']]],
+  ['voice', '🗣 语音', [['tts', '语音合成'], ['stt', '语音识别'], ['mic', '录音'], ['voice', '语音会话'], ['wake', '唤醒'], ['speak', '播报']]],
+  ['notify', '🔔 通知消息', [['notify', '通知'], ['sms', '短信'], ['calllog', '通话'], ['contacts', '联系人']]],
+  ['app', '📱 应用设备', [['apps', '应用'], ['app_', '应用'], ['intent', 'Intent'], ['alarm', '闹钟'], ['timer', '倒计时'], ['device', '设备'], ['battery', '电池'], ['network', '网络'], ['location', '位置'], ['perm', '权限'], ['floatball', '悬浮球'], ['screen_state', '屏幕'], ['device_', '设备']]],
+  ['brain', '🧠 智能与记忆', [['memory', '记忆'], ['chat', '快脑'], ['pi_rpc', '慢脑'], ['ai_', 'AI 处理'], ['macro', '宏'], ['l2', '特权通道'], ['termux', 'Termux'], ['env', '环境引擎']]],
+  ['dev', '🔧 开发调试', [['cfg', '配置'], ['tools', '工具'], ['scm', '代码'], ['files', '文件'], ['setkey', '密钥'], ['open_perm', '权限页'], ['app_request', '授权']]],
 ]
-function famOf(n) {
-  for (const [p, label] of FAMS) if (n.startsWith(p)) return label
-  return '📦 其他'
+function catOf(name) {
+  for (const [id, label, prefixes] of CATS) {
+    for (const [p, , ] of prefixes) if (name === p || name.startsWith(p)) return id
+  }
+  return 'dev'
 }
-const grouped = computed(() => {
-  const f = kw.value
-  const list = tools.value.filter(t => !f || t.name.includes(f) || (t.desc || '').includes(f))
-  const g = {}
-  for (const t of list) (g[famOf(t.name)] = g[famOf(t.name)] || []).push(t)
-  return g
-})
+const CATNAME = Object.fromEntries(CATS.map(c => [c[0], c[1]]))
 
 async function load() {
-  const r = await call('tools_list', {})
-  const raw = r.ok ? r.data : []
-  tools.value = raw.map(t => typeof t === 'string' ? { name: t, desc: '' } : { name: t.name, desc: (t.desc || t.description || '').split('：')[0].split('(')[0] })
+  const r = await call('tools_list', { fmt: 'full' })
+  const raw = r.ok ? (Array.isArray(r.data) ? r.data : []) : []
+  tools.value = raw.filter(x => x && x.name).map(x => ({
+    name: x.name,
+    desc: (x.desc || '').split('：')[0].split('(')[0],
+    fullDesc: x.desc || '',
+    props: x.schema?.properties || {},
+    required: x.schema?.required || [],
+  }))
 }
-function open(t) {
-  openName.value = openName.value === t.name ? '' : t.name
-  argsText.value = '{}'
-  result.value = ''
+
+/* ── 过滤分组 ── */
+const filtered = computed(() => {
+  const q = kw.value.trim().toLowerCase()
+  return tools.value.filter(t => !q || t.name.toLowerCase().includes(q) || t.desc.toLowerCase().includes(q))
+})
+const grouped = computed(() => {
+  const g = {}
+  for (const t of filtered.value) (g[catOf(t.name)] = g[catOf(t.name)] || []).push(t)
+  return g
+})
+const favTools = computed(() => tools.value.filter(t => favs.value.includes(t.name)))
+const recentTools = computed(() => recents.value.map(n => tools.value.find(t => t.name === n)).filter(Boolean))
+
+/* ── 打开工具（schema→表单） ── */
+function openTool(t) {
+  const args = {}
+  for (const [k, p] of Object.entries(t.props)) {
+    if (p?.type === 'boolean') args[k] = false
+    else args[k] = ''
+  }
+  cur.value = { ...t, args, result: null, busy: false }
+  if (!recents.value.includes(t.name)) {
+    recents.value = [t.name, ...recents.value.filter(n => n !== t.name)].slice(0, 8)
+    try { localStorage.setItem('xq_tool_recents', JSON.stringify(recents.value)) } catch {}
+  }
 }
-async function run(t) {
-  busy.value = true
-  let args = {}
-  try { args = JSON.parse(argsText.value || '{}') } catch { result.value = '❌ 参数不是合法 JSON'; busy.value = false; return }
-  const r = await call(t.name, args)
-  result.value = outText(r)
-  busy.value = false
+function closeTool() { cur.value = null }
+function toggleFav(name) {
+  favs.value = favs.value.includes(name) ? favs.value.filter(n => n !== name) : [...favs.value, name]
+  try { localStorage.setItem('xq_tool_favs', JSON.stringify(favs.value)) } catch {}
 }
-onMounted(load)
+/* 参数控件类型 */
+function ptype(p) {
+  const t = p?.type || 'string'
+  if (t === 'number' || t === 'integer') return 'number'
+  if (t === 'boolean') return 'switch'
+  return 'text'
+}
+const propDesc = p => (p?.description || p?.desc || '').split('；')[0]
+
+/* ── 执行 ── */
+async function run() {
+  const c = cur.value
+  if (!c) return
+  const params = {}
+  for (const [k, v] of Object.entries(c.args)) {
+    if (v === '' || v === false) continue
+    params[k] = c.props[k]?.type === 'number' ? Number(v) : v
+  }
+  for (const r of c.required) { // 必填校验
+    if (params[r] === undefined) { c.result = { ok: false, err: '必填参数缺失：' + r }; return }
+  }
+  c.busy = true
+  const r = await call(c.name, params)
+  c.busy = false
+  c.result = { ok: r.ok, data: r.data, err: r.ok ? null : outText(r) }
+  hist.value.unshift({ name: c.name, params, ok: r.ok, at: Date.now() })
+  if (hist.value.length > 20) hist.value.pop()
+}
+/* 结果美化渲染 */
+function resultView(res) {
+  if (!res) return null
+  if (!res.ok) return { type: 'err', text: res.err || '失败' }
+  const d = res.data
+  if (d == null) return { type: 'ok', text: '✅ 成功' }
+  if (Array.isArray(d)) {
+    if (!d.length) return { type: 'ok', text: '✅ 空' }
+    if (typeof d[0] === 'string' && d[0].includes(' — ')) return { type: 'kv', list: d.map(s => { const i = s.indexOf(' — '); return [s.slice(0, i), s.slice(i + 4)] }) }
+    return { type: 'list', list: d.map(x => typeof x === 'string' ? x : JSON.stringify(x)) }
+  }
+  if (typeof d === 'object') {
+    if (d.png || d.path || d.file || d.shot) return { type: 'text', text: JSON.stringify(d, null, 2) }
+    const ks = Object.keys(d)
+    if (ks.length && ks.every(k => ['v', 't'].includes(k) === false) && ks.length <= 30 && ks.every(k => typeof d[k] !== 'object')) {
+      return { type: 'kv', list: ks.map(k => [k, String(d[k])]) }
+    }
+    return { type: 'text', text: JSON.stringify(d, null, 2) }
+  }
+  return { type: 'ok', text: '✅ ' + String(d) }
+}
+function copyRes() {
+  try { navigator.clipboard.writeText(JSON.stringify(cur.value?.result, null, 2)); } catch {}
+}
 </script>
 
 <template>
   <div class="h1">工具</div>
-  <div class="sub">97+ 原生能力，全部可直达</div>
+  <div class="sub">{{ tools.length }} 项原生能力 · 点开即用（表单自动生成）</div>
 
-  <div class="card">
-    <input v-model="kw" placeholder="搜索工具名或描述" />
+  <!-- 搜索 -->
+  <div class="searchbox">
+    <span>🔍</span>
+    <input v-model="kw" placeholder="搜索能力名或描述" class="search-in">
+    <button v-if="kw" class="search-x tap" @click="kw = ''">✕</button>
   </div>
 
-  <div v-for="(arr, fam) in grouped" :key="fam" class="card">
-    <div class="sec">{{ fam }} <span class="muted" style="font-weight:400">({{ arr.length }})</span></div>
-    <div v-for="t in arr" :key="t.name" class="trow">
-      <div class="tap" style="flex:1" @click="open(t)">
-        <b style="font-size:14px">{{ t.name }}</b>
-        <div class="muted" style="font-size:12px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap">{{ t.desc }}</div>
+  <!-- 收藏/最近 -->
+  <template v-if="!kw">
+    <template v-if="favTools.length">
+      <div class="secl">⭐ 常用</div>
+      <div class="grp-card">
+        <div v-for="t in favTools" :key="t.name" class="trow tap" @click="openTool(t)">
+          <div class="trow-txt"><b>{{ t.desc || t.name }}</b><div class="trow-d mono">{{ t.name }}</div></div>
+          <span class="ar">›</span>
+        </div>
+      </div>
+    </template>
+    <template v-if="recentTools.length">
+      <div class="secl">🕘 最近</div>
+      <div class="grp-card">
+        <div v-for="t in recentTools.slice(0, 4)" :key="t.name" class="trow tap" @click="openTool(t)">
+          <div class="trow-txt"><b>{{ t.desc || t.name }}</b><div class="trow-d mono">{{ t.name }}</div></div>
+          <span class="ar">›</span>
+        </div>
+      </div>
+    </template>
+  </template>
+
+  <!-- 全部（按能力域） -->
+  <template v-for="(arr, cat) in grouped" :key="cat">
+    <div class="secl">{{ CATNAME[cat] || cat }} <em>{{ arr.length }}</em></div>
+    <div class="grp-card">
+      <div v-for="t in arr" :key="t.name" class="trow tap" @click="openTool(t)">
+        <div class="trow-txt">
+          <b>{{ t.desc || t.name }}<span v-if="favs.includes(t.name)" class="favn">⭐</span></b>
+          <div class="trow-d mono">{{ t.name }}<span v-if="Object.keys(t.props).length" class="pnum">{{ Object.keys(t.props).length }} 参数</span></div>
+        </div>
+        <span class="ar">›</span>
       </div>
     </div>
-    <div v-if="openName && arr.some(x => x.name === openName)" class="caller">
-      <label>{{ openName }} 参数（JSON）</label>
-      <textarea v-model="argsText" rows="3"></textarea>
-      <button class="btn" style="margin-top:8px" :disabled="busy" @click="run(arr.find(x => x.name === openName))">{{ busy ? '执行中…' : '▶ 执行' }}</button>
-      <div v-if="result" class="res">{{ result }}</div>
+  </template>
+  <div v-if="!filtered.length" class="empty2">没有匹配「{{ kw }}」的能力</div>
+  <div style="height:16px;"></div>
+
+  <!-- 工具详情（底部大弹层：schema 表单） -->
+  <div v-if="cur" class="toolview" @click="closeTool">
+    <div class="toolb" @click.stop>
+      <div class="toolh">
+        <div style="flex:1;min-width:0;">
+          <b style="font-size:16px;">{{ cur.desc || cur.name }}</b>
+          <div class="mono" style="font-size:11px;color:var(--muted);margin-top:2px;">{{ cur.name }}</div>
+        </div>
+        <button class="minib tap" :class="{ ong: favs.includes(cur.name) }" @click="toggleFav(cur.name)">⭐</button>
+        <button class="minib tap" @click="closeTool">✕</button>
+      </div>
+      <div class="tooldesc">{{ cur.fullDesc }}</div>
+
+      <!-- schema 表单 -->
+      <div class="form">
+        <div v-if="!Object.keys(cur.props).length" class="empty2">无需参数，直接执行</div>
+        <div v-for="(p, k) in cur.props" :key="k" class="frow">
+          <div class="flabel">
+            <span class="mono">{{ k }}</span>
+            <span v-if="cur.required.includes(k)" class="req">必填</span>
+            <span v-else class="opt">选填</span>
+          </div>
+          <input v-if="ptype(p) === 'text'" v-model="cur.args[k]" :placeholder="propDesc(p)">
+          <input v-else-if="ptype(p) === 'number'" v-model="cur.args[k]" type="number" :placeholder="propDesc(p)">
+          <div v-else class="swrow">
+            <div :class="['sw', 'tap', { on: !!cur.args[k] }]" @click="cur.args[k] = !cur.args[k]"><div class="knob"></div></div>
+            <span class="mini-hint">{{ propDesc(p) }}</span>
+          </div>
+        </div>
+      </div>
+
+      <button class="runb tap" :disabled="cur.busy" @click="run">{{ cur.busy ? '执行中…' : '▶ 执行' }}</button>
+
+      <!-- 结果 -->
+      <template v-if="cur.result">
+        <div class="secl2">结果
+          <button class="minib tap" style="margin-left:auto;" @click="copyRes">复制</button>
+        </div>
+        <div class="resbox">
+          <template v-if="resultView(cur.result)?.type === 'err'">
+            <div class="res-err">❌ {{ resultView(cur.result).text }}</div>
+          </template>
+          <template v-else-if="resultView(cur.result)?.type === 'ok'">
+            <div class="res-ok">{{ resultView(cur.result).text }}</div>
+          </template>
+          <template v-else-if="resultView(cur.result)?.type === 'kv'">
+            <div v-for="[k, v] in resultView(cur.result).list" :key="k" class="kvrow">
+              <span class="kvk">{{ k }}</span><span class="kvv">{{ v }}</span>
+            </div>
+          </template>
+          <template v-else-if="resultView(cur.result)?.type === 'list'">
+            <div v-for="(x, i) in resultView(cur.result).list.slice(0, 100)" :key="i" class="lirow">{{ x }}</div>
+          </template>
+          <template v-else>
+            <pre class="respre">{{ resultView(cur.result)?.text }}</pre>
+          </template>
+        </div>
+      </template>
+      <div style="height:14px;"></div>
     </div>
   </div>
-
-  <div v-if="!tools.length" class="card muted">加载中…</div>
 </template>
 
 <style scoped>
-.sec { font-weight: 700; font-size: 14px; margin-bottom: 8px; }
-.trow { display: flex; padding: 9px 0; border-bottom: 1px dashed var(--line); }
-.caller { background: var(--bg); border-radius: 12px; padding: 12px; margin-top: 8px; }
-.res { margin-top: 10px; background: var(--card); border-radius: 10px; padding: 10px; font-size: 13px; white-space: pre-wrap; word-break: break-all; max-height: 300px; overflow-y: auto; }
+.h1 { font-size: 21px; font-weight: 700; margin: 6px 4px 2px; }
+.sub { font-size: 13px; color: var(--muted); margin: 0 4px 12px; }
+.searchbox { display: flex; align-items: center; gap: 8px; background: var(--card); border: 1px solid var(--line); border-radius: 13px; padding: 0 12px; margin-bottom: 6px; box-shadow: var(--shadow); }
+.search-in { border: 0; background: none; padding: 11px 0; font-size: 14px; flex: 1; }
+.search-x { border: 0; background: #EFEDE6; border-radius: 50%; width: 20px; height: 20px; font-size: 11px; color: var(--muted); }
+.secl { margin: 14px 4px 7px; font-size: 12px; font-weight: 700; color: var(--muted); letter-spacing: 2px; display: flex; align-items: center; gap: 6px; }
+.secl em { font-style: normal; font-weight: 400; letter-spacing: 0; font-size: 11px; opacity: .85; }
+.grp-card { background: var(--card); border: 1px solid var(--line); border-radius: 18px; overflow: hidden; box-shadow: var(--shadow); margin-bottom: 8px; }
+.trow { display: flex; align-items: center; gap: 10px; padding: 11px 14px; border-bottom: 1px solid var(--line); }
+.trow:last-child { border-bottom: 0; }
+.trow:active { background: var(--bg); }
+.trow-txt { flex: 1; min-width: 0; }
+.trow-txt b { font-size: 14px; }
+.trow-d { font-size: 11px; color: var(--muted); margin-top: 2px; }
+.mono { font-family: ui-monospace, monospace; }
+.pnum { background: var(--hill-soft); color: var(--hill); border-radius: 6px; padding: 0 5px; font-size: 10px; margin-left: 6px; }
+.favn { margin-left: 4px; font-size: 12px; }
+.ar { color: #B9B4A6; font-size: 18px; }
+.empty2 { padding: 24px 16px; text-align: center; font-size: 13px; color: var(--muted); }
+.toolview { position: fixed; inset: 0; z-index: 70; background: rgba(24,30,20,.5); display: flex; align-items: flex-end; }
+.toolb { background: var(--bg); border-radius: 20px 20px 0 0; width: 100%; max-height: 88vh; overflow-y: auto; padding: 14px 14px 10px; animation: upin .2s ease; }
+@keyframes upin { from { transform: translateY(40px); } }
+.toolh { display: flex; align-items: center; gap: 8px; padding-bottom: 8px; border-bottom: 1px solid var(--line); }
+.tooldesc { font-size: 12px; color: var(--muted); line-height: 1.6; padding: 8px 2px; }
+.minib { border: 1px solid var(--line); background: var(--card); border-radius: 9px; padding: 5px 10px; font-size: 12px; font-weight: 600; color: var(--ink); }
+.minib.ong { background: var(--hill-soft); border-color: var(--hill); color: var(--hill); }
+.form { margin-top: 4px; }
+.frow { margin-bottom: 10px; }
+.flabel { display: flex; align-items: center; gap: 6px; margin-bottom: 5px; font-size: 12px; }
+.req { background: #F8E8E5; color: var(--bad); font-size: 10px; border-radius: 5px; padding: 1px 6px; font-weight: 700; }
+.opt { background: var(--bg); color: var(--muted); font-size: 10px; border-radius: 5px; padding: 1px 6px; }
+.frow input { width: 100%; }
+.swrow { display: flex; align-items: center; gap: 10px; }
+.mini-hint { font-size: 11px; color: var(--muted); }
+.sw { width: 46px; height: 28px; border-radius: 99px; background: #d8d6cd; position: relative; transition: background .2s; flex-shrink: 0; }
+.sw.on { background: var(--hill); }
+.sw .knob { position: absolute; top: 3px; left: 3px; width: 22px; height: 22px; border-radius: 50%; background: #fff; transition: left .18s; box-shadow: 0 1px 3px rgba(0,0,0,.2); }
+.sw.on .knob { left: 21px; }
+.runb { width: 100%; border: 0; border-radius: 14px; background: var(--hill); color: #fff; font-size: 15px; font-weight: 700; padding: 13px; margin-top: 4px; }
+.runb:disabled { opacity: .5; }
+.runb:active { opacity: .85; }
+.secl2 { margin: 14px 0 8px; font-size: 12px; font-weight: 700; color: var(--muted); display: flex; align-items: center; }
+.resbox { background: var(--card); border: 1px solid var(--line); border-radius: 14px; padding: 10px; max-height: 40vh; overflow-y: auto; }
+.res-ok { color: var(--hill); font-size: 14px; padding: 6px; }
+.res-err { color: var(--bad); font-size: 13px; padding: 6px; line-height: 1.6; }
+.kvrow { display: flex; gap: 10px; padding: 6px 4px; border-bottom: 1px dashed var(--line); font-size: 13px; }
+.kvrow:last-child { border-bottom: 0; }
+.kvk { color: var(--muted); font-family: ui-monospace, monospace; font-size: 12px; min-width: 30%; }
+.kvv { flex: 1; word-break: break-all; }
+.lirow { padding: 6px 4px; border-bottom: 1px dashed var(--line); font-size: 13px; }
+.lirow:last-child { border-bottom: 0; }
+.respre { font: 11px ui-monospace, monospace; white-space: pre-wrap; word-break: break-all; color: var(--ink); }
 </style>
