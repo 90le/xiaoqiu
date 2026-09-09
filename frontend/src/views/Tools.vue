@@ -10,35 +10,54 @@ const favs = ref(JSON.parse(localStorage.getItem('xq_tool_favs') || '[]'))
 const recents = ref(JSON.parse(localStorage.getItem('xq_tool_recents') || '[]'))
 const hist = ref([])
 
-/* 语义能力域（前缀→域，借鉴旧版但重排+扩展） */
+/* 语义能力域 v2：精确名优先 → 前缀 → 兜底。8 域各司其职 */
 const CATS = [
-  ['hand', '🖐 手机控制', [['ui_', '无障碍操作'], ['vd', '隐形副屏'], ['sysctl', '系统开关'], ['settings_', '系统设置'], ['brightness', '亮度'], ['volume', '音量'], ['flashlight', '手电筒'], ['vibrate', '震动'], ['screenshot', '截屏'], ['ime_switch', '输入法']]],
-  ['eye', '👁 视觉理解', [['vision', '视觉定位'], ['ocr', '文字识别'], ['shot_diff', '截图比对'], ['ui_screen_read', '控件树'], ['ui_find', '查找元素'], ['ui_wait', '等待元素']]],
-  ['voice', '🗣 语音', [['tts', '语音合成'], ['stt', '语音识别'], ['mic', '录音'], ['voice', '语音会话'], ['wake', '唤醒'], ['speak', '播报']]],
-  ['notify', '🔔 通知消息', [['notify', '通知'], ['sms', '短信'], ['calllog', '通话'], ['contacts', '联系人']]],
-  ['app', '📱 应用设备', [['apps', '应用'], ['app_', '应用'], ['intent', 'Intent'], ['alarm', '闹钟'], ['timer', '倒计时'], ['device', '设备'], ['battery', '电池'], ['network', '网络'], ['location', '位置'], ['perm', '权限'], ['floatball', '悬浮球'], ['screen_state', '屏幕'], ['device_', '设备']]],
-  ['brain', '🧠 智能与记忆', [['memory', '记忆'], ['chat', '快脑'], ['pi_rpc', '慢脑'], ['ai_', 'AI 处理'], ['macro', '宏'], ['l2', '特权通道'], ['termux', 'Termux'], ['env', '环境引擎']]],
-  ['dev', '🔧 开发调试', [['cfg', '配置'], ['tools', '工具'], ['scm', '代码'], ['files', '文件'], ['setkey', '密钥'], ['open_perm', '权限页'], ['app_request', '授权']]],
+  ['device', '📱 设备与系统', ['battery', 'device', 'screen_state', 'screen_', 'brightness', 'volume', 'flashlight', 'vibrate', 'sensors', 'network', 'location', 'media', 'sysctl', 'settings_write', 'settings_', 'ime_', 'clipboard', 'ui_back', 'ui_home', 'ui_recents', 'screenshot', 'floatball']],
+  ['ui', '🖐 界面操作', ['ui_']],
+  ['eye', '👁 视觉理解', ['vision', 'ocr', 'shot_diff']],
+  ['msg', '💬 消息与联系人', ['notify', 'sms', 'calllog', 'contacts']],
+  ['voice', '🗣 语音', ['tts', 'stt', 'mic_', 'mic', 'wake_service', 'voice_chat', 'voice_digest']],
+  ['brain', '🧠 智能与记忆', ['chat_fast', 'chat_', 'memory', 'ai_humanize', 'pi_rpc']],
+  ['auto', '⚡ 自动化与应用', ['macro', 'xhs', 'intent', 'alarm', 'timer', 'apps_launch', 'apps_list', 'apps_']],
+  ['dev', '🔧 文件与开发', ['files', 'env_', 'env', 'termux', 'l2_', 'cfg', 'tools', 'setkey', 'perm_', 'open_perm', 'app_request', 'voice_bus', 'app_']],
 ]
+const EXACT = { // 精确名归位（纠正前缀误伤）
+  voice_bus: 'dev', voice_digest: 'voice', voice_chat: 'voice',
+  apps_list: 'auto', apps_launch: 'auto',
+  screenshot: 'device', media_play_pause: 'device',
+  xhs_search_direct: 'auto', macro_from_session: 'auto',
+  env_run: 'dev', env_status: 'dev', env_install: 'dev',
+  clipboard_read: 'device', clipboard_write: 'device',
+}
 function catOf(name) {
-  for (const [id, label, prefixes] of CATS) {
-    for (const [p, , ] of prefixes) if (name === p || name.startsWith(p)) return id
-  }
+  if (EXACT[name]) return EXACT[name]
+  for (const [id, , prefixes] of CATS) for (const p of prefixes) if (name.startsWith(p)) return id
   return 'dev'
 }
-const CATNAME = Object.fromEntries(CATS.map(c => [c[0], c[1]]))
+const CATNAME = Object.fromEntries(CATS.map(x => [x[0], x[1]]))
 
-onMounted(load) // ← 上版漏了这行：页面从不加载（用户只看到搜索框）
+/* 标题/副标题提取：'查电池：电量、充电状态' → ['查电池','电量、充电状态'] */
+function splitDesc(desc) {
+  const d = String(desc || '')
+  const i = d.search(/[：:(（]/)
+  if (i > 1 && i < 16) return [d.slice(0, i).trim(), d.slice(i + 1).replace(/^[)）]\s*/, '').trim()]
+  return [d.length > 16 ? d.slice(0, 15) + '…' : d, '']
+}
+
 async function load() {
   const r = await call('tools_list', { fmt: 'full' })
   const raw = r.ok ? (Array.isArray(r.data) ? r.data : []) : []
-  tools.value = raw.filter(x => x && x.name).map(x => ({
-    name: x.name,
-    desc: (x.desc || '').split('：')[0].split('(')[0],
-    fullDesc: x.desc || '',
-    props: x.schema?.properties || {},
-    required: x.schema?.required || [],
-  }))
+  tools.value = raw.filter(x => x && x.name).map(x => {
+    const [title, sub] = splitDesc(x.desc)
+    return {
+      name: x.name,
+      title: title || x.name,
+      sub,
+      fullDesc: x.desc || '',
+      props: x.schema?.properties || {},
+      required: x.schema?.required || [],
+    }
+  })
 }
 
 /* ── 过滤分组 ── */
@@ -143,7 +162,7 @@ function copyRes() {
       <div class="secl">⭐ 常用</div>
       <div class="grp-card">
         <div v-for="t in favTools" :key="t.name" class="trow tap" @click="openTool(t)">
-          <div class="trow-txt"><b>{{ t.desc || t.name }}</b><div class="trow-d mono">{{ t.name }}</div></div>
+          <div class="trow-txt"><b>{{ t.title }}</b><div class="trow-d">{{ t.sub || t.name }}</div></div>
           <span class="ar">›</span>
         </div>
       </div>
@@ -152,7 +171,7 @@ function copyRes() {
       <div class="secl">🕘 最近</div>
       <div class="grp-card">
         <div v-for="t in recentTools.slice(0, 4)" :key="t.name" class="trow tap" @click="openTool(t)">
-          <div class="trow-txt"><b>{{ t.desc || t.name }}</b><div class="trow-d mono">{{ t.name }}</div></div>
+          <div class="trow-txt"><b>{{ t.title }}</b><div class="trow-d">{{ t.sub || t.name }}</div></div>
           <span class="ar">›</span>
         </div>
       </div>
@@ -165,8 +184,8 @@ function copyRes() {
     <div class="grp-card">
       <div v-for="t in arr" :key="t.name" class="trow tap" @click="openTool(t)">
         <div class="trow-txt">
-          <b>{{ t.desc || t.name }}<span v-if="favs.includes(t.name)" class="favn">⭐</span></b>
-          <div class="trow-d mono">{{ t.name }}<span v-if="Object.keys(t.props).length" class="pnum">{{ Object.keys(t.props).length }} 参数</span></div>
+          <b>{{ t.title }}<span v-if="favs.includes(t.name)" class="favn">⭐</span></b>
+          <div class="trow-d">{{ t.sub }}<span v-if="t.sub && Object.keys(t.props).length"> · </span><span v-if="Object.keys(t.props).length" class="pnum">{{ Object.keys(t.props).length }} 参</span></div>
         </div>
         <span class="ar">›</span>
       </div>
@@ -180,7 +199,7 @@ function copyRes() {
     <div class="toolb" @click.stop>
       <div class="toolh">
         <div style="flex:1;min-width:0;">
-          <b style="font-size:16px;">{{ cur.desc || cur.name }}</b>
+          <b style="font-size:16px;">{{ cur.title }}</b>
           <div class="mono" style="font-size:11px;color:var(--muted);margin-top:2px;">{{ cur.name }}</div>
         </div>
         <button class="minib tap" :class="{ ong: favs.includes(cur.name) }" @click="toggleFav(cur.name)">⭐</button>
