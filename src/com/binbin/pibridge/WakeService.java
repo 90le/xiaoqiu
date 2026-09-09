@@ -89,6 +89,18 @@ public class WakeService extends Service {
         registerReceiver(new android.content.BroadcastReceiver() {
             @Override public void onReceive(Context c2, android.content.Intent i) { turnAck = true; }
         }, new android.content.IntentFilter("com.pihost.VOICE_ACK"));
+        // 执行进度语音汇报：每个新工具开始 → 口播中文状态（节流：≥6s 间隔、每任务≤6次）
+        registerReceiver(new android.content.BroadcastReceiver() {
+            @Override public void onReceive(Context c2, android.content.Intent i) {
+                String t = i.getStringExtra("text");
+                if (t == null || t.isEmpty() || !running || sessionStop) return;
+                long now = System.currentTimeMillis();
+                if (now - lastProgSpeak < 6000 || progCount >= 6) return;
+                lastProgSpeak = now; progCount++;
+                String zh = progZh(t);
+                if (!zh.isEmpty()) { Log.i("PiBridge", "🗣 进度: " + zh); speakMarked(zh); }
+            }
+        }, new android.content.IntentFilter("com.pihost.VOICE_PROG"));
         // 全局停止钮：停播+立即收尾
         registerReceiver(new android.content.BroadcastReceiver() {
             @Override public void onReceive(Context c2, android.content.Intent i) {
@@ -295,6 +307,21 @@ public class WakeService extends Service {
     /** 等本地/文件播报完（带起播窗） */
     private void waitSpeakMs(long maxMs) { waitLocalSpeak(maxMs); }
 
+    /** 工具名 → 口语化进度（空=不播） */
+    private static String progZh(String tool) {
+        String t = tool.toLowerCase();
+        if (t.contains("location")) return "在查位置";
+        if (t.contains("screenshot") || t.contains("vision") || t.contains("ocr") || t.contains("shot")) return "在看屏幕";
+        if (t.contains("bash") || t.contains("env_run") || t.contains("termux") || t.contains("l2")) return "在跑命令";
+        if (t.contains("apps_launch") || t.contains("ui_") || t.contains("vd") || t.contains("intent") || t.contains("app")) return "在操作手机";
+        if (t.contains("notify") || t.contains("sms") || t.contains("contacts") || t.contains("calllog")) return "在查消息";
+        if (t.contains("files")) return "在整理文件";
+        if (t.contains("memory")) return "在记事情";
+        if (t.contains("network") || t.contains("battery") || t.contains("device") || t.contains("sensor")) return "在查设备";
+        if (t.contains("read") || t.contains("search") || t.contains("list")) return "在查资料";
+        return "在处理";
+    }
+
     private static final String[] WAKE_REPLIES = {"在！", "我在！", "诶！", "嗯！"};
     private static final String[] BYE_TIMEOUT = {"嗯，我先退下", "我先歇着啦"};
     private static final String[] BYE_BYE = {"好嘞", "嗯呐"};
@@ -302,6 +329,8 @@ public class WakeService extends Service {
     // ── 会话总线状态（:kws 侧，主线程广播接收器写，会话线程轮询读）──
     private volatile boolean turnDone = false;
     private volatile boolean turnAck = false;
+    private volatile long lastProgSpeak = 0;
+    private volatile int progCount = 0;
     private volatile boolean sessionStop = false;
     private volatile String[] pendingSpeak = null; // {text, token}
 
@@ -376,7 +405,7 @@ public class WakeService extends Service {
                     continue; // 本轮闭环，续听
                 }
                 // ── 任务：确认语 :kws 说（快脑生成的 reply），执行交页面 ──
-                String ack = (fd != null && !fd.optString("reply", "").isEmpty()) ? fd.optString("reply") : "好嘞，这就办";
+                String ack = (fd != null && !fd.optString("reply", "").isEmpty()) ? fd.optString("reply") : "好嘞，这就去办，办完告诉你";
                 String optPrompt = (fd != null && !fd.optString("prompt", "").isEmpty()) ? fd.optString("prompt") : heard;
                 appendCtx("用户:" + heard + "\n小丘:" + ack);
                 setGlow("speak");
@@ -384,7 +413,7 @@ public class WakeService extends Service {
                 waitSpeakMs(30000);
                 setGlow("exec");
                 Log.i("PiBridge", "🔔 任务交脑(已预分类): " + optPrompt);
-                turnDone = false; pendingSpeak = null;
+                turnDone = false; pendingSpeak = null; progCount = 0; lastProgSpeak = System.currentTimeMillis() + 8000; // 起步 8s 内不抢确认语
                 android.content.Intent ti = new android.content.Intent("com.pihost.VOICE_TURN");
                 ti.putExtra("text", heard).putExtra("from", from)
                   .putExtra("pre", true).putExtra("prompt", optPrompt);
