@@ -476,7 +476,9 @@ public class Tools {
     }
 
     /** 快脑短文本生成核心：thinking禁用（改写不需推理）+失败重试1次；失败返回ERR:串 */
-    public static String llmShort(String sys, String userMsg, int maxTok) {
+    public static String llmShort(String sys, String userMsg, int maxTok) { return llmShort(sys, userMsg, maxTok, 120); }
+    /** maxOutLen：输出长度上限（120=唤醒短语级；摘要类用 400） */
+    public static String llmShort(String sys, String userMsg, int maxTok, int maxOutLen) {
         try {
             String key = fastKey();
             if (key == null) return null;
@@ -512,7 +514,7 @@ public class Tools {
                 content = content.replace("\u300c", "").replace("\u300d", "").replace("\u3010", "").replace("\u3011", "")
                     .replace("\"", "").replace("'", "").trim();
             }
-            if (content == null || content.isEmpty() || content.length() > 120) return "ERR:EMPTY_OR_LONG";
+            if (content == null || content.isEmpty() || content.length() > maxOutLen) return "ERR:EMPTY_OR_LONG";
             return content;
         } catch (Throwable e) { return "ERR:" + e.getClass().getSimpleName() + ":" + e.getMessage(); }
     }
@@ -1488,7 +1490,7 @@ public class Tools {
                 }
                 if (sb.length() == 0) return err("NO_MEMORY", "暂无播报记录");
                 String digest = llmShort("把下面的最近播报记录整理成一段自然口语摘要（50字内），按人归组，把提问/邀约/等你回复的事放最前面说。只输出摘要本身。",
-                        sb.toString(), 512);
+                        sb.toString(), 512, 400);
                 if (digest == null || digest.startsWith("ERR:")) return err("DIGEST_FAIL", String.valueOf(digest));
                 return ok(new JSONObject().put("digest", digest).put("raw", sb.toString()));
             }});
