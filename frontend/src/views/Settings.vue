@@ -121,13 +121,17 @@ const fastReasoning = computed(() => {
   const m = (chat.models || []).find(x => x.id === v)
   return m ? !!m.reasoning : true
 })
-// 引擎若给 availableThinkingLevels 用之；否则 reasoning=true 全档可选、false 仅关
+// 档位能力（对齐模型大脑）：智谱家族硬表（pi 源码 thinkingLevelMap 实证）
+const ZHIPU_LEVELS = ['low', 'high', 'max'] // glm-5.3/flash：off恒可选+这3档；minimal/medium/xhigh 均映射null=不支持
 const fastThinkLevels = computed(() => {
-  const v = cfg.value.fast_model
+  const v = cfg.value.fast_model || 'glm-5.3'
   const m = (chat.models || []).find(x => x.id === v)
-  const avail = m?.availableThinkingLevels || m?.thinkingLevels
-  const okSet = Array.isArray(avail) && avail.length ? new Set(avail) : null
-  return FAST_THINK_BASE.map(l => ({ ...l, ok: okSet ? okSet.has(l.v) : (fastReasoning.value || l.v === 'off') }))
+  const avail = m?.availableThinkingLevels // 引擎给了就用（会话当前模型场景）
+  let okSet
+  if (Array.isArray(avail) && avail.length) okSet = new Set(['off', ...avail])
+  else if (m && m.reasoning === false) okSet = new Set(['off']) // 非推理模型：只能关
+  else okSet = new Set(['off', ...ZHIPU_LEVELS]) // 家族默认（glm-5.3/flash 实证表）
+  return FAST_THINK_BASE.map(l => ({ ...l, ok: okSet.has(l.v) }))
 })
 async function testFast() {
   fastTesting.value = true; fastTestMsg.value = ''
@@ -746,7 +750,7 @@ async function loadCfg() {
           </div>
         </div>
         <div class="srow" style="flex-direction:column;align-items:stretch;gap:6px;">
-          <div class="srow-t">思考等级 <em class="mini-hint">{{ fastReasoning ? '默认关（语音要快）；开=更聪明慢1-3秒' : '当前模型不支持思考' }}</em></div>
+          <div class="srow-t">思考等级 <em class="mini-hint">{{ fastReasoning ? '灰=该模型不支持（按模型能力自动匹配，同模型大脑）' : '当前模型不支持思考' }}</em></div>
           <div v-if="fastReasoning" class="thinkpills2">
             <button v-for="l in fastThinkLevels" :key="l.v" :class="['tp2', 'tap', { on: (cfg.fast_thinking_level || 'off') === l.v, dis: !l.ok }]"
               :title="l.ok ? '' : '该模型不支持此档位'" @click="l.ok && (cfg.fast_thinking_level = l.v, save('fast_thinking_level', l.v))">{{ l.t }}</button>
