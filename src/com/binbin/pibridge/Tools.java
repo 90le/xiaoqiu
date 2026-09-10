@@ -431,8 +431,13 @@ public class Tools {
     /** 云 TTS 合成（不播放）：返回去提示音的 wav 字节，失败 null。非主线程 */
     static byte[] synthCloud(String text) {
         try {
-            String key = fastKey();
-            if (key == null) return null;
+            if (text != null && text.length() > 400) return synthCloudChunked(text);
+            return synthCloudOne(text);
+        } catch (Exception e) { Log.w("PiBridge", "synthCloud失败: " + e); return null; }
+    }
+    static byte[] synthCloudOne(String text) throws Exception {
+        String key = fastKey();
+        if (key == null) return null;
             javax.net.ssl.HttpsURLConnection c = (javax.net.ssl.HttpsURLConnection)
                     new java.net.URL("https://open.bigmodel.cn/api/paas/v4/audio/speech").openConnection();
             c.setRequestMethod("POST"); c.setConnectTimeout(8000); c.setReadTimeout(60000); c.setDoOutput(true);
@@ -449,8 +454,62 @@ public class Tools {
             byte[] b = new byte[8192]; int n; while ((n = is.read(b)) > 0) ab.write(b, 0, n);
             is.close();
             return trimLeadingBeep(ab.toByteArray());
-        } catch (Exception e) { Log.w("PiBridge", "synthCloud失败: " + e); return null; }
+        
     }
+    /** 长文分段合成：句界切≤400字/段，3路并行，PCM 拼接单 wav（API 1024字符硬上限+300字38s 慢的对策） */
+    static byte[] synthCloudChunked(String text) {
+        try {
+            java.util.List<String> parts = new java.util.ArrayList<>();
+            StringBuilder cur = new StringBuilder();
+            for (String sent : text.split("(?<=[。！？；.!?;\n])")) {
+                if (cur.length() + sent.length() > 400 && cur.length() > 0) { parts.add(cur.toString()); cur.setLength(0); }
+                if (sent.length() > 400) { for (int i2 = 0; i2 < sent.length(); i2 += 400) parts.add(sent.substring(i2, Math.min(i2 + 400, sent.length()))); }
+                else cur.append(sent);
+            }
+            if (cur.length() > 0) parts.add(cur.toString());
+            while (parts.size() > 6) parts.remove(parts.size() - 1); // 上限~2400字
+            Log.i("PiBridge", "☁ 长文分段合成: " + parts.size() + " 段");
+            final java.util.List<byte[]> wavs = new java.util.ArrayList<>(java.util.Collections.nCopies(parts.size(), (byte[]) null));
+            java.util.List<Thread> ts = new java.util.ArrayList<>();
+            for (int i2 = 0; i2 < parts.size(); i2++) {
+                final int idx = i2; final String p = parts.get(i2);
+                Thread t = new Thread(() -> { try { wavs.set(idx, synthCloudOne(p)); } catch (Exception ignore) { wavs.set(idx, null); } });
+                t.start(); ts.add(t);
+                int alive; do { alive = 0; for (Thread x : ts) if (x.isAlive()) alive++; if (alive >= 3) { try { Thread.sleep(80); } catch (Exception ignore) {} } } while (alive >= 3);
+            }
+            for (Thread t : ts) t.join(90000);
+            return wavConcat(wavs);
+        } catch (Exception e) { Log.w("PiBridge", "分段合成失败: " + e); return null; }
+    }
+    /** wav 列表 → PCM 拼接单 wav */
+    static byte[] wavConcat(java.util.List<byte[]> wavs) {
+        try {
+            int rate = 16000; java.io.ByteArrayOutputStream pcm = new java.io.ByteArrayOutputStream();
+            for (byte[] w : wavs) {
+                if (w == null || w.length < 44) continue;
+                int pos = 12, dataPos = -1, dataLen = 0;
+                while (pos + 8 <= w.length) {
+                    String id = new String(w, pos, 4, "ASCII");
+                    int sz = (w[pos+4]&255) | (w[pos+5]&255)<<8 | (w[pos+6]&255)<<16 | (w[pos+7]&255)<<24;
+                    if (id.equals("fmt ")) rate = (w[pos+12]&255) | (w[pos+13]&255)<<8;
+                    if (id.equals("data")) { dataPos = pos + 8; dataLen = Math.min(sz, w.length - dataPos); break; }
+                    pos += 8 + sz + (sz % 2);
+                }
+                if (dataPos > 0) pcm.write(w, dataPos, dataLen);
+            }
+            if (pcm.size() == 0) return null;
+            byte[] d = pcm.toByteArray();
+            java.io.ByteArrayOutputStream out = new java.io.ByteArrayOutputStream();
+            out.write("RIFF".getBytes("ASCII")); out.write(intLE(d.length + 36)); out.write("WAVE".getBytes("ASCII"));
+            out.write("fmt ".getBytes("ASCII")); out.write(intLE(16)); out.write(shortLE(1)); out.write(shortLE(1));
+            out.write(intLE(rate)); out.write(intLE(rate * 2)); out.write(shortLE(2)); out.write(shortLE(16));
+            out.write("data".getBytes("ASCII")); out.write(intLE(d.length)); out.write(d);
+            return out.toByteArray();
+        } catch (Exception e) { return null; }
+    }
+    static byte[] intLE(int v) { return new byte[]{(byte)v, (byte)(v>>8), (byte)(v>>16), (byte)(v>>24)}; }
+    static byte[] shortLE(int v) { return new byte[]{(byte)v, (byte)(v>>8)}; }
+
 
     // ══ 唤醒回应词预生成：云端合成一次，本地秒播（用户设计：零合成延迟）═══
     public static final String[] FAST_PHRASES = {
