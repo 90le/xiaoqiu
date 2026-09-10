@@ -2,6 +2,7 @@
 import { ref, computed, onMounted, onUnmounted, watch } from 'vue'
 import QiuLogo from '../components/QiuLogo.vue'
 import { chat, api as engineApi, connect, wsSend } from '../useChat.js'
+import piModels from '../piModels.json' // pi 内置注册表快照（272模型：reasoning+思考档位，构建时从引擎同版本提取）
 
 /* ═══════════ 子页导航 ═══════════ */
 const page = ref(null)
@@ -121,26 +122,32 @@ const FAST_THINK_BASE = [
 ]
 // 选中模型的思考能力（reasoning 标志；引擎 models 列表提供）
 const fastReasoning = computed(() => {
-  const v = cfg.value.fast_model
-  if (!v) return true // 默认 glm-5.3 支持
-  const m = (chat.models || []).find(x => x.id === v)
-  return m ? !!m.reasoning : true
+  const v = cfg.value.fast_model || 'glm-5.3'
+  const m = (chat.models || []).find(x => x.id === v || x.id?.endsWith('/' + v))
+  if (m && m.reasoning !== undefined) return !!m.reasoning
+  const meta = fastMeta.value
+  return meta ? !!meta.reasoning : true
 })
-// 档位能力（完全照抄模型大脑/对话页逻辑）：
-// 引擎 availableThinkingLevels 权威（glm-5.3 实测 [low,high,max]，off 不可选=思考关不掉）
+// 每模型思考档位各异（用户纠正：非一刀切）——三级数据源
+const fastMeta = computed(() => {
+  const v = cfg.value.fast_model || 'glm-5.3'
+  const base = v.includes('/') ? v.split('/').pop() : v // 引擎 id 可能带 provider 前缀
+  return piModels[base] || piModels[v] || null
+})
 const fastThinkLevels = computed(() => {
   const v = cfg.value.fast_model || 'glm-5.3'
-  const m = (chat.models || []).find(x => x.id === v)
+  const m = (chat.models || []).find(x => x.id === v || x.id?.endsWith('/' + v))
   let avail = null
   const sess = chat.state
-  if (sess?.model?.id === v && Array.isArray(sess?.availableThinkingLevels) && sess.availableThinkingLevels.length) {
-    avail = sess.availableThinkingLevels // 快脑模型=会话模型：引擎权威（与模型大脑同源）
-  } else if (Array.isArray(m?.thinkingLevels) && m.thinkingLevels.length) {
-    avail = m.thinkingLevels
-  } else if (m && m.reasoning === false) {
-    avail = ['off'] // 非推理模型：只能关
-  } else {
-    avail = ['low', 'high', 'max'] // 智谱家族实证（pi thinkingLevelMap：off=null 关不掉）
+  if (sess?.model?.id && (sess.model.id === v || sess.model.id.endsWith('/' + v)) && Array.isArray(sess?.availableThinkingLevels) && sess.availableThinkingLevels.length) {
+    avail = sess.availableThinkingLevels // ① 快脑模型=会话模型：引擎实时权威
+  }
+  if (!avail && Array.isArray(fastMeta.value?.levels) && fastMeta.value.levels.length) {
+    avail = fastMeta.value.levels // ② pi 注册表快照（thinkingLevelMap 非null档）
+  }
+  if (!avail) {
+    const r = m?.reasoning !== undefined ? m.reasoning : fastMeta.value?.reasoning
+    avail = r === false ? ['off'] : FAST_THINK_BASE.map(l => l.v) // ③ 非推理=仅关；未知自定义=全亮（off发省略参数安全）
   }
   const okSet = new Set(avail)
   return FAST_THINK_BASE.map(l => ({ ...l, ok: okSet.has(l.v) }))
