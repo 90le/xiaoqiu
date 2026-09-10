@@ -506,9 +506,10 @@ public class WakeService extends Service {
         String eng = Tools.loadCfg().optString("tts_engine", "auto");
         if (!"xiaomi".equals(eng) && text.length() > 200) {
             // 长文云引擎：句级流式（首句 3-8s 即响，不等整文 40-60s）
+            final String tk3 = token; final String tx3 = text; final String eng3 = eng;
             new Thread(() -> {
-                Tools.speakCloudStream(text, eng);
-                sendBroadcast(new android.content.Intent("com.pihost.TTS_STATE").putExtra("on", false).putExtra("token", token));
+                Tools.speakCloudStream(tx3, eng3);
+                sendBroadcast(new android.content.Intent("com.pihost.TTS_STATE").putExtra("on", false).putExtra("token", tk3));
             }, "stream-tts").start();
             return;
         }
