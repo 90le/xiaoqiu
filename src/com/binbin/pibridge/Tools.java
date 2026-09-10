@@ -692,7 +692,7 @@ public class Tools {
                 }
                 javax.net.ssl.HttpsURLConnection c = (javax.net.ssl.HttpsURLConnection)
                     new java.net.URL(mc.optString("url", "https://open.bigmodel.cn/api/coding/paas/v4/chat/completions")).openConnection();
-                c.setRequestMethod("POST"); c.setConnectTimeout(5000); c.setReadTimeout(60000)setReadTimeout(10000); c.setDoOutput(true);
+                c.setRequestMethod("POST"); c.setConnectTimeout(5000); c.setReadTimeout(60000); c.setDoOutput(true);
                 c.setRequestProperty("Authorization", "Bearer " + key);
                 c.setRequestProperty("Content-Type", "application/json");
                 java.io.OutputStream os = c.getOutputStream();
