@@ -501,7 +501,23 @@ public class WakeService extends Service {
     /** 引理发来的播报：快缓存秒播/本地TTS顶上，完成后回执 TTS_STATE(off)+token → 引擎解锁。
      *  播报期间并发监听 RMS=打断（停播即解锁，本轮引擎流程自然收尾）。 */
     private void speakTurn(String text, String token, boolean humanize) {
-        if (humanize) { String h = Tools.voiceFriendly(text); if (h != null && !h.isEmpty()) text = h; }
+        if (humanize && text.length() > 90) {
+            // 结论播报=口语摘要（一两句），不是整文改写（voiceFriendly 会保留全文→听感=念原文）
+            try {
+                JSONObject hz = Tools.call("ai_humanize", new JSONObject().put("kind", "reply").put("text", text));
+                if (hz != null && hz.optBoolean("ok")) {
+                    JSONObject d = hz.optJSONObject("data");
+                    if (d != null) {
+                        String h = d.optString("data", d.optString("say", d.optString("digest", "")));
+                        if (!h.isEmpty() && !h.startsWith("ERR")) {
+                            Log.i("PiBridge", "🗣 结论摘要: " + h.length() + "字 ← 原文" + text.length() + "字");
+                            text = h;
+                        }
+                    }
+                }
+            } catch (Exception ignore) {}
+            if (text.length() > 400) { String h2 = Tools.voiceFriendly(text); if (h2 != null && !h2.isEmpty()) text = h2; } // 摘要失败且超长→整文改写兜底
+        }
         markSpoken(text); // 回声免疫登记（登记最终播报稿）
         String eng = Tools.loadCfg().optString("tts_engine", "auto");
         if (!"xiaomi".equals(eng) && text.length() > 200) {
