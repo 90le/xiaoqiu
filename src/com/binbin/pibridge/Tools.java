@@ -692,7 +692,7 @@ public class Tools {
                 }
                 javax.net.ssl.HttpsURLConnection c = (javax.net.ssl.HttpsURLConnection)
                     new java.net.URL(mc.optString("url", "https://open.bigmodel.cn/api/coding/paas/v4/chat/completions")).openConnection();
-                c.setRequestMethod("POST"); c.setConnectTimeout(5000); c.setReadTimeout(10000); c.setDoOutput(true);
+                c.setRequestMethod("POST"); c.setConnectTimeout(5000); c.setReadTimeout(60000)setReadTimeout(10000); c.setDoOutput(true);
                 c.setRequestProperty("Authorization", "Bearer " + key);
                 c.setRequestProperty("Content-Type", "application/json");
                 java.io.OutputStream os = c.getOutputStream();
@@ -703,8 +703,13 @@ public class Tools {
                 byte[] buf = new byte[4096]; int n; while (is != null && (n = is.read(buf)) > 0) bo.write(buf, 0, n);
                 if (is != null) is.close();
                 if (code >= 400) continue;
-                content = new JSONObject(bo.toString("UTF-8")).getJSONArray("choices").getJSONObject(0)
-                    .getJSONObject("message").optString("content", "").trim();
+                org.json.JSONObject lmsg = new JSONObject(bo.toString("UTF-8")).getJSONArray("choices").getJSONObject(0)
+                        .getJSONObject("message");
+                content = lmsg.optString("content", "").trim();
+                if (content.isEmpty()) { // 思考型兜底（同 llmRaw）
+                    String lrc = lmsg.optString("reasoning_content", "").trim();
+                    if (!lrc.isEmpty()) content = lrc.length() > 400 ? lrc.substring(lrc.length() - 400) : lrc;
+                }
                 content = content.replace("\u300c", "").replace("\u300d", "").replace("\u3010", "").replace("\u3011", "")
                     .replace("\"", "").replace("'", "").trim();
             }
