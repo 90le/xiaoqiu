@@ -510,6 +510,78 @@ public class Tools {
     static byte[] intLE(int v) { return new byte[]{(byte)v, (byte)(v>>8), (byte)(v>>16), (byte)(v>>24)}; }
     static byte[] shortLE(int v) { return new byte[]{(byte)v, (byte)(v>>8)}; }
 
+    // ═══ 流式句级合成（边合成边播：首句 3-8s 即响，不等整文 40-60s）═══
+    /** 句级流式播报：按句切分→3线程预合成→按序逐句播放。阻塞至播完。失败已播部分后落本地续播剩余。 */
+    public static void speakCloudStream(String text, String engine) {
+        java.util.List<String> sents = new java.util.ArrayList<>();
+        StringBuilder cur = new StringBuilder();
+        for (String s : text.split("(?<=[。！？；.!?;\n])")) {
+            String t = s.trim();
+            if (t.isEmpty()) continue;
+            if (cur.length() + t.length() > 120 && cur.length() > 0) { sents.add(cur.toString()); cur.setLength(0); }
+            if (t.length() > 120) { for (int i = 0; i < t.length(); i += 120) sents.add(t.substring(i, Math.min(i + 120, t.length()))); }
+            else cur.append(t);
+        }
+        if (cur.length() > 0) sents.add(cur.toString());
+        while (sents.size() > 40) sents.remove(sents.size() - 1);
+        Log.i("PiBridge", "🌊 句级流式: " + sents.size() + " 句（首句即播）");
+        ttsSpeaking = true;
+        try {
+            final java.util.List<java.io.File> wavs = new java.util.ArrayList<>(java.util.Collections.nCopies(sents.size(), (java.io.File) null));
+            final java.util.List<Boolean> done = new java.util.ArrayList<>(java.util.Collections.nCopies(sents.size(), false));
+            java.util.List<Thread> ts = new java.util.ArrayList<>();
+            for (int i = 0; i < sents.size(); i++) {
+                final int idx = i; final String p = sents.get(i);
+                Thread t = new Thread(() -> {
+                    try {
+                        byte[] w = synthCloudOne(p);
+                        if (w != null) {
+                            java.io.File f = java.io.File.createTempFile("sent" + idx, ".wav", ctx.getCacheDir());
+                            java.io.FileOutputStream fo = new java.io.FileOutputStream(f);
+                            fo.write(w); fo.close();
+                            wavs.set(idx, f);
+                        }
+                    } catch (Exception ignore) {} finally { done.set(idx, true); }
+                }, "sent-" + idx);
+                t.start(); ts.add(t);
+                int alive; do { alive = 0; for (Thread x : ts) if (x.isAlive()) alive++; if (alive >= 3) { try { Thread.sleep(60); } catch (Exception ignore) {} } } while (alive >= 3);
+            }
+            // 按序播放：首句就绪即播，不等全部
+            for (int i = 0; i < sents.size(); i++) {
+                long t0 = System.currentTimeMillis();
+                while (!done.get(i) && System.currentTimeMillis() - t0 < 90000) { try { Thread.sleep(80); } catch (Exception ignore) {} }
+                java.io.File f = wavs.get(i);
+                if (f == null || !f.isFile()) { // 该句云合成失败→本地续播这句
+                    speakLocal(sents.get(i));
+                    waitLocalSpeakingStatic(30000);
+                    continue;
+                }
+                playWavBlocking(f);
+                f.delete();
+            }
+            for (Thread t : ts) t.join(1000);
+        } catch (Exception e) {
+            Log.w("PiBridge", "流式合成异常: " + e);
+        } finally {
+            ttsSpeaking = false;
+            fireSpeakDone();
+        }
+    }
+    static void waitLocalSpeakingStatic(long maxMs) {
+        long t0 = System.currentTimeMillis();
+        while (ttsSpeaking && System.currentTimeMillis() - t0 < maxMs) { try { Thread.sleep(80); } catch (Exception ignore) {} }
+    }
+    static void playWavBlocking(java.io.File f) {
+        try {
+            MediaPlayer mp = MediaPlayer.create(ctx, android.net.Uri.fromFile(f));
+            if (mp == null) return;
+            final Object lock = new Object();
+            mp.setOnCompletionListener(m -> { m.release(); synchronized (lock) { lock.notify(); } });
+            mp.start();
+            synchronized (lock) { try { lock.wait(120000); } catch (Exception ignore) {} }
+        } catch (Exception ignore) {}
+    }
+
 
     // ══ 唤醒回应词预生成：云端合成一次，本地秒播（用户设计：零合成延迟）═══
     public static final String[] FAST_PHRASES = {

@@ -503,10 +503,19 @@ public class WakeService extends Service {
     private void speakTurn(String text, String token, boolean humanize) {
         if (humanize) { String h = Tools.voiceFriendly(text); if (h != null && !h.isEmpty()) text = h; }
         markSpoken(text); // 回声免疫登记（登记最终播报稿）
+        String eng = Tools.loadCfg().optString("tts_engine", "auto");
+        if (!"xiaomi".equals(eng) && text.length() > 200) {
+            // 长文云引擎：句级流式（首句 3-8s 即响，不等整文 40-60s）
+            new Thread(() -> {
+                Tools.speakCloudStream(text, eng);
+                sendBroadcast(new android.content.Intent("com.pihost.TTS_STATE").putExtra("on", false).putExtra("token", token));
+            }, "stream-tts").start();
+            return;
+        }
         try {
             File f = fastFileOf(text);
-            if (f != null && !f.isFile() && !"xiaomi".equals(Tools.loadCfg().optString("tts_engine", "auto"))) {
-                byte[] w = Tools.synthCloud(text); // 设置引擎=auto/cloud → 云合成（cfg 音色）
+            if (f != null && !f.isFile() && !"xiaomi".equals(eng)) {
+                byte[] w = Tools.synthCloud(text);
                 if (w != null) {
                     f.getParentFile().mkdirs();
                     java.io.FileOutputStream fo = new java.io.FileOutputStream(f);
@@ -579,6 +588,8 @@ public class WakeService extends Service {
     private void speakPSay(String text) {
         try {
             markSpoken(text);
+            String eng2 = Tools.loadCfg().optString("tts_engine", "auto");
+            if (!"xiaomi".equals(eng2) && text.length() > 200) { Tools.speakCloudStream(text, eng2); return; }
             File f = fastFileOf(text);
             if (f != null && !f.isFile() && !"xiaomi".equals(Tools.loadCfg().optString("tts_engine", "auto"))) {
                 byte[] w = Tools.synthCloud(text);
