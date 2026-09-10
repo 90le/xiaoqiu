@@ -375,7 +375,7 @@ public class Tools {
                     .put("thinking", thinkBody(mc));
             javax.net.ssl.HttpsURLConnection c = (javax.net.ssl.HttpsURLConnection)
                     new java.net.URL(mc.optString("url", "https://open.bigmodel.cn/api/coding/paas/v4/chat/completions")).openConnection();
-            c.setRequestMethod("POST"); c.setConnectTimeout(5000); c.setReadTimeout(20000); c.setDoOutput(true);
+            c.setRequestMethod("POST"); c.setConnectTimeout(5000); c.setReadTimeout(60000); c.setDoOutput(true); // 思考型模型要长超时
             c.setRequestProperty("Authorization", "Bearer " + key);
             c.setRequestProperty("Content-Type", "application/json");
             java.io.OutputStream os = c.getOutputStream();
@@ -386,8 +386,17 @@ public class Tools {
             byte[] b = new byte[8192]; int n; while (is != null && (n = is.read(b)) > 0) bo.write(b, 0, n);
             if (is != null) is.close();
             if (code >= 400) return null;
-            return new JSONObject(bo.toString("UTF-8")).getJSONArray("choices").getJSONObject(0)
-                    .getJSONObject("message").optString("content", "").trim();
+            org.json.JSONObject msg = new JSONObject(bo.toString("UTF-8")).getJSONArray("choices").getJSONObject(0)
+                    .getJSONObject("message");
+            String content = msg.optString("content", "").trim();
+            if (content.isEmpty()) { // 思考型模型（coding端点 glm-5.3 永远思考）：content 空 → reasoning_content 尾部提取最终产出
+                String rc = msg.optString("reasoning_content", "").trim();
+                if (!rc.isEmpty()) {
+                    content = rc.length() > 600 ? rc.substring(rc.length() - 600) : rc;
+                    Log.i("PiBridge", "llmRaw: content空，思考尾段兜底");
+                }
+            }
+            return content;
         } catch (Exception e) { return null; }
     }
 
@@ -426,7 +435,7 @@ public class Tools {
             if (key == null) return null;
             javax.net.ssl.HttpsURLConnection c = (javax.net.ssl.HttpsURLConnection)
                     new java.net.URL("https://open.bigmodel.cn/api/paas/v4/audio/speech").openConnection();
-            c.setRequestMethod("POST"); c.setConnectTimeout(8000); c.setReadTimeout(25000); c.setDoOutput(true);
+            c.setRequestMethod("POST"); c.setConnectTimeout(8000); c.setReadTimeout(60000); c.setDoOutput(true);
             c.setRequestProperty("Authorization", "Bearer " + key);
             c.setRequestProperty("Content-Type", "application/json");
             String voice = loadCfg().optString("tts_voice", "tongtong");
@@ -440,7 +449,7 @@ public class Tools {
             byte[] b = new byte[8192]; int n; while ((n = is.read(b)) > 0) ab.write(b, 0, n);
             is.close();
             return trimLeadingBeep(ab.toByteArray());
-        } catch (Exception e) { return null; }
+        } catch (Exception e) { Log.w("PiBridge", "synthCloud失败: " + e); return null; }
     }
 
     // ══ 唤醒回应词预生成：云端合成一次，本地秒播（用户设计：零合成延迟）═══
