@@ -73,6 +73,7 @@ import com.xiaoqiu.auth.OpenRouterOAuthManager
 import com.xiaoqiu.data.model.ProviderCredential
 import com.xiaoqiu.data.model.ProviderInstance
 import com.xiaoqiu.data.model.ProviderType
+import com.xiaoqiu.data.model.hasVoiceModality
 import com.xiaoqiu.data.repository.ProviderRepository
 import com.xiaoqiu.R
 import kotlinx.coroutines.launch
@@ -247,13 +248,20 @@ private fun ChooseProviderScreen(
         // 的 preseed 通道（type/baseURL/appendV1/跳过凭据选择）。
         SettingsSection(
             header = "推荐",
-            footer = "预填 OpenAI 兼容配置，只需粘贴 API Key 即可对话。模型：glm-5.3 / glm-5.3-flash / glm-4.7",
+            footer = "预填 OpenAI 兼容配置，只需粘贴 API Key 即可对话。Coding 订阅端点模型已内置（订阅不含语音）。",
         ) {
             SettingsRow(
-                title = "智谱 GLM",
-                subtitle = "中国大陆直连 · 语音对话与智能体推荐",
+                title = "智谱 GLM（Coding 订阅）",
+                subtitle = "包月订阅端点 · glm-5.3 / glm-5.3-flash",
                 icon = Icons.Filled.AutoAwesome,
-                onClick = { onSelectVoiceTemplate(com.xiaoqiu.data.model.VoiceProviderTemplate.XIAOQIU_ZHIPU) },
+                onClick = { onSelectVoiceTemplate(com.xiaoqiu.data.model.VoiceProviderTemplate.XIAOQIU_ZHIPU_CODING) },
+                showDivider = true,
+            )
+            SettingsRow(
+                title = "智谱 GLM（API 按量）",
+                subtitle = "按 token 计费 · 含语音（glm-asr / cogtts）",
+                icon = Icons.Filled.Cloud,
+                onClick = { onSelectVoiceTemplate(com.xiaoqiu.data.model.VoiceProviderTemplate.XIAOQIU_ZHIPU_API) },
                 showDivider = false,
             )
         }
@@ -658,6 +666,12 @@ private fun ColumnScope.ApiKeyConfigSection(
             if (apiKey.isNotBlank()) {
                 providerRepository.saveApiKey(instance.id, apiKey.trim())
             }
+            // [小丘] 推荐模板携带对话模型（如智谱 Coding 端点无 /v1/models）
+            // 时直接 seed，不依赖上游模型列表接口。
+            voiceTemplate?.mockModels
+                ?.filter { !it.hasVoiceModality }
+                ?.takeIf { it.isNotEmpty() }
+                ?.let { providerRepository.seedChatModels(instance.id, it) }
             // Auto-refresh models in background (fetches from API or falls back to models.dev)
             scope.launch { providerRepository.refreshModels(instance) }
             onSaved()

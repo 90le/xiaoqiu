@@ -154,3 +154,6 @@ checkout(submodules) → JDK17 → SDK36/NDK27/CMake → Go
 - [ ] res 资源名仍是 minis（内部实现，不影响显示，改代码引用成本高暂留）
 - [ ] libc++_shared.so 重复警告（非致命）
 - [ ] 用户首启体验待反馈（rootfs 解压/引导流/界面语言）
+
+| 09-14 | 语音模板加智谱 + Coding/API 双端点 | 用户指正：v1 主用 Coding 订阅端点（coding/paas/v4），非 API 按量。推荐区拆双行；语音=glm-asr+cogtts（OpenAI 兼容免适配器）|
+| 09-14 | 规划先行原则 | 用户指示：其它的规划好再开始。PLAN.md 战役制（A 语音→B 终端多标签→C 快捷菜单→D 对话对齐→E 中文→F KWS→G 97工具）|

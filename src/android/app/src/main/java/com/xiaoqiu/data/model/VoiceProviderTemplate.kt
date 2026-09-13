@@ -47,9 +47,30 @@ data class VoiceProviderTemplate(
         // [小丘] 主对话模型推荐模板 —— 不在 all 语音列表里，仅供
         // AddProviderScreen 的「推荐」分区一键预填（type/baseURL/appendV1）。
         // 智谱 GLM 是 OpenAI 兼容端点；mockModels 会作为普通对话模型 seed。
-        val XIAOQIU_ZHIPU = VoiceProviderTemplate(
-            id = "zhipu-glm",
-            name = "智谱 GLM",
+        // 用户主用 Coding 订阅端点（包月）；API 按量端点作为备选。
+        val XIAOQIU_ZHIPU_CODING = VoiceProviderTemplate(
+            id = "zhipu-glm-coding",
+            name = "智谱 GLM（Coding 订阅）",
+            providerType = ProviderType.openAI,
+            baseURL = "https://open.bigmodel.cn/api/coding/paas/v4",
+            appendV1 = false,
+            capability = Capability.BOTH,
+            baseURLMarkers = listOf("bigmodel.cn/api/coding"),
+            mockModels = listOf(
+                LLMModel(id = "glm-5.3", displayName = "GLM-5.3", provider = "zhipu",
+                    contextWindow = 204800, maxOutputTokens = 65536,
+                    supportsReasoning = true,
+                    reasoningEffortValues = listOf("low", "high", "max")),
+                LLMModel(id = "glm-5.3-flash", displayName = "GLM-5.3 Flash（快）", provider = "zhipu",
+                    contextWindow = 204800, maxOutputTokens = 32768,
+                    supportsReasoning = true,
+                    reasoningEffortValues = listOf("low", "high", "max")),
+            ),
+        )
+
+        val XIAOQIU_ZHIPU_API = VoiceProviderTemplate(
+            id = "zhipu-glm-api",
+            name = "智谱 GLM（API 按量）",
             providerType = ProviderType.openAI,
             baseURL = "https://open.bigmodel.cn/api/paas/v4",
             appendV1 = false,
@@ -88,6 +109,23 @@ data class VoiceProviderTemplate(
         )
 
         val all: List<VoiceProviderTemplate> = listOf(
+            // [小丘] 智谱语音：glm-asr（识别）+ cogtts（合成，含童童音色）。
+            // 端点 OpenAI 兼容（/v1/audio/*），走默认 VoiceProvider，无需 vendor 适配器。
+            VoiceProviderTemplate(
+                id = "zhipu",
+                name = "智谱语音",
+                providerType = ProviderType.openAI,
+                baseURL = "https://open.bigmodel.cn/api/paas/v4",
+                appendV1 = false,
+                capability = Capability.BOTH,
+                baseURLMarkers = listOf("bigmodel.cn/api/paas"),
+                mockModels = listOf(
+                    asr("glm-asr", "GLM 语音识别", "zhipu"),
+                    LLMModel(id = "cogtts", displayName = "CogTTS 童童（中文女声）",
+                        provider = "zhipu", outputModalities = listOf("audio")),
+                ),
+                note = "API 按量计费端点（Coding 订阅不含语音）",
+            ),
             VoiceProviderTemplate(
                 id = "elevenlabs",
                 name = "ElevenLabs",

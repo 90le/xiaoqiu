@@ -691,6 +691,23 @@ class ProviderRepository(private val context: Context) {
     }
 
     /**
+     * [小丘] 为实例 seed 一批对话模型（推荐模板路径：智谱 Coding 端点无
+     * /v1/models，列表只能由模板内置提供）。幂等：同 id 已存在则跳过。
+     */
+    fun seedChatModels(instanceId: String, models: List<com.xiaoqiu.data.model.LLMModel>): Unit = synchronized(configLock) {
+        val config = _config.value
+        val existing = config.modelEntries.mapTo(mutableSetOf()) { it.providerInstanceId to it.baseModel.id }
+        val newEntries = models
+            .filter { (instanceId to it.id) !in existing }
+            .map { com.xiaoqiu.data.model.ModelEntry(providerInstanceId = instanceId, baseModel = it) }
+        if (newEntries.isNotEmpty()) {
+            config.modelEntries.addAll(newEntries)
+            saveConfig(config)
+            android.util.Log.i("ProviderRepo", "[小丘] seeded ${newEntries.size} chat models for $instanceId")
+        }
+    }
+
+    /**
      * [T-android-provider-voice] Reconcile voice-template seed entries on every
      * launch: add template models a previous build didn't know, remove RETIRED
      * seeds, and heal corrupted modality. Straight port of iOS
