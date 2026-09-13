@@ -30,9 +30,24 @@
 | 0.5 | Git 初始化 | ✅ | main 分支 |
 | 0.6 | 设计文档 | ✅ | docs/DESIGN.md |
 | 0.7 | 进度文档 | ✅ | docs/PROGRESS.md |
-| 0.8 | 配置 Android SDK | ⬜ | Termux 或 GitHub Actions |
-| 0.9 | 第一次编译通过 | ⬜ | 阻塞项 |
-| 0.10 | 推送 GitHub | ⬜ | 网络问题待解 |
+| 0.8 | 编译环境 | ✅ | **GitHub Actions 云端**（Termux 无 NDK） |
+| 0.9 | 第一次编译通过 | 🔨 | CI 首跑迭代中 |
+| 0.10 | 推送 GitHub | ✅ | 90le/xiaoqiu |
+
+### 编译环境决策
+
+- **本地 Termux 不可行**：NDK 官方只发 x86_64 Linux 二进制，手机 aarch64 跑不了；OpenMinis 有 cpp 三件套（pty_bridge/jieba_jni/crash_handler）必须 NDK+CMake
+- **GitHub Actions 方案**：ubuntu-latest + JDK17 + SDK36 + NDK 27 + Go（rclone.aar）+ submodule（proot 源码）→ assembleDebug → artifact APK
+
+### 编译流水线（CI 步骤）
+
+```
+checkout(submodules) → JDK17 → SDK36/NDK27/CMake → Go
+→ build_rclone_android.sh（gomobile 编 rclone.aar → app/libs/）
+→ build_proot.sh（NDK 编 proot-aarch64 + libproot.so）
+→ provider-customization.properties 模板
+→ gradlew assembleDebug → APK artifact
+```
 
 ---
 
@@ -108,6 +123,8 @@
 | 09-13 | PRoot 沙箱 | OpenMinis 已验证，Alpine 完整 Linux |
 | 09-13 | 保留山野风主题 | 品牌延续 |
 | 09-13 | 直连 API 而非 pi 引擎 | 消除 npm 依赖，APK 更小更稳 |
+| 09-13 | GitHub Actions 云编译 | NDK 仅 x86_64，Termux aarch64 无法本地编 |
+| 09-13 | v1 归档 90le/xiaoqiu-v1 | 孤儿分支快照（剔除162MB bundle），原 xiaoqiu 名让给 v2 |
 
 ---
 
