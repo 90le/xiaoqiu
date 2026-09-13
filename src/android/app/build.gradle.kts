@@ -68,6 +68,18 @@ android {
         }
     }
 
+    // [小丘] 固定 debug 签名：CI 每次 runner 是新机，默认随机 debug.keystore
+    // 会导致签名不一致装不上（INSTALL_FAILED_UPDATE_INCOMPATIBLE）。
+    // 仓库内固定 key，debug 签名无安全风险（非发布签名）。
+    signingConfigs {
+        getByName("debug") {
+            storeFile = file("debug.keystore")
+            storePassword = "android"
+            keyAlias = "androiddebugkey"
+            keyPassword = "android"
+        }
+    }
+
     buildTypes {
         release {
             isMinifyEnabled = true
