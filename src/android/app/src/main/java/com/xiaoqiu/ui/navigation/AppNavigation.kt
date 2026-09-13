@@ -1246,12 +1246,11 @@ fun AppNavigation(
                 },
             ),
         ) { backStackEntry ->
-            val context = androidx.compose.ui.platform.LocalContext.current
             val initCommand = backStackEntry.arguments?.getString("initCommand")
             val sessionId = backStackEntry.arguments?.getString("sessionId")
-            val session = remember { TerminalSession(context.applicationContext) }
+            // [小丘] 多标签：会话由 TerminalSessionManager 池管理（旧单会话入口退役）
             TerminalScreen(
-                terminalSession = session,
+                terminalSession = null,
                 onBack = { navController.safePopBackStack() },
                 initCommand = initCommand,
                 sessionId = sessionId,

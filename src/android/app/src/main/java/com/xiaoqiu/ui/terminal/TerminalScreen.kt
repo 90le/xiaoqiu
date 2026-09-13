@@ -79,7 +79,7 @@ private val TopButtonBg = Color(0xFF2C2C2E)
 
 @Composable
 fun TerminalScreen(
-    terminalSession: TerminalSession,
+    terminalSession: TerminalSession?,
     onBack: () -> Unit,
     initCommand: String? = null,
     /**
@@ -89,19 +89,19 @@ fun TerminalScreen(
      */
     sessionId: String? = null,
 ) {
-    val emulator = remember { TerminalEmulator() }
+    // [小丘] 多标签：manager 为主路径（terminalSession 参数保留给旧调用方，
+    // 传 null 时从 manager 池取活跃标签）。输出泵在 Manager 层常驻，
+    // 切走标签/离开屏幕会话继续跑（v1 会话池语义）。
+    val manager = remember { TerminalSessionManager.get() }
+    val tab = remember { terminalSession?.let { null } ?: manager.open(sessionId, initCommand) }
+        ?: manager.active ?: manager.createTab(sessionId)
+    val terminalSession = tab.session
+    val emulator = tab.emulator
     val inputController = rememberTerminalInputController()
     val scope = rememberCoroutineScope()
     var ctrlActive by remember { mutableStateOf(false) }
 
-    // Pipe PTY output → emulator.
-    LaunchedEffect(terminalSession) {
-        terminalSession.outputBytes.collect { bytes ->
-            emulator.feed(bytes)
-        }
-    }
-
-    // Wire emulator responses (DSR etc.) back to the PTY.
+    // Wire emulator responses (DSR etc.) back to the PTY of the ACTIVE tab.
     DisposableEffect(terminalSession, emulator) {
         emulator.onResponse = { data -> terminalSession.sendRawBytes(data) }
         onDispose { emulator.onResponse = null }
@@ -112,16 +112,6 @@ fun TerminalScreen(
     LaunchedEffect(clearVersion) {
         if (clearVersion > 0) {
             emulator.feed("\u001Bc".toByteArray())   // RIS — full reset
-        }
-    }
-
-    // Start session + optional initCommand.
-    LaunchedEffect(Unit) {
-        if (!terminalSession.isRunning) terminalSession.start(sessionId = sessionId)
-        if (!initCommand.isNullOrBlank()) {
-            // Pre-fill at the prompt without newline so the user can review.
-            kotlinx.coroutines.delay(500)
-            terminalSession.sendText(initCommand)
         }
     }
 
@@ -154,8 +144,9 @@ fun TerminalScreen(
         if (hasHardwareKeyboard) inputController.requestFocus()
     }
 
+    // [小丘] 离开终端页不停止会话（多标签后台跑）；仅清 URL broker 状态。
     DisposableEffect(Unit) {
-        onDispose { terminalSession.stop() }
+        onDispose { MinisOpenUrlBroker.setTerminalVisible(false) }
     }
 
     // Claim the broker while the fullscreen terminal is up so ChatScreen
@@ -204,6 +195,8 @@ fun TerminalScreen(
                 .padding(bottom = accessoryBarHeightDp),
         ) {
             Spacer(modifier = Modifier.height(52.dp))
+            // [小丘] 多标签栏（v1 标签条：横滚/状态点/长按菜单/＋新建）
+            TerminalTabsBar(manager = manager)
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 // T194 part-2: native Android View backing gives us long-press
                 // selection + ActionMode + ClipboardManager copy. The old

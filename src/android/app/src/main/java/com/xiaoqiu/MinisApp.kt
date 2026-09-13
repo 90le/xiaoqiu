@@ -239,6 +239,9 @@ class MinisApp : Application(), ImageLoaderFactory {
     override fun onCreate() {
         super.onCreate()
 
+        // [小丘] 终端多标签会话池：Application 级单例，越屏存活。
+        com.xiaoqiu.ui.terminal.TerminalSessionManager.init(this)
+
         // T287-followup: ACRA spawns a separate reporter process named
         // "<package>:acra" (declared by the library's manifest) to send
         // the crash report after the main process dies. Application
