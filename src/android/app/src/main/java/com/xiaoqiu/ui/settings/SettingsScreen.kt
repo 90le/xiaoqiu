@@ -475,7 +475,7 @@ private fun buildFeedbackMailto(): String {
     """.trimIndent()
     val subject = java.net.URLEncoder.encode("Minis Feedback", "UTF-8")
     val encodedBody = java.net.URLEncoder.encode(body, "UTF-8")
-    return "mailto:dev@openminis.app?subject=$subject&body=$encodedBody"
+    return "mailto:dev@xiaoqiu.app?subject=$subject&body=$encodedBody"
 }
 
 /**

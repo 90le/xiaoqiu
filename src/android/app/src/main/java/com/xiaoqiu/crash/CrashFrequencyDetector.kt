@@ -641,7 +641,7 @@ object CrashFrequencyDetector {
             val subject = ctx.getString(R.string.crash_freq_email_subject, date)
             // Project crash-report inbox — a public alias, safe to ship in
             // open-source builds (replaced the maintainer's personal email).
-            val recipient = "dev@openminis.app"
+            val recipient = "dev@xiaoqiu.app"
 
             val launched: Boolean = if (emailOnly) {
                 tryLaunchMailto(ctx, recipient, subject, uri)
