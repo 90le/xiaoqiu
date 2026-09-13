@@ -495,6 +495,8 @@ private fun ConfigureProviderScreen(
                 onCustomBaseURLChange = { customBaseURL = it },
                 providerRepository = providerRepository,
                 initialAppendV1 = voiceTemplate?.appendV1,
+                // [小丘] 推荐模板携带的对话模型（Coding 端点无 /v1/models）
+                chatSeedModels = voiceTemplate?.mockModels?.filter { !it.hasVoiceModality } ?: emptyList(),
                 onSaved = onSaved,
             )
             ProviderCredential.oauth -> OAuthConfigSection(
@@ -521,6 +523,7 @@ private fun ColumnScope.ApiKeyConfigSection(
     // [T-android-provider-voice] Voice templates carry their own v1-suffix
     // policy (e.g. MiMo appends /v1, ElevenLabs must not). null = type default.
     initialAppendV1: Boolean? = null,
+    chatSeedModels: List<com.xiaoqiu.data.model.LLMModel> = emptyList(),
     onSaved: () -> Unit,
 ) {
     val scope = rememberCoroutineScope()
@@ -668,10 +671,9 @@ private fun ColumnScope.ApiKeyConfigSection(
             }
             // [小丘] 推荐模板携带对话模型（如智谱 Coding 端点无 /v1/models）
             // 时直接 seed，不依赖上游模型列表接口。
-            voiceTemplate?.mockModels
-                ?.filter { !it.hasVoiceModality }
-                ?.takeIf { it.isNotEmpty() }
-                ?.let { providerRepository.seedChatModels(instance.id, it) }
+            if (chatSeedModels.isNotEmpty()) {
+                providerRepository.seedChatModels(instance.id, chatSeedModels)
+            }
             // Auto-refresh models in background (fetches from API or falls back to models.dev)
             scope.launch { providerRepository.refreshModels(instance) }
             onSaved()
