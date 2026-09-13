@@ -9,6 +9,8 @@ import kotlinx.coroutines.Job
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
+import androidx.compose.runtime.getValue
+import androidx.compose.runtime.setValue
 import java.util.UUID
 
 /**
@@ -29,11 +31,12 @@ class TerminalSessionManager(private val appContext: Context) {
         val emulator: TerminalEmulator,
         initialTitle: String,
     ) {
+        private val fallbackTitle: String = initialTitle
         var title: String by androidx.compose.runtime.mutableStateOf(initialTitle)
             private set
 
         fun rename(value: String) {
-            title = value.trim().ifEmpty { initialTitle }
+            title = value.trim().ifEmpty { fallbackTitle }
         }
     }
 
