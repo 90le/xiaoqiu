@@ -29,7 +29,7 @@ class ChatConfigPrefsBindingTest {
 
     private fun source(relative: String): String {
         // Tests run with the module dir as CWD.
-        val f = File("src/main/java/com/openminis/app/$relative")
+        val f = File("src/main/java/com/xiaoqiu/$relative")
         assertTrue("source not found: ${f.absolutePath}", f.isFile)
         return f.readText()
     }

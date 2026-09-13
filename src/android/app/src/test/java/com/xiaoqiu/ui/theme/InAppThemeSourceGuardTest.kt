@@ -42,7 +42,7 @@ class InAppThemeSourceGuardTest {
 
     @Test
     fun `ui code reads the in-app theme, not the system theme`() {
-        val root = File("src/main/java/com/openminis/app")
+        val root = File("src/main/java/com/xiaoqiu")
         assertTrue(
             "source root not found — this test locates sources relative to the " +
                 "module dir (cwd=${File(".").absolutePath})",
