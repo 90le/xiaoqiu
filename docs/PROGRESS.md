@@ -1,7 +1,7 @@
 # 小丘 v2 · 进度跟踪
 
 > 最后更新：2026-09-13
-> 当前阶段：Phase 0（环境搭建）
+> 当前阶段：Phase 1（核心可用）
 
 ---
 
@@ -9,7 +9,7 @@
 
 | 阶段 | 状态 | 开始 | 完成 | 进度 |
 |---|---|---|---|---|
-| Phase 0 环境搭建 | 🔨 进行中 | 09-13 | — | 60% |
+| Phase 0 环境搭建 | ✅ 完成 | 09-13 | 09-13 | 100% |
 | Phase 1 核心可用 | ⬜ | — | — | 0% |
 | Phase 2 语音体系 | ⬜ | — | — | 0% |
 | Phase 3 工具+设备 | ⬜ | — | — | 0% |
@@ -31,7 +31,7 @@
 | 0.6 | 设计文档 | ✅ | docs/DESIGN.md |
 | 0.7 | 进度文档 | ✅ | docs/PROGRESS.md |
 | 0.8 | 编译环境 | ✅ | **GitHub Actions 云端**（Termux 无 NDK） |
-| 0.9 | 第一次编译通过 | 🔨 | CI 首跑迭代中 |
+| 0.9 | 第一次编译通过 | ✅ | CI 第4跑成功 8m47s，58MB APK 已装机 |
 | 0.10 | 推送 GitHub | ✅ | 90le/xiaoqiu |
 
 ### 编译环境决策
@@ -129,3 +129,26 @@ checkout(submodules) → JDK17 → SDK36/NDK27/CMake → Go
 ---
 
 > 本文档每完成一个任务即更新。用 ✅⬜🔨❌ 标记状态。
+
+---
+
+## Phase 0 完成记录（2026-09-13）
+
+### CI 迭代史（4 跑过关）
+
+| 跑 | 结果 | 修复 |
+|---|---|---|
+| 1 | ❌ SDK 步骤挂 | packages 参数改单行空格分隔 |
+| 2 | ❌ proot 源缺失 | 注册真子模块（复制丢 gitlink），移除 iOS 专用 ish |
+| 3 | ❌ Kotlin 编译挂 | rclone javapkg→com.xiaoqiu.rclone；res 资源名 sed 误伤恢复 minis |
+| 4 | ✅ 8m47s 成功 | — |
+
+### 装机验证
+- APK 58MB（debug 版，含 Compose+沙箱+jieba 词典+VAD 模型）
+- 首启闪退：'native-offload' socket 冲突（原版 OpenMinis 同机运行）→ 卸载原版后正常
+- 进程稳定运行 ✅
+
+### 遗留
+- [ ] res 资源名仍是 minis（内部实现，不影响显示，改代码引用成本高暂留）
+- [ ] libc++_shared.so 重复警告（非致命）
+- [ ] 用户首启体验待反馈（rootfs 解压/引导流/界面语言）
