@@ -53,12 +53,10 @@ class ClaudeOAuthManager(context: Context, instanceId: String) : OAuthManager(co
          */
         val ANTHROPIC_OAUTH_IDENTIFIER_PROMPT: String
             get() = BuildConfig.ANTHROPIC_OAUTH_IDENTIFIER_PROMPT.ifEmpty {
-                throw IllegalStateException(
-                    "ANTHROPIC_OAUTH_IDENTIFIER_PROMPT is not configured. Copy "
-                        + "app/provider-customization.properties.example to "
-                        + "app/provider-customization.properties and set "
-                        + "ANTHROPIC_OAUTH_IDENTIFIER_PROMPT before using Claude Code OAuth."
-                )
+                // 小丘：未配置时不再抛异常阻断对话——降级为空串并告警。
+                // OAuth 请求可能被服务端拒绝，但普通 API Key 对话完全不受影响。
+                android.util.Log.w("ClaudeOAuth", "ANTHROPIC_OAUTH_IDENTIFIER_PROMPT 未配置，OAuth 标识降级为空")
+                ""
             }
 
         /**

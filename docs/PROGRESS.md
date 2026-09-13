@@ -125,6 +125,8 @@ checkout(submodules) → JDK17 → SDK36/NDK27/CMake → Go
 | 09-13 | 直连 API 而非 pi 引擎 | 消除 npm 依赖，APK 更小更稳 |
 | 09-13 | GitHub Actions 云编译 | NDK 仅 x86_64，Termux aarch64 无法本地编 |
 | 09-13 | v1 归档 90le/xiaoqiu-v1 | 孤儿分支快照（剔除162MB bundle），原 xiaoqiu 名让给 v2 |
+| 09-14 | **用户评价入档：壳好，底座/UI 要继承 v1** | 用户实测：权限壳做得好，但 agent 底座与页面交互不如 v1 —— 终端无多标签、快捷菜单不如 v1、语音不可用。→ 终端/对话/快捷菜单/语音全链升为 P0 迁移项 |
+| 09-14 | 智谱一键模板+OAuth 防炸 | AddProviderScreen 推荐7一键预填；OAuth prompt 空值降级不阻断对话 |
 
 ---
 

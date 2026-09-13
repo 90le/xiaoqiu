@@ -126,9 +126,12 @@ com.xiaoqiu/
 | 悬浮球 | ❌ 无 | 新模块 ui/overlay/ | P2 |
 | 隐形副屏 | ❌ 无 | 新模块（VdManager 移植） | P2 |
 | 宏系统 | ❌ 无 | data/ + ui/macros/ | P2 |
-| 智谱 GLM 直连 | ❌ 无 | provider/openai/ 自定义 baseUrl | P0 |
+| 智谱 GLM 直连 | ✅ 一键模板（09-14） | AddProviderScreen 推荐区：预填 baseUrl+seed glm-5.3/flash/4.7 |
 | 山野风主题 | ❌ OpenMinis 默认 | ui/theme/Theme.kt | P1 |
 | 中文界面 | ⚠️ 英文 | i18n/ | P0 |
+| **终端多标签管理** | ❌ 单会话 | **用户明确要求：v1 终端会话长按菜单/多标签全量移植** | **P0** |
+| **快捷菜单** | ❌ 无 | **用户明确要求：v1 快捷短语/命令面板移植** | **P0** |
+| **语音全链** | ❌ 不可用 | **用户明确要求：v1 KWS 唤醒+快脑+流式 TTS 移植** | **P0** |
 
 **Phase 1 重点 = P0 全清**：GLM 接入 → 工具扩展 → 唤醒系统 → 中文
 

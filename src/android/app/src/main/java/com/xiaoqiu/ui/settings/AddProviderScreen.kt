@@ -243,6 +243,22 @@ private fun ChooseProviderScreen(
         title = stringResource(R.string.provider_list_add_provider),
         onBack = onBack,
     ) {
+        // [小丘] 推荐区 —— 一键预填智谱 GLM（中国直连，免代理），复用语音模板
+        // 的 preseed 通道（type/baseURL/appendV1/跳过凭据选择）。
+        SettingsSection(
+            header = "推荐",
+            footer = "预填 OpenAI 兼容配置，只需粘贴 API Key 即可对话。模型：glm-5.3 / glm-5.3-flash / glm-4.7",
+        ) {
+            SettingsRow(
+                title = "智谱 GLM",
+                subtitle = "中国大陆直连 · 语音对话与智能体推荐",
+                icon = Icons.Filled.AutoAwesome,
+                onClick = { onSelectVoiceTemplate(com.xiaoqiu.data.model.VoiceProviderTemplate.XIAOQIU_ZHIPU) },
+                showDivider = false,
+            )
+        }
+        Spacer(Modifier.height(24.dp))
+
         SettingsSection(
             header = stringResource(R.string.add_provider_choose_provider),
             footer = stringResource(R.string.add_provider_you_can_add_multiple_instances_of_the_sa),

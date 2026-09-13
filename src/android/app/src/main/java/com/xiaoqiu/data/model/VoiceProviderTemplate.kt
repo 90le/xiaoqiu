@@ -44,6 +44,33 @@ data class VoiceProviderTemplate(
             return all.firstOrNull { tpl -> tpl.baseURLMarkers.any { base.contains(it) } }
         }
 
+        // [小丘] 主对话模型推荐模板 —— 不在 all 语音列表里，仅供
+        // AddProviderScreen 的「推荐」分区一键预填（type/baseURL/appendV1）。
+        // 智谱 GLM 是 OpenAI 兼容端点；mockModels 会作为普通对话模型 seed。
+        val XIAOQIU_ZHIPU = VoiceProviderTemplate(
+            id = "zhipu-glm",
+            name = "智谱 GLM",
+            providerType = ProviderType.openAI,
+            baseURL = "https://open.bigmodel.cn/api/paas/v4",
+            appendV1 = false,
+            capability = Capability.BOTH,
+            baseURLMarkers = listOf("bigmodel.cn"),
+            mockModels = listOf(
+                LLMModel(id = "glm-5.3", displayName = "GLM-5.3", provider = "zhipu",
+                    contextWindow = 204800, maxOutputTokens = 65536,
+                    supportsReasoning = true,
+                    reasoningEffortValues = listOf("low", "high", "max")),
+                LLMModel(id = "glm-5.3-flash", displayName = "GLM-5.3 Flash（快）", provider = "zhipu",
+                    contextWindow = 204800, maxOutputTokens = 32768,
+                    supportsReasoning = true,
+                    reasoningEffortValues = listOf("low", "high", "max")),
+                LLMModel(id = "glm-4.7", displayName = "GLM-4.7", provider = "zhipu",
+                    contextWindow = 131072, maxOutputTokens = 32768,
+                    supportsReasoning = true,
+                    reasoningEffortValues = listOf("low", "high", "max")),
+            ),
+        )
+
         /** Build the seed ModelEntry list for an instance matching a template. */
         fun mockEntries(instance: ProviderInstance): List<ModelEntry> {
             val tpl = template(instance.customBaseURL) ?: return emptyList()

@@ -50,6 +50,7 @@ jobs:
         working-directory: src/android/app
         run: |
           cp provider-customization.properties.example provider-customization.properties
+          sed -i "s|^ANTHROPIC_OAUTH_IDENTIFIER_PROMPT=$|ANTHROPIC_OAUTH_IDENTIFIER_PROMPT=You are Claude Code, Anthropic's official CLI for Claude.|" provider-customization.properties && sed -i "s/^ANTHROPIC_OAUTH_IDENTIFIER_PROMPT=$/ANTHROPIC_OAUTH_IDENTIFIER_PROMPT=You are Claude Code, Anthropic's official CLI for Claude./" provider-customization.properties
 
       - name: Gradle cache
         uses: actions/cache@v4

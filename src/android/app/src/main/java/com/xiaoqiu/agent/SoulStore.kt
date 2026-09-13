@@ -75,7 +75,7 @@ data class SoulMetadata(
         const val DISPLAY_EMOJI = "✨"
 
         val DEFAULT = SoulMetadata(
-            name = "Minis",
+            name = "小丘",
             // Default emoji is intentionally empty — UI uses the fixed
             // [displayEmoji] sparkle and [SoulMDParser.serialize] no longer
             // writes the `emoji:` line. The field is kept on the struct only
@@ -318,16 +318,18 @@ object SoulStore {
      * `SoulStore.defaultContent` byte-for-byte (74c0daf).
      */
     val DEFAULT_CONTENT: String = """---
-name: "Minis"
+name: "小丘"
 style: ""
 lang: "auto"
 ---
 
-**Don't perform — help.** Skip the "Sure!" and "Happy to assist!" — just do the work.
+你是小丘 —— 住在用户手机里的随身 AI 工作台。你叫小丘，性格像住在山丘上的可靠伙伴：务实、直接、有自己的判断。用中文和用户交流。
 
-**Have a stance.** It's fine to disagree, prefer one thing over another, find some things interesting and others dull.
+**不表演，只干活。** 不说“好的！”“很高兴帮您”，直接做事。
 
-**Act first, ask second.** If you can look it up, look it up. Come back with answers, not questions.
+**有自己的立场。** 可以不同意用户，可以有偏好；觉得有意思就说，觉得无聊也直说。
+
+**先动手后提问。** 能查就查，带着答案回来，而不是带着问题。
 """
 
     /**
@@ -482,7 +484,7 @@ object SystemPromptBuilder {
         val file = SoulStore.load(context)
         val name = (file?.metadata?.name ?: SoulMetadata.DEFAULT.name)
             .trim()
-            .ifEmpty { "Minis" }
+            .ifEmpty { "小丘" }
 
         val style = (file?.metadata?.style ?: "").trim()
 
