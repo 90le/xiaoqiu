@@ -283,7 +283,7 @@
     <string name="settings_section_logs">Jurnale</string>
     <string name="settings_logs_subtitle">Vizualizează și exportă jurnalele aplicației</string>
     <string name="settings_section_about">Despre</string>
-    <string name="settings_about_xiaoqiu">Despre 小丘</string>
+    <string name="settings_about_minis">Despre 小丘</string>
     <string name="settings_about_subtitle">Versiune și informații despre proiect</string>
     <string name="settings_privacy_policy">Politica de confidențialitate</string>
     <string name="settings_feedback">Feedback</string>
@@ -291,7 +291,7 @@
     <string name="settings_feedback_telegram">Feedback (Telegram)</string>
     <string name="settings_feedback_email">Feedback (e-mail)</string>
     <string name="about_title">Despre</string>
-    <string name="about_xiaoqiu_tagline">小丘 este Agentul tău complet local și complet privat, care rulează pe dispozitiv.</string>
+    <string name="about_minis_tagline">小丘 este Agentul tău complet local și complet privat, care rulează pe dispozitiv.</string>
     <string name="about_links">Linkuri</string>
     <string name="about_github_repository">Depozit GitHub</string>
     <string name="about_version_format">Versiunea %1$s (%2$s)</string>
@@ -508,7 +508,7 @@
     <string name="browser_nav_forward">Înainte</string>
     <string name="browser_stop">Oprește</string>
     <string name="browser_reload">Reîncarcă</string>
-    <string name="browser_xiaoqiu_browsing">小丘 navighează</string>
+    <string name="browser_minis_browsing">小丘 navighează</string>
     <string name="chat_typing_indicator">%1$s se gândește</string>
     <string name="read_aloud_unavailable">Citirea cu voce tare a eșuat: niciun motor vocal utilizabil. Verifică setările de ieșire vocală sau instalează un motor de sinteză al sistemului.</string>
     <string name="chat_error_stream_dropped_partial">Conexiunea s-a întrerupt — acest răspuns poate fi incomplet. Atinge Reîncearcă pentru a continua.</string>
@@ -719,8 +719,8 @@
     <string name="perm_agent_policy">Permisiunea Agentului</string>
     <string name="perm_a11y_system_ready">Serviciu activat</string>
     <string name="perm_a11y_system_disabled">Serviciu neactivat</string>
-    <string name="perm_allow_xiaoqiu_config">Permite xiaoqiu-config</string>
-    <string name="perm_xiaoqiu_config_desc">Când este dezactivat, Agentul nu poate citi și nici modifica vreo setare prin xiaoqiu-config. Istoricul modificărilor din Jurnale → Modificări de configurare rămâne accesibil. Agentul va primi o eroare permission_denied și te poate îndruma în schimb prin linkuri directe.</string>
+    <string name="perm_allow_minis_config">Permite xiaoqiu-config</string>
+    <string name="perm_minis_config_desc">Când este dezactivat, Agentul nu poate citi și nici modifica vreo setare prin xiaoqiu-config. Istoricul modificărilor din Jurnale → Modificări de configurare rămâne accesibil. Agentul va primi o eroare permission_denied și te poate îndruma în schimb prin linkuri directe.</string>
     <string name="perm_section_privacy">Confidențialitate</string>
     <string name="perm_section_media">Media</string>
     <string name="perm_section_system">Sistem</string>
@@ -798,7 +798,7 @@
     <string name="skill_empty_title">Nicio abilitate instalată</string>
     <string name="skill_empty_action">Atinge + pentru a importa un fișier SKILL.md, .zip sau .skill, ori răsfoiește 小丘 Skills.</string>
     <string name="skill_import_modal_title">Importă o abilitate</string>
-    <string name="skill_xiaoqiu_skills_modal">小丘 Skills</string>
+    <string name="skill_minis_skills_modal">小丘 Skills</string>
     <string name="skill_delete_confirm_title">Ștergi: %1$s</string>
     <string name="skill_delete_confirm_text">Abilitatea și fișierele sale vor fi eliminate definitiv.</string>
     <string name="skill_import_sheet_title">Importă o abilitate</string>
@@ -862,8 +862,8 @@
     <string name="storage_overview_sessions">Fișierele sesiunilor</string>
     <string name="storage_section_sessions">Sesiuni</string>
     <string name="storage_no_sessions">Nicio sesiune</string>
-    <string name="storage_section_xiaoqiu_files">Fișiere 小丘</string>
-    <string name="storage_no_xiaoqiu_files">Niciun fișier 小丘</string>
+    <string name="storage_section_minis_files">Fișiere 小丘</string>
+    <string name="storage_no_minis_files">Niciun fișier 小丘</string>
     <string name="storage_section_media">Fișiere media</string>
     <string name="storage_no_media_files">Niciun fișier media</string>
     <string name="storage_clear_session_footer">Elimină toate fișierele generate de această sesiune. Conversația în sine este păstrată.</string>
@@ -1601,7 +1601,7 @@
     <string name="webapp_pin_success">Adăugat pe ecranul principal</string>
     <string name="webapp_source_missing_title">Fișierul sursă nu mai există</string>
     <string name="webapp_source_missing_body">Fișierul pe care se bazează această scurtătură a fost mutat sau șters.</string>
-    <string name="webapp_open_in_xiaoqiu">Deschide în 小丘</string>
+    <string name="webapp_open_in_minis">Deschide în 小丘</string>
     <string name="webapp_action_close">Închide</string>
     <string name="webapp_action_fullscreen">Treci pe tot ecranul</string>
     <string name="webapp_action_exit_fullscreen">Ieși din modul pe tot ecranul</string>
