@@ -60,6 +60,32 @@ class RootfsManager private constructor(private val context: Context) {
     val installState: StateFlow<RootfsInstallState> = _installState.asStateFlow()
 
     /**
+     * [小丘] 存量 rootfs 品牌自愈：把 OpenMinis 时代的 `root@minis` 提示符
+     * 与 hostname 改为 xiaoqiu。幂等——已是新内容则不动。新装 rootfs 走
+     * assets 的新文件（default_mount overlay），这里只治升级 App 后的旧
+     * rootfs（isInstalled=true 不会重装）。
+     */
+    private fun rebrandLegacyRootfs() {
+        try {
+            val profile = File(rootfsDir, "etc/profile.d/minis.sh")
+            if (profile.isFile) {
+                val text = profile.readText()
+                if (text.contains("@minis:")) {
+                    profile.writeText(text.replace("@minis:", "@xiaoqiu:"))
+                    Log.i(TAG, "rebrand: PS1 minis→xiaoqiu done")
+                }
+            }
+            val hostname = File(rootfsDir, "etc/hostname")
+            if (hostname.isFile && hostname.readText().trim() == "minis") {
+                hostname.writeText("xiaoqiu\n")
+                Log.i(TAG, "rebrand: hostname minis→xiaoqiu done")
+            }
+        } catch (e: Exception) {
+            Log.w(TAG, "rebrand failed (non-fatal): ${e.message}")
+        }
+    }
+
+    /**
      * Install Alpine rootfs from assets if not already present.
      * Extracts alpine-minirootfs.tar.gz using manual POSIX tar parsing.
      * Progress is published to [installState] (Preparing → Extracting(f) →
@@ -68,6 +94,7 @@ class RootfsManager private constructor(private val context: Context) {
     suspend fun installIfNeeded() = withContext(Dispatchers.IO) {
         if (isInstalled) {
             Log.d(TAG, "Rootfs already installed at $rootfsDir")
+            rebrandLegacyRootfs()
             _installState.value = RootfsInstallState.Installed
             return@withContext
         }

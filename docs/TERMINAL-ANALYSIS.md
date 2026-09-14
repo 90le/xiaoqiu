@@ -79,3 +79,21 @@
 并行：L3 的 ⌘ 命令面板（独立可并行）
 之后：AI 终端区（依赖 ChatScreen 改造，随战役 C/D）
 ```
+
+---
+
+## 六、终端提示符品牌化（root@minis → root@xiaoqiu）
+
+### 来源分析
+`root@minis:~#` 由两处写死：
+1. `assets/default_mount/etc/hostname` = "minis"
+2. `assets/default_mount/etc/profile.d/minis.sh` 里 `export PS1='\u@minis:\w\$ '`（OpenMinis 故意写死保证 iOS/Android 提示符一致）
+
+### 方案（双管齐下，09-14 已实施）
+| 路径 | 手段 | 生效范围 |
+|---|---|---|
+| 资产改名 | hostname→xiaoqiu、PS1→\u@xiaoqiu（重新编译 APK） | 新装/重置 rootfs |
+| 存量自愈 | RootfsManager.rebrandLegacyRootfs()：installIfNeeded 发现已装时，幂等改写 rootfs 内两文件 | 升级 App 的旧 rootfs（不重装） |
+
+### 不动的
+- `/var/minis` 挂载路径、`minis-open`/`minis-mcp-cli` 等工具名：**内部协议标识**（代码强耦合），改了牵连 PRoot bind/chat 互通，收益纯视觉，风险不成比例——保留。
