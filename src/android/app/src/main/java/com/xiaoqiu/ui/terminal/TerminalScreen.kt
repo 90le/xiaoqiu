@@ -94,6 +94,7 @@ fun TerminalScreen(
     // 传 null 时从 manager 池取活跃标签）。输出泵在 Manager 层常驻，
     // 切走标签/离开屏幕会话继续跑（v1 会话池语义）。
     val manager = remember { TerminalSessionManager.get() }
+    val ctx = androidx.compose.ui.platform.LocalContext.current
     val tab = remember { terminalSession?.let { null } ?: manager.open(sessionId, initCommand) }
         ?: manager.active ?: manager.createTab(sessionId)
     val terminalSession = tab.session
@@ -277,7 +278,6 @@ fun TerminalScreen(
                 keyboardVisible = inputController.isFocused,
                 expanded = keysExpanded,
                 onPaste = {
-                    val ctx = androidx.compose.ui.platform.LocalContext.current
                     val cm = ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
                     val text = cm?.primaryClip?.getItemAt(0)?.coerceToText(ctx)?.toString().orEmpty()
                     if (text.isNotEmpty()) {
