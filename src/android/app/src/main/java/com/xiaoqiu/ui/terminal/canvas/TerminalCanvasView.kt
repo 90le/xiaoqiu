@@ -223,6 +223,7 @@ fun TerminalCanvasView(
     }
 
     androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize()) {
+    androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize()) {
     Canvas(
         modifier = modifier
             .fillMaxSize()
@@ -264,7 +265,7 @@ fun TerminalCanvasView(
                         moveHandleTo(change.position.x, change.position.y)
                     } else {
                         tracker.addPosition(change.uptimeMillis, change.position)
-                        applyScroll(dragAmount)
+                        applyScroll(dragAmount.y)
                     }
                 }
             }
@@ -338,8 +339,6 @@ fun TerminalCanvasView(
                 val handlePaint = Paint().apply {
                     color = android.graphics.Color.argb(0xFF, 0x8F, 0xE0, 0xAC)
                     style = Paint.Style.FILL
-                    shadowLayer = 8f
-                    // 阴影需要 blurring mask filter；简化用双圈模拟
                 }
                 fun drawHandlePx(px: Float, py: Float) {
                     val rodTop = py - cellHeight * 1.6f
@@ -393,49 +392,31 @@ fun TerminalCanvasView(
             }
         }
 
-        // [小丘] 复制浮层：选区存在时贴选区上方显示（v1 工具条）
+
+        // [小丘] 复制浮层：选区存在时显示（v1 工具条：复制/全选/✕）
         val selNow = emulator.selectionRect.value
         if (showCopyBar && selNow != null) {
             val e = if (selNow[1] < selNow[3] || (selNow[1] == selNow[3] && selNow[0] <= selNow[2]))
                 intArrayOf(selNow[0], selNow[1], selNow[2], selNow[3])
             else intArrayOf(selNow[2], selNow[3], selNow[0], selNow[1])
-            val barY = (e[1] * cellHeight - 52.dp.roundToPx()).coerceAtLeast(8.dp.roundToPx())
             androidx.compose.foundation.layout.Row(
                 modifier = Modifier
-                    .offset(x = with(androidx.compose.ui.platform.LocalDensity.current) { (e[0] * cellWidth).toDp() })
-                    .offset(y = with(androidx.compose.ui.platform.LocalDensity.current) { barY.toDp() })
+                    .padding(start = with(androidx.compose.ui.platform.LocalDensity.current) { (e[0] * cellWidth).toDp() })
+                    .padding(top = with(androidx.compose.ui.platform.LocalDensity.current) { ((e[1] * cellHeight) - 60.dp.roundToPx()).coerceAtLeast(8.dp.roundToPx()).toDp() })
                     .clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
                     .background(androidx.compose.ui.graphics.Color(0xE6, 0x2E, 0x4A, 0x38))
                     .padding(horizontal = 14.dp, vertical = 8.dp),
                 horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp),
             ) {
-                androidx.compose.material3.Text(
-                    "复制",
-                    color = androidx.compose.ui.graphics.Color.White,
-                    fontSize = 13.sp,
-                    modifier = Modifier.clickable { copySelection() },
-                )
-                androidx.compose.material3.Text(
-                    "全选",
-                    color = androidx.compose.ui.graphics.Color(0xFFCFE0D5),
-                    fontSize = 13.sp,
-                    modifier = Modifier.clickable {
-                        emulator.setSelectionRect(0, 0, cols - 1, rows - 1)
-                    },
-                )
-                androidx.compose.material3.Text(
-                    "✕",
-                    color = androidx.compose.ui.graphics.Color(0xFFBBBBBB),
-                    fontSize = 13.sp,
-                    modifier = Modifier.clickable {
-                        emulator.clearSelectionRect()
-                        showCopyBar = false
-                    },
-                )
+                androidx.compose.material3.Text("复制", color = androidx.compose.ui.graphics.Color.White, fontSize = 13.sp,
+                    modifier = Modifier.clickable { copySelection() })
+                androidx.compose.material3.Text("全选", color = androidx.compose.ui.graphics.Color(0xFFCFE0D5), fontSize = 13.sp,
+                    modifier = Modifier.clickable { emulator.setSelectionRect(0, 0, cols - 1, rows - 1) })
+                androidx.compose.material3.Text("✕", color = androidx.compose.ui.graphics.Color(0xFFBBBBBB), fontSize = 13.sp,
+                    modifier = Modifier.clickable { emulator.clearSelectionRect(); showCopyBar = false })
             }
         }
-    } // Box
-    }
+    } // Box    }
 }
 
 private fun drawCell(
