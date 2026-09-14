@@ -47,8 +47,12 @@ fun FloatingDpad(
     modifier: Modifier = Modifier,
 ) {
     val context = LocalContext.current
-    val screenW = LocalConfiguration.current.screenWidthDp
-    val screenH = LocalConfiguration.current.screenHeightDp
+    val density = androidx.compose.ui.platform.LocalDensity.current
+    // 全部用像素：屏幕实际尺寸（dp×density），拖动增量原生 px，offset 原生 px
+    val screenWpx = with(density) { LocalConfiguration.current.screenWidthDp.dp.toPx() }
+    val screenHpx = with(density) { LocalConfiguration.current.screenHeightDp.dp.toPx() }
+    val screenW = screenWpx.toInt()
+    val screenH = screenHpx.toInt()
 
     var expanded by remember { mutableStateOf(false) }
     var pos by remember { androidx.compose.runtime.mutableStateOf(loadDpadPos(context)) }
@@ -137,8 +141,9 @@ private fun DpadKey(label: String, clickModifier: Modifier) {
 data class DpadPos(val x: Float, val y: Float)
 
 private fun clampDpad(p: DpadPos, screenW: Int, screenH: Int): DpadPos {
-    val maxX = (screenW - 60).coerceAtLeast(0).toFloat()
-    val maxY = (screenH - 140).coerceAtLeast(0).toFloat()
+    // 余量 px：球 46dp+边距≈180px；展开态最宽≈260px
+    val maxX = (screenW - 200).coerceAtLeast(0).toFloat()
+    val maxY = (screenH - 300).coerceAtLeast(0).toFloat()
     // MAX_VALUE = 未初始化标记 → 右缘中部
     if (p.x == Float.MAX_VALUE) return DpadPos(maxX, (maxY * 0.45f))
     return DpadPos(p.x.coerceIn(0f, maxX), p.y.coerceIn(0f, maxY))
