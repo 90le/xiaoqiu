@@ -462,12 +462,13 @@ class TerminalNativeView @JvmOverloads constructor(
         if (em.scrollOffset > 6 && cellHeight > 0) {
             val cx = width - 64f
             val cy = height - 150f
-            btnToBottomRect = android.graphics.RectF(cx - 26f, cy - 26f, cx + 26f, cy + 26f)
+            val btnRect = android.graphics.RectF(cx - 26f, cy - 26f, cx + 26f, cy + 26f)
+            btnToBottomRect = btnRect
             val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
                 color = 0xE62E4A38.toInt()
                 style = android.graphics.Paint.Style.FILL
             }
-            canvas.drawRoundRect(btnToBottomRect, 26f, 26f, paint)
+            canvas.drawRoundRect(btnRect, 26f, 26f, paint)
             val arrow = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
                 color = 0xFFE7F0EA.toInt()
                 style = android.graphics.Paint.Style.STROKE
