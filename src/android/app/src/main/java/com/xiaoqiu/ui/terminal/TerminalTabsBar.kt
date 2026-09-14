@@ -1,6 +1,7 @@
 package com.xiaoqiu.ui.terminal
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.layout.Column
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
@@ -51,8 +52,7 @@ import com.xiaoqiu.ui.terminal.TerminalSessionManager.Tab
  * 横滚标签 · 状态点（活绿/死灰/选中山绿）· 长按菜单（重命名/重启/关闭）· ＋新建。
  * 重命名走内联输入框（v1 同款：点「重命名」原地变输入框，回车确认）。
  */
-@OptIn(ExperimentalFoundationApi::class)
-@OptIn(ExperimentalFoundationApi::class)
+@OptIn(androidx.compose.material3.ExperimentalMaterial3Api::class)
 @Composable
 fun TerminalTabsBar(
     manager: TerminalSessionManager,
