@@ -59,6 +59,8 @@ import com.xiaoqiu.ui.terminal.TerminalSessionManager.Tab
 fun TerminalTabsBar(
     manager: TerminalSessionManager,
     modifier: Modifier = Modifier,
+    onClose: () -> Unit = {},
+    onClear: () -> Unit = {},
 ) {
     val active = manager.active
     var drawerOpen by remember { mutableStateOf(false) }
@@ -66,7 +68,8 @@ fun TerminalTabsBar(
     Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(Color(0xFF101013))
+            .statusBarsPadding()
+            .background(Color(0xFF16161B))
             .drawBehind {
                 // 底部分隔线：标签条与终端画布的硬边界（v1 tabs 底线）
                 drawRect(
@@ -130,7 +133,7 @@ fun TerminalTabsBar(
         // ＋ 新建（v1 常驻右缘）
         Box(
             modifier = Modifier
-                .padding(vertical = 6.dp, horizontal = 6.dp)
+                .padding(vertical = 6.dp, horizontal = 2.dp)
                 .size(40.dp)
                 .clip(RoundedCornerShape(10.dp))
                 .background(Color(0xFF4CAF7D))
@@ -139,6 +142,32 @@ fun TerminalTabsBar(
             contentAlignment = Alignment.Center,
         ) {
             Text("＋", color = Color.White, fontSize = 24.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+        }
+        // 🧹 清屏
+        Box(
+            modifier = Modifier
+                .padding(vertical = 6.dp, horizontal = 2.dp)
+                .size(40.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color(0xFF3A3A44))
+                .border(1.dp, Color(0xFF55555F), RoundedCornerShape(10.dp))
+                .clickable(onClick = onClear),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("🧹", fontSize = 16.sp)
+        }
+        // ✕ 退出终端
+        Box(
+            modifier = Modifier
+                .padding(vertical = 6.dp, horizontal = 6.dp)
+                .size(40.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color(0xFF3A3A44))
+                .border(1.dp, Color(0xFF55555F), RoundedCornerShape(10.dp))
+                .clickable(onClick = onClose),
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("✕", color = Color(0xFFE0E0E0), fontSize = 16.sp)
         }
     }
 

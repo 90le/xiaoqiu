@@ -198,9 +198,17 @@ fun TerminalScreen(
                 .imePadding()
                 .padding(bottom = accessoryBarHeightDp),
         ) {
-            Spacer(modifier = Modifier.height(52.dp))
-            // [小丘] 多标签栏（v1 标签条：横滚/状态点/长按菜单/＋新建）
-            TerminalTabsBar(manager = manager)
+            // [小丘] 标签条即顶栏（v1 结构：标签管理是终端页第一公民，
+            // 不再藏在标题栏下的暗区——用户"看不到"的根治）
+            TerminalTabsBar(
+                manager = manager,
+                onClose = { terminalSession.stop(); onBack() },
+                onClear = {
+                    terminalSession.sendRawBytes(byteArrayOf(0x15))
+                    terminalSession.clearOutput()
+                    emulator.feed("\u001Bc".toByteArray())
+                },
+            )
             Box(modifier = Modifier.weight(1f).fillMaxWidth()) {
                 // T194 part-2: native Android View backing gives us long-press
                 // selection + ActionMode + ClipboardManager copy. The old
@@ -233,32 +241,6 @@ fun TerminalScreen(
                     modifier = Modifier.size(1.dp),
                 )
             }
-        }
-
-        // Top bar pinned at top — never moves with IME.
-        Box(
-            modifier = Modifier
-                .fillMaxWidth()
-                .align(Alignment.TopStart)
-                .windowInsetsPadding(WindowInsets.systemBars)
-                .height(52.dp)
-                .background(TerminalBg),
-        ) {
-            TerminalTopBar(
-                onClose = {
-                    terminalSession.stop()
-                    onBack()
-                },
-                onClear = {
-                    // T310: send Ctrl+U (NAK, 0x15) so readline kills any
-                    // half-typed line in the shell. Otherwise those chars
-                    // stay in the line buffer and get prepended to the
-                    // user's next command after the visual clear.
-                    terminalSession.sendRawBytes(byteArrayOf(0x15))
-                    terminalSession.clearOutput()
-                    emulator.feed("\u001Bc".toByteArray())
-                },
-            )
         }
 
         // T290: accessory bar — anchored to bottom of the parent Box and
