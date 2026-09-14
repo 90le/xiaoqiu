@@ -421,14 +421,17 @@ fun TerminalCanvasView(
             val selTopPx = e[1] * cellHeight
             val selBottomPx = (e[3] + 1) * cellHeight
             val densityNow = density
+            val viewportH = androidx.compose.ui.platform.LocalConfiguration.current.screenHeightDp.dp
             val placeBelow = with(densityNow) { selTopPx.toDp() } < 120.dp
-            val topGap = if (placeBelow)
+            val rawGap = if (placeBelow)
                 with(densityNow) { selBottomPx.toDp() } + 8.dp
             else
-                (with(densityNow) { selTopPx.toDp() } - 48.dp).coerceAtLeast(8.dp)
+                (with(densityNow) { selTopPx.toDp() } - 48.dp)
+            // [小丘] 视窗 clamp：浮层永不挤出底部/顶部（选区拖到底时浮层仍可见）
+            val topGap = rawGap.coerceIn(8.dp, (viewportH - 56.dp).coerceAtLeast(8.dp))
             androidx.compose.foundation.layout.Row(
                 modifier = Modifier
-                    .align(androidx.compose.ui.Alignment.TopStart)
+                    .align(androidx.compose.ui.Alignment.TopCenter)
                     .padding(top = topGap)
                     .shadow(6.dp, androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
                     .clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp))

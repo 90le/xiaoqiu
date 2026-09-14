@@ -101,7 +101,7 @@ fun FloatingDpad(
             // [小丘] 顶行：拖柄胶囊（左）+ 收起凸钮（右，独立醒目）
             Row(
                 verticalAlignment = Alignment.CenterVertically,
-                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(6.dp),
             ) {
                 Box(
                     modifier = Modifier
