@@ -397,6 +397,8 @@ fun TerminalCanvasView(
         }
 
 
+    } // Canvas content
+
         // [小丘] 复制浮层：选区存在时显示（v1 工具条：复制/全选/✕）
         val selNow = emulator.selectionRect.value
         if (showCopyBar && selNow != null) {
@@ -420,7 +422,6 @@ fun TerminalCanvasView(
                     modifier = Modifier.clickable { emulator.clearSelectionRect(); showCopyBar = false })
             }
         }
-    } // Canvas content
     } // Box
 
 }
