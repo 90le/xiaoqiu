@@ -112,7 +112,7 @@ fun FloatingDpad(
                 ) {
                     Text("⠿⠿ 拖移", color = Color(0xFF8FE0AC), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
-                Spacer(Modifier.weight(1f))
+                Spacer(Modifier.size(10.dp))
                 Box(
                     modifier = Modifier
                         .size(34.dp)
