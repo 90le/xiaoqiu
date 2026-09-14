@@ -46,6 +46,11 @@ jobs:
         run: |
           ./build_proot.sh
 
+      - name: Prepare sandbox assets (Alpine rootfs + proot binary)
+        run: |
+          sudo apt-get install -y zstd binutils >/dev/null 2>&1 || true
+          bash scripts/prepare_android_sandbox.sh
+
       - name: Provider customization template
         working-directory: src/android/app
         run: |
