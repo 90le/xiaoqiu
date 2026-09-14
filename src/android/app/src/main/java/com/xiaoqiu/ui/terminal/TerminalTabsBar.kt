@@ -70,7 +70,7 @@ fun TerminalTabsBar(
         modifier = modifier
             .fillMaxWidth()
             .statusBarsPadding()
-            .background(Color(0xFFFFAA00))
+            .background(Color(0xFF16161B))
             .drawBehind {
                 // 底部分隔线：标签条与终端画布的硬边界（v1 tabs 底线）
                 drawRect(
