@@ -142,6 +142,7 @@ fun TerminalTabsBar(
     }
 
     // ── 会话管理抽屉（ModalBottomSheet：全部会话/新建/关闭）──
+    } // Column 结束（分隔线容器）
     if (drawerOpen) {
         androidx.compose.material3.ModalBottomSheet(
             onDismissRequest = { drawerOpen = false },
@@ -262,8 +263,6 @@ fun TerminalTabsBar(
         }
     }
 
-    } // Row 结束
-    } // Column 结束
 
     // ── ⌘ 命令面板 ──
     if (paletteOpen) {
