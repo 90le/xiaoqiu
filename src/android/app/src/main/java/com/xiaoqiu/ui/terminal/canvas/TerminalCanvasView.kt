@@ -398,10 +398,11 @@ fun TerminalCanvasView(
             val e = if (selNow[1] < selNow[3] || (selNow[1] == selNow[3] && selNow[0] <= selNow[2]))
                 intArrayOf(selNow[0], selNow[1], selNow[2], selNow[3])
             else intArrayOf(selNow[2], selNow[3], selNow[0], selNow[1])
+            val densityNow = density
             androidx.compose.foundation.layout.Row(
                 modifier = Modifier
-                    .padding(start = with(androidx.compose.ui.platform.LocalDensity.current) { (e[0] * cellWidth).toDp() })
-                    .padding(top = with(androidx.compose.ui.platform.LocalDensity.current) { ((e[1] * cellHeight) - 60.dp.roundToPx()).coerceAtLeast(8.dp.roundToPx()).toDp() })
+                    .padding(start = with(densityNow) { (e[0] * cellWidth).toDp() })
+                    .padding(top = with(densityNow) { ((e[1] * cellHeight - 60f * densityNow.density).coerceAtLeast(8f)).toDp() })
                     .clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
                     .background(androidx.compose.ui.graphics.Color(0xE6, 0x2E, 0x4A, 0x38))
                     .padding(horizontal = 14.dp, vertical = 8.dp),
