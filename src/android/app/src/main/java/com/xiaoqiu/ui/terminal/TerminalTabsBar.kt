@@ -1,6 +1,7 @@
 package com.xiaoqiu.ui.terminal
 
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.drawBehind
 import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Column
 import androidx.compose.ui.draw.clip
