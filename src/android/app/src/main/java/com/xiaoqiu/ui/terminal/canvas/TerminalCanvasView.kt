@@ -415,8 +415,7 @@ fun TerminalCanvasView(
                     modifier = Modifier.clickable { emulator.clearSelectionRect(); showCopyBar = false })
             }
         }
-        } // Canvas content lambda
-    ) // Canvas 调用闭合
+    } // Canvas content
     } // Box
 
 }
