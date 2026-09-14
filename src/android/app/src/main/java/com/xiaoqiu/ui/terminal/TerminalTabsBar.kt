@@ -60,6 +60,7 @@ fun TerminalTabsBar(
 ) {
     val active = manager.active
     var drawerOpen by remember { mutableStateOf(false) }
+    var paletteOpen by remember { mutableStateOf(false) }
     Row(
         modifier = modifier
             .fillMaxWidth()
@@ -77,6 +78,17 @@ fun TerminalTabsBar(
                 .padding(horizontal = 10.dp, vertical = 8.dp),
         ) {
             Text("☰", color = Color(0xFF9CBFA8), fontSize = 14.sp)
+        }
+        // ⌘ 命令面板（v1 commands 复用：▶跑/✎预填/编辑/二次确认删）
+        Box(
+            modifier = Modifier
+                .padding(vertical = 5.dp, horizontal = 2.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFF2A2A2E))
+                .clickable { paletteOpen = true }
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+        ) {
+            Text("⌘", color = Color(0xFF9CBFA8), fontSize = 14.sp)
         }
         Row(
             modifier = Modifier
@@ -230,6 +242,14 @@ fun TerminalTabsBar(
                 Spacer(Modifier.height(24.dp))
             }
         }
+    }
+
+    // ── ⌘ 命令面板 ──
+    if (paletteOpen) {
+        CommandPaletteSheet(
+            manager = manager,
+            onDismiss = { paletteOpen = false },
+        )
     }
 }
 
