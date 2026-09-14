@@ -276,6 +276,15 @@ fun TerminalScreen(
                 altActive = altActive,
                 keyboardVisible = inputController.isFocused,
                 expanded = keysExpanded,
+                onPaste = {
+                    val ctx = androidx.compose.ui.platform.LocalContext.current
+                    val cm = ctx.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as? android.content.ClipboardManager
+                    val text = cm?.primaryClip?.getItemAt(0)?.coerceToText(ctx)?.toString().orEmpty()
+                    if (text.isNotEmpty()) {
+                        emulator.scrollOffset = 0
+                        terminalSession.sendText(text)
+                    }
+                },
                 onCtrlToggle = { ctrlActive = !ctrlActive },
                 onAltToggle = { altActive = !altActive },
                 onToggleKeyboard = {
@@ -406,6 +415,7 @@ private fun KeyboardAccessoryBar(
     altActive: Boolean,
     keyboardVisible: Boolean,
     expanded: Boolean,
+    onPaste: () -> Unit,
     onCtrlToggle: () -> Unit,
     onAltToggle: () -> Unit,
     onToggleKeyboard: () -> Unit,
@@ -433,6 +443,7 @@ private fun KeyboardAccessoryBar(
             KeyCap("⏎", prominent = true) { onSendRaw(byteArrayOf(0x0D)) }
             KeyCap("^C") { onSendRaw(byteArrayOf(0x03)) }
             KeyCap("⌫") { onSendRaw(byteArrayOf(0x7F)) }
+            KeyCap("📋", prominent = true) { onPaste() }
         }
         if (expanded) {
             // ── 展开行A：编程符号横滚 ──

@@ -181,6 +181,28 @@ class TerminalNativeView @JvmOverloads constructor(
 
     // ── Touch handling ─────────────────────────────────────────────────────
 
+    // [小丘] 惯性滚动驱动
+    private val flingScroller = android.widget.OverScroller(context)
+    private var flingRunning = false
+    private val flingRunnable = object : Runnable {
+        override fun run() {
+            val em = emulator ?: return
+            if (flingScroller.computeScrollOffset()) {
+                em.scrollOffset = flingScroller.currY.coerceAtLeast(0)
+                invalidate()
+                post(this)
+            } else {
+                flingRunning = false
+            }
+        }
+    }
+    private fun postFlingRunnable() {
+        if (!flingRunning) {
+            flingRunning = true
+            post(flingRunnable)
+        }
+    }
+
     private val gestureDetector = GestureDetector(context, object : GestureDetector.SimpleOnGestureListener() {
         override fun onSingleTapUp(e: MotionEvent): Boolean {
             // Tapping outside an active selection cancels it; otherwise pass focus.
@@ -213,11 +235,44 @@ class TerminalNativeView @JvmOverloads constructor(
             if (rowDelta != 0) {
                 em.scrollOffset = (em.scrollOffset + rowDelta).coerceAtLeast(0)
             }
+            invalidate()
+            return true
+        }
+
+        // [小丘] v1 惯性甩动：抬手后按速度继续滚，OverScroller 驱动。
+        override fun onFling(
+            e1: MotionEvent?,
+            e2: MotionEvent,
+            velocityX: Float,
+            velocityY: Float,
+        ): Boolean {
+            val em = emulator ?: return false
+            if (cellHeight <= 0f) return false
+            // px/s → 行/s；scrollOffset 单位是行
+            val rowsPerSec = (-velocityY / cellHeight)
+            flingScroller.fling(
+                0, em.scrollOffset,
+                0, rowsPerSec.toInt(),
+                0, 0,
+                0, Int.MAX_VALUE,
+            )
+            postFlingRunnable()
             return true
         }
     })
 
+    private var btnToBottomRect: android.graphics.RectF? = null
+
     override fun onTouchEvent(event: MotionEvent): Boolean {
+        // [小丘] 回底按钮命中优先（点击即回底，不进手势）
+        if (event.action == MotionEvent.ACTION_DOWN) {
+            val r = btnToBottomRect
+            if (r != null && r.contains(event.x, event.y)) {
+                emulator?.scrollOffset = 0
+                invalidate()
+                return true
+            }
+        }
         return gestureDetector.onTouchEvent(event) || super.onTouchEvent(event)
     }
 
@@ -402,6 +457,28 @@ class TerminalNativeView @JvmOverloads constructor(
                     )
                 }
             }
+        }
+        // [小丘] v1 回底按钮：滚离底部 >6 行时右下角浮现「↓」
+        if (em.scrollOffset > 6 && cellHeight > 0) {
+            val cx = width - 64f
+            val cy = height - 150f
+            btnToBottomRect = android.graphics.RectF(cx - 26f, cy - 26f, cx + 26f, cy + 26f)
+            val paint = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                color = 0xE62E4A38.toInt()
+                style = android.graphics.Paint.Style.FILL
+            }
+            canvas.drawRoundRect(btnToBottomRect, 26f, 26f, paint)
+            val arrow = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                color = 0xFFE7F0EA.toInt()
+                style = android.graphics.Paint.Style.STROKE
+                strokeWidth = 4.5f
+                strokeCap = android.graphics.Paint.Cap.ROUND
+            }
+            val p = android.graphics.Path()
+            p.moveTo(cx - 9f, cy - 7f); p.lineTo(cx, cy + 6f); p.lineTo(cx + 9f, cy - 7f)
+            canvas.drawPath(p, arrow)
+        } else {
+            btnToBottomRect = null
         }
     }
 
