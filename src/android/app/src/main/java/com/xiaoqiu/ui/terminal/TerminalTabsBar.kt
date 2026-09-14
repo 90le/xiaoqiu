@@ -1,6 +1,7 @@
 package com.xiaoqiu.ui.terminal
 
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
 import androidx.compose.foundation.layout.Column
 import androidx.compose.ui.draw.clip
 import androidx.compose.foundation.clickable
@@ -61,34 +62,50 @@ fun TerminalTabsBar(
     val active = manager.active
     var drawerOpen by remember { mutableStateOf(false) }
     var paletteOpen by remember { mutableStateOf(false) }
-    Row(
+    Column(
         modifier = modifier
             .fillMaxWidth()
-            .background(Color(0xFF1A1A1C))
+            .background(Color(0xFF101013))
+            .drawBehind {
+                // 底部分隔线：标签条与终端画布的硬边界（v1 tabs 底线）
+                drawRect(
+                    color = Color(0xFF4A4A55),
+                    topLeft = androidx.compose.ui.geometry.Offset(0f, size.height - 2f),
+                    size = androidx.compose.ui.geometry.Size(size.width, 2f),
+                )
+            },
+    ) {
+    Row(
+        modifier = Modifier
+            .fillMaxWidth()
             .padding(horizontal = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
     ) {
         // ☰ 会话管理抽屉（v1 同款入口）
         Box(
             modifier = Modifier
-                .padding(vertical = 5.dp, horizontal = 4.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(Color(0xFF2A2A2E))
-                .clickable { drawerOpen = true }
-                .padding(horizontal = 10.dp, vertical = 8.dp),
+                .padding(vertical = 6.dp, horizontal = 4.dp)
+                .size(40.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color(0xFF3A3A44))
+                .border(1.dp, Color(0xFF55555F), RoundedCornerShape(10.dp))
+                .clickable { drawerOpen = true },
+            contentAlignment = Alignment.Center,
         ) {
-            Text("☰", color = Color(0xFF9CBFA8), fontSize = 14.sp)
+            Text("☰", color = Color(0xFF9CBFA8), fontSize = 18.sp)
         }
         // ⌘ 命令面板（v1 commands 复用：▶跑/✎预填/编辑/二次确认删）
         Box(
             modifier = Modifier
-                .padding(vertical = 5.dp, horizontal = 2.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(Color(0xFF2A2A2E))
-                .clickable { paletteOpen = true }
-                .padding(horizontal = 10.dp, vertical = 8.dp),
+                .padding(vertical = 6.dp, horizontal = 2.dp)
+                .size(40.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color(0xFF3A3A44))
+                .border(1.dp, Color(0xFF55555F), RoundedCornerShape(10.dp))
+                .clickable { paletteOpen = true },
+            contentAlignment = Alignment.Center,
         ) {
-            Text("⌘", color = Color(0xFF9CBFA8), fontSize = 14.sp)
+            Text("⌘", color = Color(0xFF9CBFA8), fontSize = 18.sp)
         }
         Row(
             modifier = Modifier
@@ -112,14 +129,15 @@ fun TerminalTabsBar(
         // ＋ 新建（v1 常驻右缘）
         Box(
             modifier = Modifier
-                .padding(vertical = 5.dp, horizontal = 6.dp)
-                .size(30.dp)
-                .clip(RoundedCornerShape(8.dp))
-                .background(Color(0xFF2E4A38))
+                .padding(vertical = 6.dp, horizontal = 6.dp)
+                .size(40.dp)
+                .clip(RoundedCornerShape(10.dp))
+                .background(Color(0xFF4CAF7D))
+                .border(1.dp, Color(0xFF6FCC9A), RoundedCornerShape(10.dp))
                 .clickable { manager.createTab() },
             contentAlignment = Alignment.Center,
         ) {
-            Text("＋", color = Color(0xFFE7F0EA), fontSize = 17.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+            Text("＋", color = Color.White, fontSize = 24.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
         }
     }
 
@@ -244,6 +262,9 @@ fun TerminalTabsBar(
         }
     }
 
+    } // Row 结束
+    } // Column 结束
+
     // ── ⌘ 命令面板 ──
     if (paletteOpen) {
         CommandPaletteSheet(
@@ -269,28 +290,34 @@ private fun TabChip(
     var renameText by remember { mutableStateOf("") }
 
     Box {
+        Column(horizontalAlignment = Alignment.CenterHorizontally) {
         Row(
             modifier = Modifier
-                .padding(vertical = 5.dp, horizontal = 2.dp)
+                .padding(top = 6.dp, bottom = 2.dp)
                 .background(
-                    color = if (isActive) Color(0xFF2E4A38) else Color(0xFF2A2A2E),
-                    shape = RoundedCornerShape(8.dp),
+                    color = if (isActive) Color(0xFF4CAF7D) else Color(0xFF3A3A44),
+                    shape = RoundedCornerShape(10.dp),
+                )
+                .border(
+                    width = 1.dp,
+                    color = if (isActive) Color(0xFF8FE0AC) else Color(0xFF55555F),
+                    shape = RoundedCornerShape(10.dp),
                 )
                 .combinedClickable(
                     onClick = { if (!renaming) onActivate() },
                     onLongClick = { menuOpen = true },
                 )
-                .padding(horizontal = 10.dp, vertical = 4.dp),
+                .padding(horizontal = 14.dp, vertical = 8.dp),
             verticalAlignment = Alignment.CenterVertically,
-            horizontalArrangement = Arrangement.spacedBy(6.dp),
+            horizontalArrangement = Arrangement.spacedBy(7.dp),
         ) {
-            // 状态点：活=山绿亮 / 死=灰
+            // 状态点：活=山绿亮 / 死=灰（v1 tdot）
             Box(
                 modifier = Modifier
-                    .size(6.dp)
+                    .size(8.dp)
                     .background(
                         color = when {
-                            isAlive -> Color(0xFF6FBF8A)
+                            isAlive -> Color(0xFF8FE0AC)
                             else -> Color(0xFF666666)
                         },
                         shape = CircleShape,
@@ -321,13 +348,25 @@ private fun TabChip(
             } else {
                 Text(
                     text = tab.title,
-                    color = if (isActive) Color(0xFFE7F0EA) else Color(0xFFBBBBBB),
-                    fontSize = 13.sp,
+                    color = if (isActive) Color.White else Color(0xFFE0E0E0),
+                    fontSize = 15.sp,
+                    fontWeight = if (isActive) androidx.compose.ui.text.font.FontWeight.Bold else androidx.compose.ui.text.font.FontWeight.Normal,
                     maxLines = 1,
                     overflow = TextOverflow.Ellipsis,
-                    modifier = Modifier.widthIn(max = 88.dp),
+                    modifier = Modifier.widthIn(max = 110.dp),
                 )
             }
+        }
+        // v1 风激活底条（4dp 山绿，仅激活标签）
+        Box(
+            modifier = Modifier
+                .width(28.dp)
+                .height(4.dp)
+                .background(
+                    color = if (isActive) Color(0xFF8FE0AC) else Color.Transparent,
+                    shape = RoundedCornerShape(2.dp),
+                ),
+        )
         }
         DropdownMenu(expanded = menuOpen, onDismissRequest = { menuOpen = false }) {
             DropdownMenuItem(
