@@ -198,6 +198,16 @@ fun TerminalScreen(
                 .imePadding()
                 .padding(bottom = accessoryBarHeightDp),
         ) {
+            // [探针A] 最简 Compose 元素——若它可见而 TabsBar 不可见=TabsBar 内部问题
+            Text(
+                "PROBE-A 顶部测试",
+                color = androidx.compose.ui.graphics.Color.White,
+                fontSize = 18.sp,
+                modifier = Modifier
+                    .fillMaxWidth()
+                    .background(androidx.compose.ui.graphics.Color(0xFFCC0000))
+                    .padding(8.dp),
+            )
             // [小丘] 标签条即顶栏（v1 结构：标签管理是终端页第一公民，
             // 不再藏在标题栏下的暗区——用户"看不到"的根治）
             TerminalTabsBar(

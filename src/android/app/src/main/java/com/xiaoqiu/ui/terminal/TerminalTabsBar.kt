@@ -70,7 +70,7 @@ fun TerminalTabsBar(
         modifier = modifier
             .fillMaxWidth()
             .statusBarsPadding()
-            .background(Color(0xFF16161B))
+            .background(Color(0xFFFFAA00))
             .drawBehind {
                 // 底部分隔线：标签条与终端画布的硬边界（v1 tabs 底线）
                 drawRect(
@@ -97,7 +97,7 @@ fun TerminalTabsBar(
                 .clickable { drawerOpen = true },
             contentAlignment = Alignment.Center,
         ) {
-            Text("☰", color = Color(0xFF9CBFA8), fontSize = 18.sp)
+            Text("☰标签", color = Color(0xFFFFE066), fontSize = 20.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
         }
         // ⌘ 命令面板（v1 commands 复用：▶跑/✎预填/编辑/二次确认删）
         Box(
