@@ -70,12 +70,13 @@ import com.xiaoqiu.ui.terminal.emulator.TerminalEmulator
 import kotlinx.coroutines.launch
 
 // iOS-matched palette
-private val TerminalBg = Color(0xFF000000)
-private val TerminalFg = Color(0xFFD4D4D4)
-private val TerminalGreen = Color(0xFF34C759)
-private val AccessoryBg = Color(0xFF1F1F1F)
-private val AccButtonBg = Color(0xFF404040)
-private val AccButtonActive = Color(0xFF007AFF)
+// [小丘] 山野风终端配色（与 TabsBar/画布统一）
+private val TerminalBg = Color(0xFF0A120E)        // 深墨绿（同画布）
+private val TerminalFg = Color(0xFFD8E4DB)        // 米绿白
+private val TerminalGreen = Color(0xFF8FE0AC)     // 山绿亮字
+private val AccessoryBg = Color(0xFF10161A)       // 键盘条底（比画布略亮）
+private val AccButtonBg = Color(0xFF24312B)       // 键帽墨绿灰
+private val AccButtonActive = Color(0xFF3E7C59)   // 粘滞激活山绿
 private val TopButtonBg = Color(0xFF2C2C2E)
 
 @Composable
