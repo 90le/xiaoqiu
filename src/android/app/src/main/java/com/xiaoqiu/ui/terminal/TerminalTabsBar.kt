@@ -1,6 +1,8 @@
 package com.xiaoqiu.ui.terminal
 
 import androidx.compose.foundation.background
+import androidx.compose.ui.draw.clip
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.combinedClickable
 import androidx.compose.foundation.ExperimentalFoundationApi
 import androidx.compose.foundation.horizontalScroll
@@ -50,41 +52,184 @@ import com.xiaoqiu.ui.terminal.TerminalSessionManager.Tab
  * 重命名走内联输入框（v1 同款：点「重命名」原地变输入框，回车确认）。
  */
 @OptIn(ExperimentalFoundationApi::class)
+@OptIn(ExperimentalFoundationApi::class)
 @Composable
 fun TerminalTabsBar(
     manager: TerminalSessionManager,
     modifier: Modifier = Modifier,
 ) {
     val active = manager.active
+    var drawerOpen by remember { mutableStateOf(false) }
     Row(
         modifier = modifier
             .fillMaxWidth()
             .background(Color(0xFF1A1A1C))
-            .horizontalScroll(rememberScrollState())
-            .padding(horizontal = 4.dp),
+            .padding(horizontal = 2.dp),
         verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(2.dp),
     ) {
-        manager.tabs.forEach { tab ->
-            TabChip(
-                tab = tab,
-                isActive = tab.id == active?.id,
-                isAlive = manager.isAlive(tab),
-                onActivate = { manager.activate(tab.id) },
-                onRename = { manager.rename(tab.id, it) },
-                onRestart = { manager.restartTab(tab.id) },
-                onClose = { manager.killTab(tab.id) },
-            )
+        // ☰ 会话管理抽屉（v1 同款入口）
+        Box(
+            modifier = Modifier
+                .padding(vertical = 5.dp, horizontal = 4.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFF2A2A2E))
+                .clickable { drawerOpen = true }
+                .padding(horizontal = 10.dp, vertical = 8.dp),
+        ) {
+            Text("☰", color = Color(0xFF9CBFA8), fontSize = 14.sp)
         }
-        IconButton(onClick = { manager.createTab() }) {
-            Icon(
-                Icons.Filled.Add,
-                contentDescription = "新建终端",
-                tint = Color(0xFF9CBFA8),
-                modifier = Modifier.size(20.dp),
-            )
+        Row(
+            modifier = Modifier
+                .weight(1f)
+                .horizontalScroll(rememberScrollState()),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(2.dp),
+        ) {
+            manager.tabs.forEach { tab ->
+                TabChip(
+                    tab = tab,
+                    isActive = tab.id == active?.id,
+                    isAlive = manager.isAlive(tab),
+                    onActivate = { manager.activate(tab.id) },
+                    onRename = { manager.rename(tab.id, it) },
+                    onRestart = { manager.restartTab(tab.id) },
+                    onClose = { manager.killTab(tab.id) },
+                )
+            }
         }
-        Spacer(Modifier.width(2.dp))
+        // ＋ 新建（v1 常驻右缘）
+        Box(
+            modifier = Modifier
+                .padding(vertical = 5.dp, horizontal = 6.dp)
+                .size(30.dp)
+                .clip(RoundedCornerShape(8.dp))
+                .background(Color(0xFF2E4A38))
+                .clickable { manager.createTab() },
+            contentAlignment = Alignment.Center,
+        ) {
+            Text("＋", color = Color(0xFFE7F0EA), fontSize = 17.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+        }
+    }
+
+    // ── 会话管理抽屉（ModalBottomSheet：全部会话/新建/关闭）──
+    if (drawerOpen) {
+        androidx.compose.material3.ModalBottomSheet(
+            onDismissRequest = { drawerOpen = false },
+            containerColor = Color(0xFF232326),
+        ) {
+            Column(modifier = Modifier.padding(horizontal = 16.dp, vertical = 8.dp)) {
+                Text(
+                    "终端会话管理",
+                    color = Color(0xFFE7F0EA),
+                    fontSize = 16.sp,
+                    fontWeight = androidx.compose.ui.text.font.FontWeight.Bold,
+                    modifier = Modifier.padding(bottom = 10.dp),
+                )
+                manager.tabs.forEach { tab ->
+                    val alive = manager.isAlive(tab)
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(
+                                if (tab.id == active?.id) Color(0xFF2E4A38)
+                                else Color(0xFF2A2A2E),
+                            )
+                            .clickable {
+                                manager.activate(tab.id)
+                                drawerOpen = false
+                            }
+                            .padding(horizontal = 14.dp, vertical = 12.dp)
+                            .padding(bottom = 6.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                    ) {
+                        Box(
+                            modifier = Modifier
+                                .size(8.dp)
+                                .background(
+                                    if (alive) Color(0xFF6FBF8A) else Color(0xFF666666),
+                                    CircleShape,
+                                ),
+                        )
+                        Text(
+                            "  " + tab.title,
+                            color = if (tab.id == active?.id) Color(0xFFE7F0EA) else Color(0xFFBBBBBB),
+                            fontSize = 15.sp,
+                            modifier = Modifier.weight(1f),
+                        )
+                        Text(
+                            if (alive) "运行中" else "已停止",
+                            color = if (alive) Color(0xFF6FBF8A) else Color(0xFF888888),
+                            fontSize = 12.sp,
+                        )
+                        Spacer(Modifier.width(10.dp))
+                        Text(
+                            "重启",
+                            color = Color(0xFF9CBFA8),
+                            fontSize = 13.sp,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFF33333A))
+                                .clickable {
+                                    manager.restartTab(tab.id)
+                                    drawerOpen = false
+                                }
+                                .padding(horizontal = 10.dp, vertical = 5.dp),
+                        )
+                        Spacer(Modifier.width(6.dp))
+                        Text(
+                            "关闭",
+                            color = Color(0xFFC24B3C),
+                            fontSize = 13.sp,
+                            modifier = Modifier
+                                .clip(RoundedCornerShape(6.dp))
+                                .background(Color(0xFF33333A))
+                                .clickable {
+                                    manager.killTab(tab.id)
+                                    if (manager.tabs.isEmpty()) manager.createTab()
+                                    drawerOpen = false
+                                }
+                                .padding(horizontal = 10.dp, vertical = 5.dp),
+                        )
+                    }
+                    Spacer(Modifier.height(6.dp))
+                }
+                // 新建 + 关闭全部
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .padding(vertical = 8.dp),
+                    horizontalArrangement = Arrangement.spacedBy(10.dp),
+                ) {
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color(0xFF2E4A38))
+                            .clickable {
+                                manager.createTab()
+                                drawerOpen = false
+                            }
+                            .padding(vertical = 12.dp),
+                        contentAlignment = Alignment.Center,
+                    ) { Text("＋ 新建会话", color = Color(0xFFE7F0EA), fontSize = 14.sp) }
+                    Box(
+                        modifier = Modifier
+                            .weight(1f)
+                            .clip(RoundedCornerShape(10.dp))
+                            .background(Color(0xFF33333A))
+                            .clickable {
+                                manager.tabs.toList().forEach { manager.killTab(it.id) }
+                                manager.createTab()
+                                drawerOpen = false
+                            }
+                            .padding(vertical = 12.dp),
+                        contentAlignment = Alignment.Center,
+                    ) { Text("全部关闭并新建", color = Color(0xFFBBBBBB), fontSize = 14.sp) }
+                }
+                Spacer(Modifier.height(24.dp))
+            }
+        }
     }
 }
 

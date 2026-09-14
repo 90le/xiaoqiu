@@ -187,16 +187,6 @@ fun TerminalScreen(
     val accessoryBarHeightDp = if (keysExpanded) 134.dp else 74.dp
 
     Box(modifier = Modifier.fillMaxSize().background(TerminalBg)) {
-        // [小丘] 悬浮 D-pad（v1：球态拖移/点开/位置持久化/出界自愈）
-        FloatingDpad(
-            onArrow = { dir ->
-                emulator.scrollOffset = 0
-                val prefix = if (emulator.applicationCursorKeys)
-                    byteArrayOf(0x1B, 'O'.code.toByte())
-                else byteArrayOf(0x1B, '['.code.toByte())
-                terminalSession.sendRawBytes(prefix + byteArrayOf(dir.code.toByte()))
-            },
-        )
         // Main content: top bar + canvas. imePadding() lifts the canvas
         // above the keyboard so it's never covered.
         Column(
@@ -316,6 +306,16 @@ fun TerminalScreen(
                 },
             )
         }
+        // [小丘] 悬浮 D-pad（v1：球态拖移/点开/位置持久化/出界自愈）
+        FloatingDpad(
+            onArrow = { dir ->
+                emulator.scrollOffset = 0
+                val prefix = if (emulator.applicationCursorKeys)
+                    byteArrayOf(0x1B, 'O'.code.toByte())
+                else byteArrayOf(0x1B, '['.code.toByte())
+                terminalSession.sendRawBytes(prefix + byteArrayOf(dir.code.toByte()))
+            },
+        )
 
         previewUrl?.let { url ->
             com.xiaoqiu.ui.components.UrlPreviewSheet(
@@ -494,19 +494,26 @@ private fun KeyCap(
     prominent: Boolean = false,
     onClick: (() -> Unit)? = null,
 ) {
+    // [小丘] v1 .vk 样式：紧凑圆角键帽，最小宽度保证小标签可点，
+    // 粘滞键点亮山绿、主键（⏎/^C/SPC）微亮底、常态深灰。
     val bg = when {
-        sticky -> AccButtonActive
+        sticky -> Color(0xFF3E7C59)
         prominent -> Color(0xFF2E4A38)
-        else -> AccButtonBg
+        else -> Color(0xFF3A3A40)
     }
-    val fg = if (sticky) Color.White else TerminalGreen
+    val fg = when {
+        sticky -> Color.White
+        prominent -> Color(0xFFE7F0EA)
+        else -> Color(0xFF9CCFA8)
+    }
     Box(
         modifier = Modifier
-            .height(30.dp)
-            .clip(RoundedCornerShape(6.dp))
+            .height(32.dp)
+            .widthIn(min = 40.dp)
+            .clip(RoundedCornerShape(8.dp))
             .background(bg)
             .clickable(onClick = { onClick?.invoke() })
-            .padding(horizontal = 10.dp),
+            .padding(horizontal = 9.dp),
         contentAlignment = Alignment.Center,
     ) {
         Text(
