@@ -2,6 +2,8 @@ package com.xiaoqiu.ui.terminal
 
 import android.content.Context
 import androidx.compose.foundation.background
+import androidx.compose.foundation.border
+import androidx.compose.ui.draw.shadow
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.layout.Box
@@ -9,6 +11,7 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.size
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.shape.CircleShape
@@ -95,21 +98,31 @@ fun FloatingDpad(
                 .padding(6.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // 顶行：拖柄 + 收起
-            Row(verticalAlignment = Alignment.CenterVertically) {
+            // [小丘] 顶行：拖柄胶囊（左）+ 收起凸钮（右，独立醒目）
+            Row(
+                verticalAlignment = Alignment.CenterVertically,
+                modifier = Modifier.fillMaxWidth(),
+            ) {
                 Box(
                     modifier = Modifier
                         .then(drag)
-                        .padding(horizontal = 4.dp),
+                        .background(Color(0xFF33333A), androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
+                        .border(1.dp, Color(0xFF4A5A50), androidx.compose.foundation.shape.RoundedCornerShape(10.dp))
+                        .padding(horizontal = 10.dp, vertical = 5.dp),
                 ) {
-                    Text("⠿⠿", color = Color(0xFF6FBF8A), fontSize = 12.sp, fontWeight = FontWeight.Bold)
+                    Text("⠿⠿ 拖移", color = Color(0xFF8FE0AC), fontSize = 11.sp, fontWeight = FontWeight.Bold)
                 }
+                Spacer(Modifier.weight(1f))
                 Box(
                     modifier = Modifier
-                        .clickable { expanded = false }
-                        .padding(horizontal = 6.dp),
+                        .size(34.dp)
+                        .shadow(4.dp, androidx.compose.foundation.shape.CircleShape)
+                        .background(Color(0xFF1E2B23), androidx.compose.foundation.shape.CircleShape)
+                        .border(1.5.dp, Color(0xFF8FE0AC), androidx.compose.foundation.shape.CircleShape)
+                        .clickable { expanded = false },
+                    contentAlignment = Alignment.Center,
                 ) {
-                    Text("⌄", color = Color(0xFFBBBBBB), fontSize = 14.sp)
+                    Text("⌄", color = Color(0xFF8FE0AC), fontSize = 18.sp, fontWeight = FontWeight.Bold)
                 }
             }
             // 方向键 ↑ / ← ↓ →

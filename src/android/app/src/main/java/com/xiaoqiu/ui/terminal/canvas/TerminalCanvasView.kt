@@ -16,6 +16,8 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.offset
+import androidx.compose.ui.draw.shadow
+import androidx.compose.foundation.border
 import androidx.compose.ui.draw.clip
 import androidx.compose.ui.unit.dp
 
@@ -414,13 +416,25 @@ fun TerminalCanvasView(
             val e = if (selNow[1] < selNow[3] || (selNow[1] == selNow[3] && selNow[0] <= selNow[2]))
                 intArrayOf(selNow[0], selNow[1], selNow[2], selNow[3])
             else intArrayOf(selNow[2], selNow[3], selNow[0], selNow[1])
+            // [小丘] 浮层动态避让：选区靠屏幕顶部 → 浮层放选区下方；否则放选区上方。
+            // 加 shadow 浮起 + 描边，与选区高亮清晰分层（用户反馈：浮层被选区盖住）。
+            val selTopPx = e[1] * cellHeight
+            val selBottomPx = (e[3] + 1) * cellHeight
+            val densityNow = density
+            val placeBelow = with(densityNow) { selTopPx.toDp() } < 120.dp
+            val topGap = if (placeBelow)
+                with(densityNow) { selBottomPx.toDp() } + 8.dp
+            else
+                (with(densityNow) { selTopPx.toDp() } - 48.dp).coerceAtLeast(8.dp)
             androidx.compose.foundation.layout.Row(
                 modifier = Modifier
-                    .align(androidx.compose.ui.Alignment.TopCenter)
-                    .padding(top = 56.dp)
+                    .align(androidx.compose.ui.Alignment.TopStart)
+                    .padding(top = topGap)
+                    .shadow(6.dp, androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
                     .clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
-                    .background(androidx.compose.ui.graphics.Color(0xE6, 0x2E, 0x4A, 0x38))
-                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                    .background(androidx.compose.ui.graphics.Color(0xF2, 0x22, 0x38, 0x2C))
+                    .border(1.dp, androidx.compose.ui.graphics.Color(0xFF8FE0AC).copy(alpha = 0.6f), androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
+                    .padding(horizontal = 14.dp, vertical = 9.dp),
                 horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp),
             ) {
                 androidx.compose.material3.Text("复制", color = androidx.compose.ui.graphics.Color.White, fontSize = 13.sp,
