@@ -122,7 +122,8 @@ G 工具迁移（独立，量大可穿插）
 - ✅ Dpad 全屏拖动（dp/px 单位修复）+ ☰会话管理抽屉 + 键帽 v1 样式
 - ✅ 提示符 root@xiaoqiu（资产+存量自愈双路径）
 - ⏳ 选区双拖柄+边缘自动滚（L2 收尾，最大工程量）
-- 备注：git push 遭运营商间歇性 TLS RST（github.com SNI 阻断窗口）——已验证 GitHub Data API 通道（gh api）可绕过推提交，hosts 刷新 + 耐心重试为第一选择
+- 备注：git push 遭运营商间歇性 TLS RST——GitHub Data API（gh api 建 blob/tree/commit/ref）为可靠备路
+- 09-14 晚：**全量品牌手术**——minis→xiaoqiu 4287处一刀切（含 /var/xiaoqiu 路径/深链/工具名/类名），CI 首过验证全局一致
 
 ---
 
