@@ -22,7 +22,7 @@ import org.junit.Test
  *
  * Why this matters: an unmatched pair is a hard 400 on OpenAI-compatible APIs
  * ("No tool call found for function call output with call_id …"), and because
- * the history slice is recomputed deterministically it repeats on every retry
+ * the history slice is recomputed deterxiaoqiutically it repeats on every retry
  * AND every fallback model — the session wedges until the user clears it.
  */
 class CompactToolPairingTest {

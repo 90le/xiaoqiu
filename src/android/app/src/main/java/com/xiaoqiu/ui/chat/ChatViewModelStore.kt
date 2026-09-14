@@ -124,7 +124,7 @@ object ChatViewModelStore {
     /**
      * T311: id of the chat the user has on screen right now. Set by
      * `ChatScreen`'s lifecycle hook on enter, cleared on dispose.
-     * `minis-config session.*` reads this so reads/writes target the
+     * `xiaoqiu-config session.*` reads this so reads/writes target the
      * "current session" the same way iOS `AIChatViewModel.activeSessionId`
      * does. `null` = no chat is foregrounded → reads return empty / writes
      * throw `No active session`. Resolves through `aliases` so a draft id
@@ -171,7 +171,7 @@ object ChatViewModelStore {
          * whichever ChatScreen composed first ate the content — if the
          * navigation to the target didn't land (or the user backed out and
          * opened something else), the moved text/attachments surfaced in an
-         * unrelated session. Mirrors iOS 6c3093c8 (GH OpenMinis#120).
+         * unrelated session. Mirrors iOS 6c3093c8 (GH OpenXiaoQiu#120).
          */
         val targetId: String,
         /** Wall-clock stash time; drives the [STASH_TTL_MS] staleness drop. */

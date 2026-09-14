@@ -313,7 +313,7 @@ abstract class AppDatabase : RoomDatabase() {
                 INSTANCE ?: Room.databaseBuilder(
                     context.applicationContext,
                     AppDatabase::class.java,
-                    "minis.db"
+                    "xiaoqiu.db"
                 )
                     // MIGRATION_12_11 is the downgrade counterpart of
                     // MIGRATION_11_12 — registering it is what lets an older

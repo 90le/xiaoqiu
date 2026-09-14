@@ -29,13 +29,13 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.unit.dp
 import com.xiaoqiu.R
-import com.xiaoqiu.accessibility.MinisAccessibilityService
+import com.xiaoqiu.accessibility.XiaoQiuAccessibilityService
 import com.xiaoqiu.accessibility.RestrictedSettingsManager
 import com.xiaoqiu.logging.AppLogger
 import com.xiaoqiu.offload.OffloadPermissionManager
 import com.xiaoqiu.offload.ShizukuManager
-import com.xiaoqiu.ui.components.MinisMenu
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuMenu
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
@@ -57,7 +57,7 @@ fun OffloadPermissionScreen(
 
     var showResetConfirm by remember { mutableStateOf(false) }
 
-    val configEnabled by com.xiaoqiu.config.MinisConfigPermissionStore.enabled.collectAsState()
+    val configEnabled by com.xiaoqiu.config.XiaoQiuConfigPermissionStore.enabled.collectAsState()
 
     val context = LocalContext.current
 
@@ -73,7 +73,7 @@ fun OffloadPermissionScreen(
         // Re-poll once a second so coming back from system Accessibility
         // settings flips the row without a manual refresh.
         while (true) {
-            a11yEnabled = isA11yServiceEnabled(context) || MinisAccessibilityService.getInstance() != null
+            a11yEnabled = isA11yServiceEnabled(context) || XiaoQiuAccessibilityService.getInstance() != null
             // Re-probed each tick so the section disappears by itself once the
             // user allows restricted settings and returns.
             a11yRestricted = !a11yEnabled && RestrictedSettingsManager.isRestricted(context)
@@ -86,21 +86,21 @@ fun OffloadPermissionScreen(
         title = stringResource(R.string.perm_title),
         onBack = onBack,
         actions = {
-            MinisTextButton(onClick = { showResetConfirm = true }) {
+            XiaoQiuTextButton(onClick = { showResetConfirm = true }) {
                 Text(stringResource(R.string.perm_reset_all))
             }
         },
     ) {
-        // T-config: master switch for the minis-config CLI surface.
+        // T-config: master switch for the xiaoqiu-config CLI surface.
         SettingsSection(
             header = stringResource(R.string.perm_section_config_tool),
-            footer = stringResource(R.string.perm_minis_config_desc),
+            footer = stringResource(R.string.perm_xiaoqiu_config_desc),
         ) {
             SettingsSwitchRow(
-                title = stringResource(R.string.perm_allow_minis_config),
+                title = stringResource(R.string.perm_allow_xiaoqiu_config),
                 checked = configEnabled,
                 onCheckedChange = {
-                    com.xiaoqiu.config.MinisConfigPermissionStore.setEnabled(it)
+                    com.xiaoqiu.config.XiaoQiuConfigPermissionStore.setEnabled(it)
                 },
                 showDivider = false,
             )
@@ -188,7 +188,7 @@ fun OffloadPermissionScreen(
                 SettingsRow(
                     title = stringResource(R.string.system_permissions_a11y_restricted_manual),
                     subtitle = stringResource(R.string.system_permissions_a11y_restricted_manual_sub),
-                    // Lands on Minis' own App info page, where "Allow
+                    // Lands on XiaoQiu' own App info page, where "Allow
                     // restricted settings" lives in the overflow menu.
                     onClick = { openAppDetailsSettings(context) },
                     showDivider = false,
@@ -225,17 +225,17 @@ fun OffloadPermissionScreen(
             title = { Text(stringResource(R.string.perm_reset_confirm_title)) },
             text = { Text(stringResource(R.string.perm_reset_confirm_text)) },
             confirmButton = {
-                MinisTextButton(onClick = {
+                XiaoQiuTextButton(onClick = {
                     OffloadPermissionManager.resetAll()
-                    com.xiaoqiu.config.MinisConfigPermissionStore.setEnabled(true)
-                    AppLogger.info("PermissionsScreen", "user confirmed Reset All — all tool permissions cleared, minis-config switch reset to default")
+                    com.xiaoqiu.config.XiaoQiuConfigPermissionStore.setEnabled(true)
+                    AppLogger.info("PermissionsScreen", "user confirmed Reset All — all tool permissions cleared, xiaoqiu-config switch reset to default")
                     showResetConfirm = false
                 }) {
                     Text(stringResource(R.string.perm_reset_confirm))
                 }
             },
             dismissButton = {
-                MinisTextButton(onClick = { showResetConfirm = false }) {
+                XiaoQiuTextButton(onClick = { showResetConfirm = false }) {
                     Text(stringResource(R.string.common_cancel))
                 }
             },
@@ -362,7 +362,7 @@ private fun AgentPolicyRow(
         // edge so it grows down-and-left from the trailing chip instead
         // of Material3's default down-and-right (which on a narrow phone
         // pushed the menu off the screen edge).
-        MinisMenu(expanded = expanded, onDismissRequest = { expanded = false }, alignEnd = true) {
+        XiaoQiuMenu(expanded = expanded, onDismissRequest = { expanded = false }, alignEnd = true) {
             for (level in OffloadPermissionManager.PermissionLevel.entries) {
                 DropdownMenuItem(
                     text = {
@@ -413,7 +413,7 @@ private fun PermissionRow(
         // edge so it grows down-and-left from the trailing chip instead
         // of Material3's default down-and-right (which on a narrow phone
         // pushed the menu off the screen edge).
-        MinisMenu(expanded = expanded, onDismissRequest = { expanded = false }, alignEnd = true) {
+        XiaoQiuMenu(expanded = expanded, onDismissRequest = { expanded = false }, alignEnd = true) {
             for (level in OffloadPermissionManager.PermissionLevel.entries) {
                 DropdownMenuItem(
                     text = {
@@ -478,7 +478,7 @@ private fun levelColor(level: OffloadPermissionManager.PermissionLevel): Color =
 }
 
 private fun isA11yServiceEnabled(context: Context): Boolean {
-    val expected = "${context.packageName}/${MinisAccessibilityService::class.java.name}"
+    val expected = "${context.packageName}/${XiaoQiuAccessibilityService::class.java.name}"
     val enabled = Settings.Secure.getString(
         context.contentResolver,
         Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,
@@ -505,7 +505,7 @@ private fun openAccessibilitySettings(context: Context) {
 }
 
 /**
- * [T-android-restricted-settings] Open Minis' own App info page — "Allow
+ * [T-android-restricted-settings] Open XiaoQiu' own App info page — "Allow
  * restricted settings" lives in that page's overflow (⋮) menu, and there is no
  * public intent that opens the menu item directly.
  */

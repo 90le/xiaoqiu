@@ -42,7 +42,7 @@ import androidx.compose.ui.unit.dp
 import com.xiaoqiu.R
 import com.xiaoqiu.backup.BackupCategory
 import com.xiaoqiu.backup.BackupHistory
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 import com.xiaoqiu.ui.settings.SettingsScaffold
 import com.xiaoqiu.ui.settings.SettingsSection
 
@@ -213,7 +213,7 @@ fun BackupHistoryDetailScreen(
             },
             confirmButton = {
                 Column {
-                    MinisTextButton(onClick = { confirmRemove = false; onRemove() }) {
+                    XiaoQiuTextButton(onClick = { confirmRemove = false; onRemove() }) {
                         Text(
                             stringResource(
                                 if (canDeleteFiles) R.string.backup_history_remove_record_only
@@ -223,7 +223,7 @@ fun BackupHistoryDetailScreen(
                         )
                     }
                     if (canDeleteFiles) {
-                        MinisTextButton(
+                        XiaoQiuTextButton(
                             onClick = { confirmRemove = false; onRemoveWithFiles?.invoke() },
                         ) {
                             Text(
@@ -235,7 +235,7 @@ fun BackupHistoryDetailScreen(
                 }
             },
             dismissButton = {
-                MinisTextButton(onClick = { confirmRemove = false }) {
+                XiaoQiuTextButton(onClick = { confirmRemove = false }) {
                     Text(stringResource(R.string.backup_dest_cancel))
                 }
             },

@@ -1,7 +1,7 @@
 package com.xiaoqiu.debug
 
 import android.content.Context
-import com.xiaoqiu.MinisApp
+import com.xiaoqiu.XiaoQiuApp
 import com.xiaoqiu.data.model.FallbackStrategy
 import com.xiaoqiu.data.model.ImageEndpointMode
 import com.xiaoqiu.data.model.LLMModel
@@ -32,8 +32,8 @@ import java.util.UUID
 internal object ProviderMutationMethods {
 
     private fun repo(context: Context): ProviderRepository =
-        (context.applicationContext as? MinisApp
-            ?: throw RPCException(-32000, "MinisApp not initialized")).providerRepository
+        (context.applicationContext as? XiaoQiuApp
+            ?: throw RPCException(-32000, "XiaoQiuApp not initialized")).providerRepository
 
     // ─── Instances ──────────────────────────────────────────────────────────
 
@@ -124,7 +124,7 @@ internal object ProviderMutationMethods {
         // authentication request chain with a fixed client UA — overriding it can
         // break the handshake or be rejected upstream. Reject any write (including
         // the empty-string clear) for non-apiKey instances, mirroring the
-        // minis-config writer guard in ProvidersCollection.kt.
+        // xiaoqiu-config writer guard in ProvidersCollection.kt.
         val customUserAgent: String? = if (params.has("customUserAgent")) {
             if (current.credentialType != ProviderCredential.apiKey) {
                 throw RPCException(-32602, "Custom User-Agent is only supported for third-party API-key providers. OAuth providers (Anthropic/Codex) use their own authentication UA and cannot be overridden.")

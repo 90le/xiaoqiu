@@ -22,7 +22,7 @@ import com.xiaoqiu.data.repository.ProviderRepository
 import com.xiaoqiu.ui.components.RowLabel
 import com.xiaoqiu.ui.components.SectionTextField
 import com.xiaoqiu.R
-import com.xiaoqiu.ui.components.MinisButton
+import com.xiaoqiu.ui.components.XiaoQiuButton
 
 /**
  * Add Custom Model — adopts the SettingsScaffold/SettingsSection toolkit
@@ -74,7 +74,7 @@ fun AddCustomModelScreen(
         }
 
         Spacer(Modifier.height(20.dp))
-        MinisButton(
+        XiaoQiuButton(
             onClick = {
                 val name = displayName.ifBlank { modelId }
                 val model = LLMModel(

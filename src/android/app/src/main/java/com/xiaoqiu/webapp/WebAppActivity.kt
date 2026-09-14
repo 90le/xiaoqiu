@@ -65,8 +65,8 @@ import androidx.core.view.WindowInsetsControllerCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.webkit.WebViewAssetLoader
 import com.xiaoqiu.MainActivity
-import com.xiaoqiu.ui.components.MinisButton
-import com.xiaoqiu.MinisApp
+import com.xiaoqiu.ui.components.XiaoQiuButton
+import com.xiaoqiu.XiaoQiuApp
 import com.xiaoqiu.R
 import com.xiaoqiu.logging.AppLogger
 import kotlinx.coroutines.Dispatchers
@@ -145,7 +145,7 @@ class WebAppActivity : ComponentActivity() {
         }
 
         lifecycleScope.launch {
-            val app = applicationContext as MinisApp
+            val app = applicationContext as XiaoQiuApp
             val shortcut = withContext(Dispatchers.IO) {
                 app.webAppShortcutRepository.get(shortcutId)
             }
@@ -205,7 +205,7 @@ class WebAppActivity : ComponentActivity() {
 
     /**
      * T-pwa-3: replaces the prior toast-and-finish with an inline error
-     * screen offering an "Open in Minis" escape hatch.
+     * screen offering an "Open in XiaoQiu" escape hatch.
      */
     @OptIn(ExperimentalMaterial3Api::class)
     private fun renderSourceMissing(sourceSessionId: String?) {
@@ -242,8 +242,8 @@ class WebAppActivity : ComponentActivity() {
                                     style = MaterialTheme.typography.bodyMedium,
                                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                                 )
-                                MinisButton(onClick = { openInMinis(sourceSessionId) }) {
-                                    Text(stringResource(R.string.webapp_open_in_minis))
+                                XiaoQiuButton(onClick = { openInXiaoQiu(sourceSessionId) }) {
+                                    Text(stringResource(R.string.webapp_open_in_xiaoqiu))
                                 }
                             }
                         }
@@ -253,7 +253,7 @@ class WebAppActivity : ComponentActivity() {
         }
     }
 
-    private fun openInMinis(sourceSessionId: String?) {
+    private fun openInXiaoQiu(sourceSessionId: String?) {
         val intent = Intent(this, MainActivity::class.java).apply {
             addFlags(Intent.FLAG_ACTIVITY_NEW_TASK or Intent.FLAG_ACTIVITY_CLEAR_TOP)
             sourceSessionId?.let { putExtra(EXTRA_TARGET_SESSION_ID, it) }

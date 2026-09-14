@@ -64,7 +64,7 @@ class GeminiProvider(
             .url(url)
             .post(body.toString().toRequestBody("application/json".toMediaType()))
             // [T-android-default-ua] Brand the outbound UA so server logs
-            // can trace the request back to the Minis build. Gemini has no
+            // can trace the request back to the XiaoQiu build. Gemini has no
             // SDK-specific UA requirement, so the helper's default kicks in.
             .applyUserAgentOverride(null)
             .build()
@@ -111,7 +111,7 @@ class GeminiProvider(
             .url(url)
             .post(body.toString().toRequestBody("application/json".toMediaType()))
             // [T-android-default-ua] same intent as the non-streaming
-            // branch above — brand outbound requests with Minis/<version>.
+            // branch above — brand outbound requests with XiaoQiu/<version>.
             .applyUserAgentOverride(null)
             .build()
 
@@ -326,7 +326,7 @@ class GeminiProvider(
         }
         body.put("contents", contents)
 
-        // [OpenMinis#226] Audio-output models reject systemInstruction with 400
+        // [OpenXiaoQiu#226] Audio-output models reject systemInstruction with 400
         // "Developer instruction is not enabled for this model", the same way they reject
         // a thinking config. Keyed off the declared output modality (the property actually
         // responsible) rather than the model id. Dropping it costs nothing: the preamble

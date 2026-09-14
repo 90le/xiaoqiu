@@ -38,7 +38,7 @@ object AppLogger {
      * early as possible so the read-only helpers below can find
      * `filesDir/logs` even when [init] never ran.
      *
-     * [init] is called from MinisApp.onCreate AFTER the safe-mode
+     * [init] is called from XiaoQiuApp.onCreate AFTER the safe-mode
      * early-return, so on a launch following a crash burst [logDir] stays
      * null — and every reader keyed off it ([listLogFiles],
      * [listLogFileMetas], [readLog], [totalSize]) reported "no logs".
@@ -168,7 +168,7 @@ object AppLogger {
 
     /**
      * Append a logcat tail line to today's log file. Lines that AppLogger
-     * itself produced (tag prefix `Minis.`) are skipped — [log] already wrote
+     * itself produced (tag prefix `XiaoQiu.`) are skipped — [log] already wrote
      * them via [writer], so without this filter every `info()` / `warning()`
      * / etc. call would appear twice in the file (once from [log], once
      * echoed back through logcat).
@@ -181,7 +181,7 @@ object AppLogger {
         val parenIdx = if (slashIdx >= 0) rawLine.indexOf('(', slashIdx) else -1
         if (slashIdx >= 0 && parenIdx > slashIdx) {
             val tag = rawLine.substring(slashIdx + 1, parenIdx).trim()
-            if (tag.startsWith("Minis.") || tag == "AppLogger") return
+            if (tag.startsWith("XiaoQiu.") || tag == "AppLogger") return
         }
         try {
             val now = Date()
@@ -306,7 +306,7 @@ object AppLogger {
         val timestamp = timestampFormat.format(now)
 
         // Also output to logcat
-        val logcatTag = "Minis.$category"
+        val logcatTag = "XiaoQiu.$category"
         when (level) {
             "ERROR" -> Log.e(logcatTag, message)
             "WARN" -> Log.w(logcatTag, message)
@@ -330,7 +330,7 @@ object AppLogger {
         if (date != currentDate || writer == null) {
             writer?.close()
             val dir = logDir ?: throw IllegalStateException("AppLogger not initialized")
-            val file = File(dir, "minis-$date.log")
+            val file = File(dir, "xiaoqiu-$date.log")
             writer = PrintWriter(FileWriter(file, true))
             currentDate = date
         }
@@ -363,7 +363,7 @@ object AppLogger {
     /**
      * Capped, prefix-filtered log listing for the UI.
      *
-     * - `prefix`: filename starts-with filter (e.g. `"minis-"` for daily
+     * - `prefix`: filename starts-with filter (e.g. `"xiaoqiu-"` for daily
      *   logs, `"crash-"` / `"native-crash-"` for crash reports). Empty
      *   string returns all `.log` files.
      * - `limit`: keep at most this many files, sorted by name descending
@@ -410,7 +410,7 @@ object AppLogger {
         // just-deleted file; a FileWriter on an unlinked inode keeps writing to
         // the zombie file (invisible on disk) until currentDate changes or the
         // writer is nulled. Drop it and reset currentDate so the next
-        // getWriter() reopens a fresh minis-<date>.log on the following write.
+        // getWriter() reopens a fresh xiaoqiu-<date>.log on the following write.
         // @Synchronized shares getWriter()'s monitor so this can't race a write.
         writer?.close()
         writer = null

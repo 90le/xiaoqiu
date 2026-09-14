@@ -54,7 +54,7 @@ import com.xiaoqiu.data.model.ProviderInstance
 import com.xiaoqiu.data.repository.ProviderRepository
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Delete
-import com.xiaoqiu.ui.components.MinisAlertDialog
+import com.xiaoqiu.ui.components.XiaoQiuAlertDialog
 import com.xiaoqiu.ui.components.SwipeRowAction
 import com.xiaoqiu.ui.components.SwipeRowActions
 import com.xiaoqiu.logging.AppLogger
@@ -364,7 +364,7 @@ fun ProviderListScreen(
     // ProviderDetailScreen's "Delete Provider" button, so swipe-delete and
     // detail-delete cannot drift apart.
     instanceToDelete?.let { target ->
-        MinisAlertDialog(
+        XiaoQiuAlertDialog(
             onDismissRequest = { instanceToDelete = null },
             title = stringResource(R.string.provider_detail_delete_provider),
             text = stringResource(

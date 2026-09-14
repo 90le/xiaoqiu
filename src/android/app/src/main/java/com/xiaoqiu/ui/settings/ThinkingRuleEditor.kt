@@ -27,7 +27,7 @@ import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import com.xiaoqiu.R
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 import com.xiaoqiu.data.model.ThinkingLevel
 import com.xiaoqiu.provider.thinking.ThinkingRule
 import com.xiaoqiu.provider.thinking.ThinkingResolveContext
@@ -153,7 +153,7 @@ fun ThinkingRuleEditorDialog(
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                 )
                 Column {
-                    MinisTextButton(onClick = { formatMenuOpen = true }) {
+                    XiaoQiuTextButton(onClick = { formatMenuOpen = true }) {
                         Text(stringResource(choice.titleRes))
                     }
                     DropdownMenu(expanded = formatMenuOpen, onDismissRequest = { formatMenuOpen = false }) {
@@ -236,12 +236,12 @@ fun ThinkingRuleEditorDialog(
             }
         },
         confirmButton = {
-            MinisTextButton(onClick = { if (isValid) onSave(buildRule()) }, enabled = isValid) {
+            XiaoQiuTextButton(onClick = { if (isValid) onSave(buildRule()) }, enabled = isValid) {
                 Text(stringResource(R.string.common_save))
             }
         },
         dismissButton = {
-            MinisTextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
+            XiaoQiuTextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
         },
     )
 }

@@ -9,7 +9,7 @@ import android.os.Build
 import android.view.Display
 import android.view.accessibility.AccessibilityNodeInfo
 import com.xiaoqiu.accessibility.AccessibilityRecoveryManager
-import com.xiaoqiu.accessibility.MinisAccessibilityService
+import com.xiaoqiu.accessibility.XiaoQiuAccessibilityService
 import com.xiaoqiu.accessibility.NodeRegistry
 import com.xiaoqiu.accessibility.RestrictedSettingsManager
 import com.xiaoqiu.logging.AppLogger
@@ -21,7 +21,7 @@ import org.json.JSONObject
 
 /**
  * `android-a11y-cli` — UI-layer automation surface backed by
- * [MinisAccessibilityService]. Mirrors the design doc
+ * [XiaoQiuAccessibilityService]. Mirrors the design doc
  * `docs/.../android-accessibility-cli-design.md`.
  *
  * Output envelope `{ ok, data }` / `{ ok:false, error:{code,message} }`
@@ -54,7 +54,7 @@ Groups:
 Output: JSON envelope { ok, data | error: { code, message } }.
 Use --compact to emit on a single line; --quiet to strip the envelope.
 
-First-run: enable "Minis" under Settings → Accessibility, then `service ping`.
+First-run: enable "XiaoQiu" under Settings → Accessibility, then `service ping`.
 """
         private const val SERVICE_HELP = "service status | ping\n"
         private const val UI_HELP = """ui dump | find | info | node | screenshot
@@ -146,12 +146,12 @@ First-run: enable "Minis" under Settings → Accessibility, then `service ping`.
                         "Android is blocking the accessibility toggle for this install " +
                             "(\"Restricted setting\" — applies to apps installed from a " +
                             "downloaded APK). Allow it via App info → ⋮ → Allow restricted " +
-                            "settings, then enable Minis under Settings → Accessibility. " +
+                            "settings, then enable XiaoQiu under Settings → Accessibility. " +
                             "Settings → Permissions → System Permissions has a one-tap fix " +
                             "when Shizuku is available."
                     } else {
                         "Accessibility permission was revoked (this happens after a force-stop). " +
-                            "Re-enable Minis under Settings → Accessibility, or use Settings → " +
+                            "Re-enable XiaoQiu under Settings → Accessibility, or use Settings → " +
                             "Permissions → Integrations to repair it with Shizuku."
                     },
                     exit = 77,
@@ -188,7 +188,7 @@ First-run: enable "Minis" under Settings → Accessibility, then `service ping`.
             }
         } catch (e: NotRunning) {
             err(args, "SERVICE_NOT_RUNNING",
-                e.message ?: "Accessibility service is not running. Enable Minis under Settings → Accessibility.",
+                e.message ?: "Accessibility service is not running. Enable XiaoQiu under Settings → Accessibility.",
                 exit = 77)
         } catch (e: Throwable) {
             AppLogger.warning(TAG, "uncaught: ${e.javaClass.simpleName} ${e.message}")
@@ -202,10 +202,10 @@ First-run: enable "Minis" under Settings → Accessibility, then `service ping`.
         return when (args.positional.getOrNull(1)) {
             null -> NativeOffloadResult(2, SERVICE_HELP)
             "status" -> {
-                val svc = MinisAccessibilityService.getInstance()
+                val svc = XiaoQiuAccessibilityService.getInstance()
                 val data = JSONObject()
                     .put("running", svc != null)
-                    .put("serviceName", MinisAccessibilityService.SERVICE_ID)
+                    .put("serviceName", XiaoQiuAccessibilityService.SERVICE_ID)
                     .put("capabilities", JSONArray().apply {
                         put("retrieveWindowContent"); put("performGestures"); put("watchEvents")
                     })
@@ -219,7 +219,7 @@ First-run: enable "Minis" under Settings → Accessibility, then `service ping`.
                 ok(args, data)
             }
             "ping" -> {
-                if (MinisAccessibilityService.getInstance() != null)
+                if (XiaoQiuAccessibilityService.getInstance() != null)
                     NativeOffloadResult(0, "✓ Accessibility service is running\n")
                 else if (RestrictedSettingsManager.isRestricted(context))
                     NativeOffloadResult(
@@ -229,7 +229,7 @@ First-run: enable "Minis" under Settings → Accessibility, then `service ping`.
                             "Allow it via App info → ⋮ → Allow restricted settings first.\n",
                     )
                 else
-                    NativeOffloadResult(77, "✗ Accessibility service is not running — go to Settings → Accessibility → Minis to enable\n")
+                    NativeOffloadResult(77, "✗ Accessibility service is not running — go to Settings → Accessibility → XiaoQiu to enable\n")
             }
             else -> NativeOffloadResult(2, "$TOOL service: unknown action\n$SERVICE_HELP")
         }
@@ -494,7 +494,7 @@ First-run: enable "Minis" under Settings → Accessibility, then `service ping`.
         return tapXYRaw(svc, x, y, args)
     }
 
-    private fun tapXYRaw(svc: MinisAccessibilityService, x: Int, y: Int, args: OffloadArgs): NativeOffloadResult {
+    private fun tapXYRaw(svc: XiaoQiuAccessibilityService, x: Int, y: Int, args: OffloadArgs): NativeOffloadResult {
         val duration = args.getLong("duration") ?: if (args.hasFlag("long")) 1000L else 50L
         val path = Path().apply {
             moveTo(x.toFloat(), y.toFloat())
@@ -616,7 +616,7 @@ First-run: enable "Minis" under Settings → Accessibility, then `service ping`.
         }
     }
 
-    private fun resolveTargetEditable(svc: MinisAccessibilityService, args: OffloadArgs): AccessibilityNodeInfo? {
+    private fun resolveTargetEditable(svc: XiaoQiuAccessibilityService, args: OffloadArgs): AccessibilityNodeInfo? {
         args.get("node")?.let { id -> return svc.nodeRegistry.get(id) }
         for (root in svc.rootNodes()) {
             val focused = root.findFocus(AccessibilityNodeInfo.FOCUS_INPUT)
@@ -838,7 +838,7 @@ First-run: enable "Minis" under Settings → Accessibility, then `service ping`.
         return ok(args, JSONObject().put("stable", false).put("timedOut", true))
     }
 
-    private fun treeSignature(svc: MinisAccessibilityService): Int {
+    private fun treeSignature(svc: XiaoQiuAccessibilityService): Int {
         var h = 0
         for (root in svc.rootNodes()) {
             h = h * 31 + (root.text?.hashCode() ?: 0)
@@ -887,8 +887,8 @@ First-run: enable "Minis" under Settings → Accessibility, then `service ping`.
         val textContains = args.get("text-contains")
         val sb = StringBuilder()
         val deadline = System.currentTimeMillis() + duration.coerceAtMost(120_000L)
-        val collected = java.util.concurrent.ConcurrentLinkedQueue<MinisAccessibilityService.RecordedEvent>()
-        val listener: (MinisAccessibilityService.RecordedEvent) -> Unit = { collected.offer(it) }
+        val collected = java.util.concurrent.ConcurrentLinkedQueue<XiaoQiuAccessibilityService.RecordedEvent>()
+        val listener: (XiaoQiuAccessibilityService.RecordedEvent) -> Unit = { collected.offer(it) }
         svc.addEventListener(listener)
         try {
             while (System.currentTimeMillis() < deadline) {
@@ -1113,9 +1113,9 @@ First-run: enable "Minis" under Settings → Accessibility, then `service ping`.
 
     private class NotRunning(msg: String) : RuntimeException(msg)
 
-    private fun svcOrThrow(): MinisAccessibilityService =
-        MinisAccessibilityService.getInstance()
-            ?: throw NotRunning("Accessibility service is not running. Enable Minis under Settings → Accessibility.")
+    private fun svcOrThrow(): XiaoQiuAccessibilityService =
+        XiaoQiuAccessibilityService.getInstance()
+            ?: throw NotRunning("Accessibility service is not running. Enable XiaoQiu under Settings → Accessibility.")
 
     private fun ok(args: OffloadArgs, data: Any): NativeOffloadResult {
         val body = JSONObject().put("ok", true).put("data", data).toString()

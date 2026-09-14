@@ -51,8 +51,8 @@ import com.xiaoqiu.agent.shell.BashismDetector
 import com.xiaoqiu.agent.shell.BashismReminder
 import com.xiaoqiu.agent.shell.OnDemandBash
 import com.xiaoqiu.sandbox.ExecutionCoordinator
-import com.xiaoqiu.terminal.MinisOpenUrlBroker
-import com.xiaoqiu.terminal.MinisUrlMarker
+import com.xiaoqiu.terminal.XiaoQiuOpenUrlBroker
+import com.xiaoqiu.terminal.XiaoQiuUrlMarker
 import com.xiaoqiu.tools.AgentTools
 import com.xiaoqiu.tools.FileEditTool
 import com.xiaoqiu.tools.FileReadTool
@@ -396,7 +396,7 @@ class ChatViewModel(
             ToolBlockStatus.RUNNING,
         )
         // T145 phase 1: dedicated tag so the streaming-state debug pipeline
-        // can be filtered with `adb logcat -s Minis.ChatVMStream:D`.
+        // can be filtered with `adb logcat -s XiaoQiu.ChatVMStream:D`.
         // Removed once the retry-state regression is rooted out.
         private const val TAG_STREAM = "ChatVMStream"
         /**
@@ -1557,19 +1557,19 @@ class ChatViewModel(
 
     // ── @ file-mention picker (mirrors iOS AIChatViewModel mention*) ─────
     /**
-     * Per-app singleton — scans /var/minis/{workspace,attachments,shared,
+     * Per-app singleton — scans /var/xiaoqiu/{workspace,attachments,shared,
      * skills,memory}/<sessionId>/ on demand, ranks matches by basename
      * fuzzy score + scope priority. The composer hooks update*MentionMenu*
      * on every keystroke; the popup composes against [mentionEntries].
      */
     val fileMentionIndex: FileMentionIndex by lazy {
         // T219: provide the SAF-mounted external folders so `@<mountName>`
-        // resolves to /var/minis/mounts/<name>/... in the chat composer.
+        // resolves to /var/xiaoqiu/mounts/<name>/... in the chat composer.
         // PRootKernel holds the MountedFoldersStore reference (set at app
-        // launch by MinisApp); reading via a closure means the index sees
+        // launch by XiaoQiuApp); reading via a closure means the index sees
         // an up-to-date snapshot on every rescan without a manual refresh.
         FileMentionIndex(
-            filesDir = java.io.File(context.applicationContext.filesDir, "minis-global"),
+            filesDir = java.io.File(context.applicationContext.filesDir, "xiaoqiu-global"),
             mountsProvider = {
                 com.xiaoqiu.sandbox.PRootKernel
                     .mountEntriesForIndex(context.applicationContext)
@@ -2604,7 +2604,7 @@ class ChatViewModel(
         // For dropped images without a linuxPath, lazily spill to disk so
         // the placeholder still gives the model an addressable reference.
         val attachmentsRoot = activeSessionId?.let { sid ->
-            java.io.File(context.filesDir, "minis-sessions/$sid/attachments")
+            java.io.File(context.filesDir, "xiaoqiu-sessions/$sid/attachments")
         }
         val resolvedPaths = HashMap<ImageBudget.ImagePartId, String?>()
         for (ref in images) {
@@ -2875,7 +2875,7 @@ class ChatViewModel(
      *
      * An unmatched pair is a hard 400 on OpenAI-compatible APIs —
      *     No tool call found for function call output with call_id …
-     * — and because the slice is recomputed deterministically, it repeats on
+     * — and because the slice is recomputed deterxiaoqiutically, it repeats on
      * every retry AND every fallback model, wedging the conversation until the
      * user clears the session. Port of iOS `dropOrphanedToolParts`
      * (AIChatViewModel+Persistence.swift, c7f6a299e).
@@ -3265,7 +3265,7 @@ class ChatViewModel(
      *
      * This deliberately REPLACES [isContextTooLargeError] on the split path.
      * That substring allow-list tried to enumerate how every provider words an
-     * over-length refusal and was provably incomplete — OpenMinis#133's
+     * over-length refusal and was provably incomplete — OpenXiaoQiu#133's
      * `[context_length_exceeded] Your input exceeds the context window of this
      * model` slipped past several variants — and every miss silently disabled
      * splitting, so compaction failed outright instead of retrying smaller.
@@ -3773,13 +3773,13 @@ class ChatViewModel(
      * Session ID that disk/shell-bound resources must use. Until the user sends
      * the first message, `realSessionId` is empty and we fall back to the draft
      * key. After `ensureSession()` runs, this returns the persisted id so
-     * `/var/minis/{attachments,workspace,...}` mounts, browser artifacts, and
+     * `/var/xiaoqiu/{attachments,workspace,...}` mounts, browser artifacts, and
      * the PersistentShell all land in a single directory that survives re-entry.
      */
     internal val activeSessionId: String
         get() = realSessionId.ifEmpty { sessionId }
 
-    /** Public accessor used by ChatScreen to resolve session-scoped minis:// links. */
+    /** Public accessor used by ChatScreen to resolve session-scoped xiaoqiu:// links. */
     val currentSessionId: String
         get() = activeSessionId
 
@@ -3830,8 +3830,8 @@ class ChatViewModel(
             // Bring every disk/shell resource that was opened with the draft
             // id over to the real id *before* agent tools start running against
             // the persisted session — otherwise the first tool call (e.g.
-            // yt-dlp writing into /var/minis/attachments) would land in
-            // minis-sessions/__new__*/… and be orphaned when the user
+            // yt-dlp writing into /var/xiaoqiu/attachments) would land in
+            // xiaoqiu-sessions/__new__*/… and be orphaned when the user
             // re-enters the session and everything is resolved via the real
             // id. See debug report 2026-04-21 (TikTok Chinese filename).
             migrateDraftResources(fromDraft = sessionId, toReal = session.id)
@@ -3876,7 +3876,7 @@ class ChatViewModel(
      * browser artifacts (`persistBrowserArtifact`), and the `BrowserTabPool`'s
      * cookie/state store. Before this migration ran, a tool invocation that
      * happened before the user's first message would write into the draft's
-     * `minis-sessions/__new__{uuid}` directory and become invisible the
+     * `xiaoqiu-sessions/__new__{uuid}` directory and become invisible the
      * moment the VM was recreated under the real id — exactly the symptom
      * observed with the Chinese-named TikTok download that appeared to
      * "disappear" after `yt-dlp` reported success.
@@ -3887,7 +3887,7 @@ class ChatViewModel(
         // we can't reuse it after the migration.
         runCatching { ExecutionCoordinator.sessionDidTerminate(fromDraft) }
 
-        val base = java.io.File(context.filesDir, "minis-sessions")
+        val base = java.io.File(context.filesDir, "xiaoqiu-sessions")
         val draftBase = java.io.File(base, fromDraft)
         if (!draftBase.isDirectory) return
         val realBase = java.io.File(base, toReal).apply { mkdirs() }
@@ -6459,7 +6459,7 @@ class ChatViewModel(
 
             // T132: build the user contentParts in iOS order — caption first
             // (only if non-empty), then per image emit
-            //   text("[attached image: /var/minis/attachments/uploads/<f>]")
+            //   text("[attached image: /var/xiaoqiu/attachments/uploads/<f>]")
             //   ImageData(<bytes>, <mime>)
             // so the caption sits adjacent to the image in the wire payload,
             // and the agent's read_image tool can resolve the same path back
@@ -6620,7 +6620,7 @@ class ChatViewModel(
      *
      *  Also clears [ChatMessage.isAwaitingModelResponse] — without this, an
      *  exception thrown after a tool turn (which sets isAwaitingModelResponse=
-     *  true at runAgentLoop ~4015) leaves the "Minis is thinking" indicator
+     *  true at runAgentLoop ~4015) leaves the "XiaoQiu is thinking" indicator
      *  on screen even though streaming is over. The flag is per-message and
      *  is not implicitly cleared by isStreaming=false. */
     private fun setInlineError(errorText: String) {
@@ -7084,7 +7084,7 @@ class ChatViewModel(
     // The agent loop calls [offloadContextIfNeeded] once per turn just before
     // the next API call. When token usage crosses the policy threshold, large
     // tool outputs in older messages are written to disk under
-    // `filesDir/minis-sessions/<sid>/offloads/tools/` and replaced in
+    // `filesDir/xiaoqiu-sessions/<sid>/offloads/tools/` and replaced in
     // [agentHistory] by `[CONTEXT OFFLOADED] … <linux path>` stubs. The model
     // can later `file_read` the path to retrieve the original content.
     //
@@ -7486,7 +7486,7 @@ class ChatViewModel(
         val allToolInputs = mutableMapOf<String, String>()
 
         // Add placeholder assistant message (once). Mark as awaiting so the
-        // "Minis is thinking" indicator shows during the initial request gap
+        // "XiaoQiu is thinking" indicator shows during the initial request gap
         // before the first stream chunk arrives. Mirrors iOS isAwaitingModelResponse.
         // T300: snapshot the user's current thinking level at message
         // creation so the renderer can hide Deep Thinking blocks for
@@ -7674,7 +7674,7 @@ class ChatViewModel(
                     // placeholder, while `loopExitedNormally = true` below
                     // deliberately skips finalizeAtTurnLimit at the loop tail.
                     //
-                    // Without this the bubble stays on "Minis is thinking"
+                    // Without this the bubble stays on "XiaoQiu is thinking"
                     // forever — the streamJob's finally only clears the GLOBAL
                     // _isStreaming, not the per-message flags. Reachable with no
                     // failure at all: ContextPolicy gives every model with a
@@ -8216,7 +8216,7 @@ class ChatViewModel(
                         // media (gpt-image-2 image). Inline chat display is out
                         // of scope for this change — the image is delivered via
                         // sendMessage→LLMResponse.mediaAttachments for the
-                        // minis-model-use CLI path. No-op here so the chat agent
+                        // xiaoqiu-model-use CLI path. No-op here so the chat agent
                         // loop compiles with the new chunk variant.
                     }
                 }
@@ -8951,7 +8951,7 @@ class ChatViewModel(
             }
 
             // Update UI with tool statuses. Mark as awaiting the next model
-            // response so "Minis is thinking" shows during the network gap
+            // response so "XiaoQiu is thinking" shows during the network gap
             // between tool results being sent and the next turn's first chunk.
             // Mirrors iOS isAwaitingModelResponse.
             withContext(Dispatchers.Main) {
@@ -9148,7 +9148,7 @@ class ChatViewModel(
         return when (name) {
             FileReadTool.NAME -> {
                 val result = FileReadTool.execute(argsJson, activeSessionId, context)
-                // Record skill usage when SKILL.md under /var/minis/skills/<id>/ is read.
+                // Record skill usage when SKILL.md under /var/xiaoqiu/skills/<id>/ is read.
                 if (result.success) {
                     runCatching {
                         val readPath = JSONObject(argsJson).optString("path", "")
@@ -9171,7 +9171,7 @@ class ChatViewModel(
             // resolveSessionHostPath like file_read/write/edit do — without
             // these, the tool consults the global last-writer-wins
             // bindMounts map and would surface another session's
-            // /var/minis/{workspace,attachments,offloads,browser} files.
+            // /var/xiaoqiu/{workspace,attachments,offloads,browser} files.
             ReadImageTool.NAME -> executeReadImageTool(argsJson)
             "shell_execute" -> executeShellCommand(argsJson, toolId, toolBlocks, assistantId, currentText)
             "browser_use" -> executeBrowserUseTool(argsJson)
@@ -9241,7 +9241,7 @@ class ChatViewModel(
             // [T-vision-group-attribution / GH#182] iOS rewrites the tool block's
             // live content here so the card names the model as it works. Android
             // has no equivalent channel — no tool streams partial output to its
-            // card, and the progress label ("Minis is reading Image",
+            // card, and the progress label ("XiaoQiu is reading Image",
             // ChatToolFormatting.kt:102) is a static per-tool string. Building
             // that plumbing is a separate change, so for now the per-attempt
             // signal goes to the log, where a fallback is still traceable. The
@@ -9312,8 +9312,8 @@ class ChatViewModel(
         val b64 = android.util.Base64.encodeToString(
             normalized.toByteArray(Charsets.UTF_8), android.util.Base64.NO_WRAP)
         return "( command -v bash >/dev/null 2>&1 || exit $BASH_MISSING_SENTINEL; " +
-            "printf %s '$b64' | base64 -d > /tmp/.minis-exec-\$\$.sh && " +
-            "bash /tmp/.minis-exec-\$\$.sh; rc=\$?; rm -f /tmp/.minis-exec-\$\$.sh; exit \$rc )"
+            "printf %s '$b64' | base64 -d > /tmp/.xiaoqiu-exec-\$\$.sh && " +
+            "bash /tmp/.xiaoqiu-exec-\$\$.sh; rc=\$?; rm -f /tmp/.xiaoqiu-exec-\$\$.sh; exit \$rc )"
     }
 
     private suspend fun executeShellCommand(
@@ -9411,14 +9411,14 @@ class ChatViewModel(
                 command = command,
                 timeout = timeoutSec * 1000L,
                 lineCallback = lc@{ rawLine ->
-                    // Strip any OSC MinisOpenURL markers emitted by
-                    // /usr/local/bin/minis-open and forward the captured
+                    // Strip any OSC XiaoQiuOpenURL markers emitted by
+                    // /usr/local/bin/xiaoqiu-open and forward the captured
                     // URLs to the broker so the chat screen can present the
                     // in-app preview. Lines that were *entirely* a marker
                     // (nothing visible afterwards) are dropped so the tool
                     // output doesn't grow blank rows.
-                    val (cleanedLine, capturedUrls) = MinisUrlMarker.extract(rawLine)
-                    for (raw in capturedUrls) MinisOpenUrlBroker.offer(raw)
+                    val (cleanedLine, capturedUrls) = XiaoQiuUrlMarker.extract(rawLine)
+                    for (raw in capturedUrls) XiaoQiuOpenUrlBroker.offer(raw)
                     if (cleanedLine.isEmpty() && rawLine.isNotEmpty()) return@lc
 
                     val idx = toolBlocks.indexOfFirst { it.id == toolId }
@@ -9456,8 +9456,8 @@ class ChatViewModel(
             // Also scrub markers from the aggregated one-shot output and
             // broker any URLs that only appeared there (defensive — handles
             // executors that don't fire lineCallback for every line).
-            val (cleanedOutput, oneShotUrls) = MinisUrlMarker.extract(result.output)
-            for (raw in oneShotUrls) MinisOpenUrlBroker.offer(raw)
+            val (cleanedOutput, oneShotUrls) = XiaoQiuUrlMarker.extract(result.output)
+            for (raw in oneShotUrls) XiaoQiuOpenUrlBroker.offer(raw)
             val output = if (cleanedOutput.isBlank()) "(no output)" else cleanedOutput
             val exitInfo = if (result.exitCode != 0) " (exit code ${result.exitCode})" else ""
             // Exit code 124 is the BusyBox/GNU timeout-utility convention for
@@ -9513,8 +9513,8 @@ class ChatViewModel(
             var persistentImagePath: String? = result.imageFilePath
             var inferenceBytes: ByteArray? = null
 
-            // Persist browser screenshots to /var/minis/browser/<session>/ so the
-            // agent can reference them via minis:// in subsequent tool calls
+            // Persist browser screenshots to /var/xiaoqiu/browser/<session>/ so the
+            // agent can reference them via xiaoqiu:// in subsequent tool calls
             // (mirrors iOS AIChatViewModel case "browser_use").
             val base64 = result.base64Image
             var linuxImagePath: String? = null
@@ -9530,21 +9530,21 @@ class ChatViewModel(
                     val persistPath = persistBrowserArtifact(filename, raw)
                     if (persistPath != null) {
                         persistentImagePath = persistPath
-                        linuxImagePath = "/var/minis/browser/$filename"
-                        linuxPathToMinisURL(linuxImagePath)?.let {
-                            output = "$output\nminis_url: $it"
+                        linuxImagePath = "/var/xiaoqiu/browser/$filename"
+                        linuxPathToXiaoQiuURL(linuxImagePath)?.let {
+                            output = "$output\nxiaoqiu_url: $it"
                         }
                     }
                 }
             }
 
-            // Persist fetched files (fetch action) and append minis_url
+            // Persist fetched files (fetch action) and append xiaoqiu_url
             val fetchData = result.fetchedFileData
             val fetchName = result.fetchedFileName
             if (fetchData != null && fetchName != null) {
                 persistBrowserArtifact(fetchName, fetchData)
-                linuxPathToMinisURL("/var/minis/browser/$fetchName")?.let {
-                    output = "$output\nminis_url: $it"
+                linuxPathToXiaoQiuURL("/var/xiaoqiu/browser/$fetchName")?.let {
+                    output = "$output\nxiaoqiu_url: $it"
                 }
             }
 
@@ -9564,15 +9564,15 @@ class ChatViewModel(
     }
 
     /**
-     * Write bytes to <filesDir>/minis-sessions/<sessionId>/browser/<filename>.
-     * That directory is bind-mounted to `/var/minis/browser/` so the agent can
-     * read it back via file_read / file_write / minis:// URLs.
+     * Write bytes to <filesDir>/xiaoqiu-sessions/<sessionId>/browser/<filename>.
+     * That directory is bind-mounted to `/var/xiaoqiu/browser/` so the agent can
+     * read it back via file_read / file_write / xiaoqiu:// URLs.
      * Returns the host absolute path on success, null otherwise.
      */
     private fun persistBrowserArtifact(filename: String, data: ByteArray): String? {
         val sid = activeSessionId.takeIf { it.isNotEmpty() } ?: return null
         return try {
-            val dir = java.io.File(context.filesDir, "minis-sessions/$sid/browser").apply { mkdirs() }
+            val dir = java.io.File(context.filesDir, "xiaoqiu-sessions/$sid/browser").apply { mkdirs() }
             val file = java.io.File(dir, filename)
             file.writeBytes(data)
             file.absolutePath
@@ -9583,11 +9583,11 @@ class ChatViewModel(
     }
 
     /**
-     * Convert a Linux path under /var/minis/ to a percent-encoded minis:// URL.
-     * Mirrors iOS AIChatViewModel.linuxPathToMinisURL.
+     * Convert a Linux path under /var/xiaoqiu/ to a percent-encoded xiaoqiu:// URL.
+     * Mirrors iOS AIChatViewModel.linuxPathToXiaoQiuURL.
      */
-    private fun linuxPathToMinisURL(path: String): String? {
-        val prefix = "/var/minis/"
+    private fun linuxPathToXiaoQiuURL(path: String): String? {
+        val prefix = "/var/xiaoqiu/"
         if (!path.startsWith(prefix)) return null
         val rest = path.removePrefix(prefix)
         val slash = rest.indexOf('/')
@@ -9595,7 +9595,7 @@ class ChatViewModel(
         val namespace = rest.substring(0, slash)
         val filename = rest.substring(slash + 1)
         val encoded = java.net.URLEncoder.encode(filename, "UTF-8").replace("+", "%20")
-        return "minis://$namespace/$encoded"
+        return "xiaoqiu://$namespace/$encoded"
     }
 
     /**
@@ -9768,7 +9768,7 @@ class ChatViewModel(
             //
             // 𝙓𝙄𝙉 TG36302 (0.10): user saw a red "timeout / retry" banner
             // glued to the bottom of the conversation while the agent
-            // continued running (LM Studio tool loop on 30/30, "Minis is
+            // continued running (LM Studio tool loop on 30/30, "XiaoQiu is
             // thinking" indicator). Caused by (a) the fallback-switch branch in
             // runAgentLoop not calling clearInlineError(), and (b) the
             // streaming-side-channel writing every subsequent delta into
@@ -10053,7 +10053,7 @@ class ChatViewModel(
         // Cache-friendly layout: keep `base` byte-stable by stripping out anything
         // that varies per request, then append a "Runtime context" suffix at the
         // very end with all the dynamic bits (date, timezone, locale, configured
-        // minis-model-use count). OpenAI / DeepSeek prompt caching is prefix-
+        // xiaoqiu-model-use count). OpenAI / DeepSeek prompt caching is prefix-
         // based, so the longer the static head, the better the hit rate.
         // Pre-T122 the prompt embedded `Current time: yyyy-MM-dd HH:mm` mid-base,
         // which guaranteed cache misses across minute boundaries — even a quick
@@ -10063,7 +10063,7 @@ class ChatViewModel(
         val tzId = java.util.TimeZone.getDefault().id
         val lang = context.resources.configuration.locales[0].toLanguageTag()
 
-        // Count of agent-loop-visible models for the `minis-model-use` CLI
+        // Count of agent-loop-visible models for the `xiaoqiu-model-use` CLI
         // (exposed as a shell command via the native_offload handler).
         val modelUseCount = try { providerRepository.resolvedAgentLoopEntries().size } catch (_: Exception) { 0 }
 
@@ -10103,7 +10103,7 @@ class ChatViewModel(
 
 Memory system (currently ENABLED):
 - memory_write writes to today's daily log (YYYY-MM-DD.md) — use it for session notes, key facts, project context, things learned, and action items.
-- GLOBAL.md (/var/minis/memory/GLOBAL.md) stores persistent preferences, settings, and general-purpose conventions. To read it, use file_read (NOT memory_get). To update it, use file_read first then file_edit. If GLOBAL.md does not exist yet, use file_write to create it directly.
+- GLOBAL.md (/var/xiaoqiu/memory/GLOBAL.md) stores persistent preferences, settings, and general-purpose conventions. To read it, use file_read (NOT memory_get). To update it, use file_read first then file_edit. If GLOBAL.md does not exist yet, use file_write to create it directly.
 - IMPORTANT: Only write to GLOBAL.md when the user explicitly asks (e.g. 'remember this globally', 'save to global memory'). Before editing, deduplicate and clean up — avoid ambiguity, repetition, or daily-log-style entries. GLOBAL.md should contain only concise, reusable knowledge (preferences, settings, conventions), NOT session logs or transient context.
 - Use memory_get to recall past knowledge before starting tasks — check if there are relevant memories that can help.
 - Proactively save memories (via memory_write to daily log) when you discover user preferences or important patterns — don't wait to be asked.
@@ -10115,7 +10115,7 @@ Memory system (currently ENABLED):
 
 Memory system (currently DISABLED):
 - The user has turned OFF memory injection and memory tools for this session. GLOBAL.md and recent daily logs are NOT included in this prompt, and the memory_write / memory_get tools are NOT available — do not attempt to call them.
-- If the user asks why earlier memories aren't visible, or asks you to save something, tell them memory is currently disabled and point them at the /memory slash command or [Settings → Memory](minis://settings/memory) to re-enable it.
+- If the user asks why earlier memories aren't visible, or asks you to save something, tell them memory is currently disabled and point them at the /memory slash command or [Settings → Memory](xiaoqiu://settings/memory) to re-enable it.
 - SOUL.md (personality / identity) is unaffected by this toggle; the persona section above still applies."""
         }
         val base = identitySection + """You should proactively use shell commands to accomplish the user's tasks — installing packages (apk add), writing and running scripts, managing files, networking, and any other operations a Linux terminal can perform.
@@ -10128,33 +10128,33 @@ Available tools:
 - browser_use: Web browsing (navigate, screenshot, click, type, get_text, scroll, scroll_and_collect, get_readable, get_backbone, fetch, etc.). Starts with a desktop Chrome user agent. Use screenshot to see the page.
   当 browser_use 触达 Google 登录 / OAuth 页（accounts.google.com、signin.google.com、myaccount.google.com、oauth2.googleapis.com 等）或网页返回 "disallowed_useragent" / 403 包含 "browser is not secure" 字样时，**不要重试或尝试登录** — Google 永久禁止 in-app WebView 完成登录，重试只会浪费 turn。改为告诉用户："此页面需要在系统 Chrome 完成登录" 并给出可点击的 Markdown link [在 Chrome 中打开](https://accounts.google.com/...)。点该 link 时 app 会跳出 Custom Tab；用户在 Chrome 完成操作后，请他**把所需结果（邮件正文 / 文档摘要 / 表格数据）粘贴回 chat**，你再继续帮他处理。这是 Android 平台限制，不是 bug。${toolListMemoryBullets}
 
-Shared directory /var/minis/ (bidirectional read/write between shell and app):
-  /var/minis/attachments/ — Media files (images, audio, video). Display inline with ![desc](minis://attachments/filename).
-  /var/minis/workspace/   — Working files (scripts, data, configs). Link with [name](minis://workspace/filename).
-  /var/minis/offloads/    — Auto-saved large outputs. Read with file_read.
-  /var/minis/browser/     — Browser screenshots and extracts.
-  /var/minis/shared/      — Cross-session shared storage for artifacts and documents. Organize by project or topic (e.g. shared/myproject/, shared/datasets/). Do NOT store temporary files here.
-  /var/minis/memory/GLOBAL.md    — Persistent global memory (read-only, user-maintained via Settings).
-  /var/minis/memory/YYYY-MM-DD.md — Daily memory log.
-  /var/minis/mounts/<name>/      — User-mounted external folders from Settings → Mount External Folders. Presence and names vary per user; check this directory first when the task references external/user files. Some mounts may be read-only — file_write / file_edit will reject writes with a clear error message.
+Shared directory /var/xiaoqiu/ (bidirectional read/write between shell and app):
+  /var/xiaoqiu/attachments/ — Media files (images, audio, video). Display inline with ![desc](xiaoqiu://attachments/filename).
+  /var/xiaoqiu/workspace/   — Working files (scripts, data, configs). Link with [name](xiaoqiu://workspace/filename).
+  /var/xiaoqiu/offloads/    — Auto-saved large outputs. Read with file_read.
+  /var/xiaoqiu/browser/     — Browser screenshots and extracts.
+  /var/xiaoqiu/shared/      — Cross-session shared storage for artifacts and documents. Organize by project or topic (e.g. shared/myproject/, shared/datasets/). Do NOT store temporary files here.
+  /var/xiaoqiu/memory/GLOBAL.md    — Persistent global memory (read-only, user-maintained via Settings).
+  /var/xiaoqiu/memory/YYYY-MM-DD.md — Daily memory log.
+  /var/xiaoqiu/mounts/<name>/      — User-mounted external folders from Settings → Mount External Folders. Presence and names vary per user; check this directory first when the task references external/user files. Some mounts may be read-only — file_write / file_edit will reject writes with a clear error message.
 
-The minis:// URL scheme:
-  minis://attachments/file.png  →  /var/minis/attachments/file.png
-  minis://workspace/data.csv    →  /var/minis/workspace/data.csv
-  minis://shared/project/f.txt  →  /var/minis/shared/project/f.txt
+The xiaoqiu:// URL scheme:
+  xiaoqiu://attachments/file.png  →  /var/xiaoqiu/attachments/file.png
+  xiaoqiu://workspace/data.csv    →  /var/xiaoqiu/workspace/data.csv
+  xiaoqiu://shared/project/f.txt  →  /var/xiaoqiu/shared/project/f.txt
 
-IMPORTANT: minis:// URLs are app-internal — they are NOT web URLs. Do NOT pass minis:// action URLs (open_terminal, views, settings) to browser_use — those are app deep links, use Markdown links in chat instead. However, minis:// resource URLs CAN be opened in browser_use with navigate. All directories under /var/minis/ are accessible: workspace, attachments, offloads, shared, etc. The built-in browser fully supports minis:// — HTML pages and all sub-resources (JS, CSS, images, fonts, etc.) referenced via minis:// absolute URLs or relative paths resolve correctly within the current session. When building multi-file web projects, use file_write to create files in the same directory (e.g. /var/minis/workspace/myapp/), then reference sub-resources with relative paths in HTML (e.g. <link href="style.css">, <script src="app.js">, <img src="logo.png">). The browser resolves relative paths against the minis:// base URL automatically. Cross-directory references also work with absolute minis:// URLs (e.g. <img src="minis://attachments/photo.png"> from a workspace HTML page). Navigate to the entry HTML to preview, e.g. minis://workspace/myapp/index.html.
-To display a minis:// URL in chat, write it as a Markdown link or image (e.g. [name](minis://...)) — the app handles it when the user taps it.
-IMPORTANT: minis:// URLs MUST be percent-encoded. Non-ASCII characters (Chinese, emoji, spaces, etc.) in filenames will break Markdown rendering if not encoded. Use the minis_url from tool results directly — it is already encoded. If you construct a minis:// URL manually, percent-encode the filename (e.g. %E4%B8%AD%E6%96%87 for non-ASCII characters).
-When you write files to /var/minis/, the tool result includes a minis_url you can embed directly in Markdown.
-Inline media — use the ![desc](minis://...) image syntax for ALL of images, audio, AND video. The same ![]() syntax renders an inline audio player or video player, not just images:
-  - Images: ![chart](minis://attachments/chart.png)   → inline image (.png/.jpg/.gif/.webp)
-  - Audio:  ![song](minis://attachments/song.mp3)     → inline audio player (.mp3/.m4a/.wav)
-  - Video:  ![clip](minis://attachments/clip.mp4)     → inline video player (.mp4/.mov/.m4v)
+IMPORTANT: xiaoqiu:// URLs are app-internal — they are NOT web URLs. Do NOT pass xiaoqiu:// action URLs (open_terminal, views, settings) to browser_use — those are app deep links, use Markdown links in chat instead. However, xiaoqiu:// resource URLs CAN be opened in browser_use with navigate. All directories under /var/xiaoqiu/ are accessible: workspace, attachments, offloads, shared, etc. The built-in browser fully supports xiaoqiu:// — HTML pages and all sub-resources (JS, CSS, images, fonts, etc.) referenced via xiaoqiu:// absolute URLs or relative paths resolve correctly within the current session. When building multi-file web projects, use file_write to create files in the same directory (e.g. /var/xiaoqiu/workspace/myapp/), then reference sub-resources with relative paths in HTML (e.g. <link href="style.css">, <script src="app.js">, <img src="logo.png">). The browser resolves relative paths against the xiaoqiu:// base URL automatically. Cross-directory references also work with absolute xiaoqiu:// URLs (e.g. <img src="xiaoqiu://attachments/photo.png"> from a workspace HTML page). Navigate to the entry HTML to preview, e.g. xiaoqiu://workspace/myapp/index.html.
+To display a xiaoqiu:// URL in chat, write it as a Markdown link or image (e.g. [name](xiaoqiu://...)) — the app handles it when the user taps it.
+IMPORTANT: xiaoqiu:// URLs MUST be percent-encoded. Non-ASCII characters (Chinese, emoji, spaces, etc.) in filenames will break Markdown rendering if not encoded. Use the xiaoqiu_url from tool results directly — it is already encoded. If you construct a xiaoqiu:// URL manually, percent-encode the filename (e.g. %E4%B8%AD%E6%96%87 for non-ASCII characters).
+When you write files to /var/xiaoqiu/, the tool result includes a xiaoqiu_url you can embed directly in Markdown.
+Inline media — use the ![desc](xiaoqiu://...) image syntax for ALL of images, audio, AND video. The same ![]() syntax renders an inline audio player or video player, not just images:
+  - Images: ![chart](xiaoqiu://attachments/chart.png)   → inline image (.png/.jpg/.gif/.webp)
+  - Audio:  ![song](xiaoqiu://attachments/song.mp3)     → inline audio player (.mp3/.m4a/.wav)
+  - Video:  ![clip](xiaoqiu://attachments/clip.mp4)     → inline video player (.mp4/.mov/.m4v)
 Do NOT use the [text](url) link form for audio/video when you want them to play inline — that only produces a tappable link. Use ![]() to embed an actual player.
-For non-media files, use Markdown links: [filename](minis://workspace/filename).
-Tappable link previews: text/code (.py/.json/.md/etc), images, audio, video, HTML, and PDF files open native previews when the user taps a [name](minis://...) link.
-Use Markdown links for all non-media minis:// files — the user can tap to preview them directly in chat.
+For non-media files, use Markdown links: [filename](xiaoqiu://workspace/filename).
+Tappable link previews: text/code (.py/.json/.md/etc), images, audio, video, HTML, and PDF files open native previews when the user taps a [name](xiaoqiu://...) link.
+Use Markdown links for all non-media xiaoqiu:// files — the user can tap to preview them directly in chat.
 
 File creation guidelines:
 - Use file_write to CREATE new files. Use file_edit to MODIFY existing files. The shell is BusyBox ash: heredoc syntax (cat << EOF, python3 << 'EOF') may mis-parse braces, quotes, or special characters and execute abnormally — avoid it whenever possible, and prefer file_write over echo/printf for writing file contents. When you hit escaping or parsing errors with long inline content, write the content to a file first (file_write), then pass or execute the file (e.g. `python3 /tmp/script.py`).
@@ -10165,7 +10165,7 @@ File creation guidelines:
 - Also (BusyBox ash, NOT bash): `**` recursive glob (globstar) is NOT supported. Use `find <dir> -name '*.ext'` for recursive file search, and pipe to `xargs` for tools like `wc`. Brace expansion ({a,b,c}) and bash arrays (arr=(...), ${'$'}{arr[@]}) are also unsupported — use space-separated strings with a for loop or multiple arguments instead.
 - Python packages: many PyPI packages (numpy, pandas, scipy, pillow, etc.) lack musllinux_aarch64 wheels and will fail to build from source. Use Alpine's native packages instead: `apk search py3-<name>` then `apk add py3-numpy py3-pandas py3-matplotlib py3-pillow py3-scipy py3-requests`. Only fall back to `pip install` for pure-Python packages not available via apk. For matplotlib, always set `matplotlib.use('Agg')` before importing pyplot — there is no display server in the sandbox.
 - Background services: each shell_execute runs in an isolated process. When starting a background server (e.g. `python3 -m http.server &`), you MUST redirect stdout/stderr to avoid SIGPIPE when the shell exits: `python3 -m http.server 8765 > /dev/null 2>&1 &`. Without redirection the server dies silently after the command finishes.
-- File search: when looking for user files, do NOT scan the whole filesystem. Search under /var/minis/ first (workspace/attachments/shared for the current session, mounts/* for user-provided external folders). Only widen the scope if the file is clearly not under /var/minis/.
+- File search: when looking for user files, do NOT scan the whole filesystem. Search under /var/xiaoqiu/ first (workspace/attachments/shared for the current session, mounts/* for user-provided external folders). Only widen the scope if the file is clearly not under /var/xiaoqiu/.
 
 Tool call style:
 - Default: do not narrate routine, low-risk tool calls — just call the tool directly.
@@ -10179,8 +10179,8 @@ Tone and style:
 - Be concise. Prefer action over explanation — when the user asks for something that can be done via shell, do it directly.
 
 Android-only tools (android-* CLIs):
-CLI tools at /usr/local/bin with the `android-` prefix give you access to Android framework capabilities and on-device control. Invoke them from shell_execute like any other binary — they are already on PATH. Each tool prints JSON (or a short human-readable line) and supports --help for full usage. Tools gated by Shizuku or AccessibilityService return permission_denied when not granted — handle that gracefully and point the user at [Settings → Permissions](minis://settings/permissions).
-- android-alarm — schedule alarms/timers in the system Clock app (`schedule <HH:MM> --label <L> [--repeat ONCE|DAILY|WEEKDAYS]`, `timer <seconds> --label <L>`, `open`). Alarms/timers are saved into the user's Android Clock — list/cancel are not supported (no system query API); tell the user to manage them from the Clock app's Alarms/Timers tabs (or `android-alarm open` / minis://views/alarm).
+CLI tools at /usr/local/bin with the `android-` prefix give you access to Android framework capabilities and on-device control. Invoke them from shell_execute like any other binary — they are already on PATH. Each tool prints JSON (or a short human-readable line) and supports --help for full usage. Tools gated by Shizuku or AccessibilityService return permission_denied when not granted — handle that gracefully and point the user at [Settings → Permissions](xiaoqiu://settings/permissions).
+- android-alarm — schedule alarms/timers in the system Clock app (`schedule <HH:MM> --label <L> [--repeat ONCE|DAILY|WEEKDAYS]`, `timer <seconds> --label <L>`, `open`). Alarms/timers are saved into the user's Android Clock — list/cancel are not supported (no system query API); tell the user to manage them from the Clock app's Alarms/Timers tabs (or `android-alarm open` / xiaoqiu://views/alarm).
 - android-calendar — read/write the device calendar (`list --start YYYY-MM-DD [--end ...] [--max N]`; `create --title <T> --start <ISO> [--end <ISO>] [--description <D>] [--location <L>] [--all-day]`).
 - android-clipboard — `get | set <text> [--label L] | clear`.
 - android-contacts — `list [--max N] | search <query> [--max N] | get <id> | delete <id>`. Requires READ_CONTACTS (delete also needs WRITE_CONTACTS).
@@ -10195,17 +10195,17 @@ CLI tools at /usr/local/bin with the `android-` prefix give you access to Androi
 - android-weather <latitude> <longitude> — Open-Meteo forecast (current + hourly + daily). No API key needed.
 - android-shizuku-cli — invoke privileged Android system APIs (package management, settings, system commands) via Shizuku when granted. Curated subcommands return structured JSON; for anything not covered, fall back to `android-shizuku-cli exec <any shell command>` which runs the command via `sh -c` with Shizuku privilege (same surface as `adb shell`). Run with no args (or --help) for the subcommand list.
 - android-a11y-cli — drive system UI (read screen, tap, type, swipe, scroll) via the Android AccessibilityService when enabled. Run with no args (or --help) for the subcommand list.
-- minis-open <url-or-path>: Opens a resource inside Minis without leaving the chat. Accepts http/https URLs (→ built-in WebKit preview) and chat-resource file paths under /var/minis/** (→ built-in file preview, routed by extension: images to the image viewer, .md to markdown preview, .html to HTML preview, .pdf/office docs to QuickLook, audio/video to the media player, else share sheet). Examples: minis-open https://example.com, minis-open /var/minis/workspace/report.md, minis-open /var/minis/attachments/chart.png. Prefer this over android-open for anything that can be previewed in-app so the user doesn't lose conversation context. Use android-open for non-web schemes (tel:, mailto:, geo:, intent:, etc.) or when the user explicitly wants the system handler.
-- minis-sessions-cli: Manage chat sessions. `list` recent or by date range, `search --keywords` cross-session, `messages --id` to read, `send` to create/continue a session, `retry` to re-run, `status` to check, `open` to navigate the app UI. Run --help for full options.
-- minis-model-use: Invoke other LLM models pre-configured by the user. Use `minis-model-use list` to see them (includes each model's modality capabilities like image_output, audio_output, etc.), `minis-model-use search <query>` to filter by name/provider. `minis-model-use run --model <id_or_name>` sends an OpenAI-compatible messages request; pass input via --input <json_file> or stdin, output goes to stdout or --output <path>. The OpenAI shape is the PRIMARY input for every model and modality; standard params are auto-converted to the underlying provider, so do not hand-write provider-native bodies as the primary input. For provider-specific extras the standard schema doesn't model (web-search plugins, image-to-image fields, TTS/video or other custom endpoints), escape hatches exist for OpenAI-compatible providers (they error or are ignored on Anthropic/Gemini models): `extra_body` (object merged verbatim into the request body), a custom `endpoint` path, and a top-level `passthrough` envelope for fully verbatim requests with RAW (unparsed) responses. Results may carry `warnings` (fields that were ignored/downgraded and why) and `applied_extras` (which extras actually took effect) — read them to self-correct. Run --help for the full contract before using these. Models may support multimodal output (image generation, TTS/audio, video) — check the modalities field in list output. For image_output models, pass generation params in the input JSON: top-level `n`/`size`/`quality`/`prompt` (OpenAI /images/generations style) or `generation_config.{aspect_ratio,image_size,number_of_images,person_generation}` (Gemini). Run with --help for full usage.
-- minis-config: Read or change Minis settings programmatically. Run `minis-config --help` for subcommands and `minis-config topic-help <topic>` for details on a specific area. For array-valued fields (e.g. `models`, `groups`, `envvars`, `defaults.agentLoopEntries`) the `get` subcommand accepts `--filter <keywords>` (whitespace-AND, case-insensitive substring match against each element's JSON) and `--page <N> --page-size <N>` (default 20, max 100) — use these instead of dumping the full list when you only need a subset, and check the response's `pagination` / `agent_hint` fields for the next-page command. Every write triggers an in-app confirmation sheet and is logged to a revertable audit (1000-entry rolling log). After a successful change the response includes a `user_message` field — relay it (or paraphrase) so the user knows how to review or revert via Settings → Logs → Config Changes. If the call returns `permission_denied`, the user has disabled minis-config in [Settings → Permissions](minis://settings/permissions); relay that message and don't retry. You CAN add new providers and write their `apiKey` (literal string OR a `${'$'}${'$'}ENV_VAR` reference to copy from an env var at write time), but `get` never echoes API keys / OAuth tokens / env var values back — those reads return `permission_denied` by design. OAuth tokens and env var values are not settable via this tool; for an env var, point the user at [Set ENV_NAME](minis://settings/environments?create_key=ENV_NAME&create_value=) so they enter the value themselves.
-- minis-scheduled: Create and manage scheduled tasks — prompts that run automatically at a chosen time. `minis-scheduled create --time HH:MM --prompt "..." [--label L] [--repeat once|daily|weekdays|custom --days mon,tue,...] [--target new|follow-up|rerun --session <id> --message <id>] [--model <modelId>] [--start YYYY-MM-DD] [--end YYYY-MM-DD]` schedules it; `list` shows existing tasks (with nextTriggerMs and run history), `delete --id <taskId>`, `enable`/`disable --id <taskId>`, and `run --id <taskId>` fires one immediately. Target modes: `new` runs the prompt in a fresh chat; `follow-up` appends the prompt to an existing chat (--session); `rerun` re-runs an existing chat (--session) from a chosen user message (--message). Use this when the user asks to "remind me / do X every morning / run this later / schedule a task". Run --help for full usage.
-Interactive terminal: minis://open_terminal opens a terminal for tasks that require interactive stdin (passwords, ssh, TUI apps like htop/vi). Write it as a Markdown link in your response — the app opens it when tapped. The optional init_command parameter pre-fills (NOT executes) a command; it MUST be fully percent-encoded (spaces → %20, & → %26, | → %7C, etc.). Only use this for genuinely interactive sessions — for everything else, use shell_execute. Examples: [Open Terminal](minis://open_terminal), [Login to SSH](minis://open_terminal?init_command=ssh%20user%40host).
+- xiaoqiu-open <url-or-path>: Opens a resource inside XiaoQiu without leaving the chat. Accepts http/https URLs (→ built-in WebKit preview) and chat-resource file paths under /var/xiaoqiu/** (→ built-in file preview, routed by extension: images to the image viewer, .md to markdown preview, .html to HTML preview, .pdf/office docs to QuickLook, audio/video to the media player, else share sheet). Examples: xiaoqiu-open https://example.com, xiaoqiu-open /var/xiaoqiu/workspace/report.md, xiaoqiu-open /var/xiaoqiu/attachments/chart.png. Prefer this over android-open for anything that can be previewed in-app so the user doesn't lose conversation context. Use android-open for non-web schemes (tel:, mailto:, geo:, intent:, etc.) or when the user explicitly wants the system handler.
+- xiaoqiu-sessions-cli: Manage chat sessions. `list` recent or by date range, `search --keywords` cross-session, `messages --id` to read, `send` to create/continue a session, `retry` to re-run, `status` to check, `open` to navigate the app UI. Run --help for full options.
+- xiaoqiu-model-use: Invoke other LLM models pre-configured by the user. Use `xiaoqiu-model-use list` to see them (includes each model's modality capabilities like image_output, audio_output, etc.), `xiaoqiu-model-use search <query>` to filter by name/provider. `xiaoqiu-model-use run --model <id_or_name>` sends an OpenAI-compatible messages request; pass input via --input <json_file> or stdin, output goes to stdout or --output <path>. The OpenAI shape is the PRIMARY input for every model and modality; standard params are auto-converted to the underlying provider, so do not hand-write provider-native bodies as the primary input. For provider-specific extras the standard schema doesn't model (web-search plugins, image-to-image fields, TTS/video or other custom endpoints), escape hatches exist for OpenAI-compatible providers (they error or are ignored on Anthropic/Gemini models): `extra_body` (object merged verbatim into the request body), a custom `endpoint` path, and a top-level `passthrough` envelope for fully verbatim requests with RAW (unparsed) responses. Results may carry `warnings` (fields that were ignored/downgraded and why) and `applied_extras` (which extras actually took effect) — read them to self-correct. Run --help for the full contract before using these. Models may support multimodal output (image generation, TTS/audio, video) — check the modalities field in list output. For image_output models, pass generation params in the input JSON: top-level `n`/`size`/`quality`/`prompt` (OpenAI /images/generations style) or `generation_config.{aspect_ratio,image_size,number_of_images,person_generation}` (Gemini). Run with --help for full usage.
+- xiaoqiu-config: Read or change XiaoQiu settings programmatically. Run `xiaoqiu-config --help` for subcommands and `xiaoqiu-config topic-help <topic>` for details on a specific area. For array-valued fields (e.g. `models`, `groups`, `envvars`, `defaults.agentLoopEntries`) the `get` subcommand accepts `--filter <keywords>` (whitespace-AND, case-insensitive substring match against each element's JSON) and `--page <N> --page-size <N>` (default 20, max 100) — use these instead of dumping the full list when you only need a subset, and check the response's `pagination` / `agent_hint` fields for the next-page command. Every write triggers an in-app confirmation sheet and is logged to a revertable audit (1000-entry rolling log). After a successful change the response includes a `user_message` field — relay it (or paraphrase) so the user knows how to review or revert via Settings → Logs → Config Changes. If the call returns `permission_denied`, the user has disabled xiaoqiu-config in [Settings → Permissions](xiaoqiu://settings/permissions); relay that message and don't retry. You CAN add new providers and write their `apiKey` (literal string OR a `${'$'}${'$'}ENV_VAR` reference to copy from an env var at write time), but `get` never echoes API keys / OAuth tokens / env var values back — those reads return `permission_denied` by design. OAuth tokens and env var values are not settable via this tool; for an env var, point the user at [Set ENV_NAME](xiaoqiu://settings/environments?create_key=ENV_NAME&create_value=) so they enter the value themselves.
+- xiaoqiu-scheduled: Create and manage scheduled tasks — prompts that run automatically at a chosen time. `xiaoqiu-scheduled create --time HH:MM --prompt "..." [--label L] [--repeat once|daily|weekdays|custom --days mon,tue,...] [--target new|follow-up|rerun --session <id> --message <id>] [--model <modelId>] [--start YYYY-MM-DD] [--end YYYY-MM-DD]` schedules it; `list` shows existing tasks (with nextTriggerMs and run history), `delete --id <taskId>`, `enable`/`disable --id <taskId>`, and `run --id <taskId>` fires one immediately. Target modes: `new` runs the prompt in a fresh chat; `follow-up` appends the prompt to an existing chat (--session); `rerun` re-runs an existing chat (--session) from a chosen user message (--message). Use this when the user asks to "remind me / do X every morning / run this later / schedule a task". Run --help for full usage.
+Interactive terminal: xiaoqiu://open_terminal opens a terminal for tasks that require interactive stdin (passwords, ssh, TUI apps like htop/vi). Write it as a Markdown link in your response — the app opens it when tapped. The optional init_command parameter pre-fills (NOT executes) a command; it MUST be fully percent-encoded (spaces → %20, & → %26, | → %7C, etc.). Only use this for genuinely interactive sessions — for everything else, use shell_execute. Examples: [Open Terminal](xiaoqiu://open_terminal), [Login to SSH](xiaoqiu://open_terminal?init_command=ssh%20user%40host).
 
 Environment variables:
 - Shell environment variables may contain sensitive API keys, tokens, or passwords. NEVER echo, print, cat, or otherwise output their values to stdout/stderr. Always reference them by variable name (e.g. ${'$'}API_KEY) inside scripts or commands — never inline the literal value.
-- When a skill or task requires an environment variable that is not set, tell the user which variable is missing and provide a tappable deep link to create it: [Set ENV_NAME](minis://settings/environments?create_key=ENV_NAME&create_value=) — the user can tap it to open the Environment Variables page with the key pre-filled.
-- Settings deep links: when you tell the user "go to Settings → X" or want to point them at a specific setting, prefer a Markdown link `[Label](minis://settings/<path>)` over plain prose. Available paths: providers (list), providers/<instanceId> (one provider), model-groups (incl. Agent Loop), model-groups/<groupId>, usage (token usage), skills, memory, storage, shared-folders (Shared Folders: /var/minis/{shared,skills,memory}), mount-external (Mount External Folders), logs, appearance, background, about, permissions, environments[?create_key=K&create_value=V[&create_note=N]], rootfs (also reachable as mirrors). Unknown paths fall back to Settings home, but prefer the exact path so users land where they want. These settings/action links are app deep links — render them as Markdown links in chat (same action-vs-resource rule as the minis:// section above: only /var/minis resource URLs may go to browser_use).
+- When a skill or task requires an environment variable that is not set, tell the user which variable is missing and provide a tappable deep link to create it: [Set ENV_NAME](xiaoqiu://settings/environments?create_key=ENV_NAME&create_value=) — the user can tap it to open the Environment Variables page with the key pre-filled.
+- Settings deep links: when you tell the user "go to Settings → X" or want to point them at a specific setting, prefer a Markdown link `[Label](xiaoqiu://settings/<path>)` over plain prose. Available paths: providers (list), providers/<instanceId> (one provider), model-groups (incl. Agent Loop), model-groups/<groupId>, usage (token usage), skills, memory, storage, shared-folders (Shared Folders: /var/xiaoqiu/{shared,skills,memory}), mount-external (Mount External Folders), logs, appearance, background, about, permissions, environments[?create_key=K&create_value=V[&create_note=N]], rootfs (also reachable as mirrors). Unknown paths fall back to Settings home, but prefer the exact path so users land where they want. These settings/action links are app deep links — render them as Markdown links in chat (same action-vs-resource rule as the xiaoqiu:// section above: only /var/xiaoqiu resource URLs may go to browser_use).
 - To check if a variable is set, use `[ -n "${'$'}VAR" ] && echo 'set' || echo 'not set'`. NEVER use echo ${'$'}VAR, printenv VAR, or any command that would output the actual value into the conversation context.${memorySystemSection}
 
 Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended, so in-app scheduled scripts may not run as expected. For recurring tasks that must fire while the app is backgrounded, use the native alarm tool (AlarmManager) or tell the user to set up a system-level schedule (Google Calendar event, Tasker automation, etc.). (Waiting or polling WITHIN the current turn is different — that is what shell_execute `delay` chains are for, per the shell_execute notes above.)"""
@@ -10267,12 +10267,12 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
                 append(dailyMemoryFragment)
             }
             // Runtime context goes last so the prefix above stays byte-stable
-            // across requests within the same day. Keep ordering deterministic
+            // across requests within the same day. Keep ordering deterxiaoqiutic
             // (date → tz → lang → model count) — any reorder defeats the cache.
             append("\n\nRuntime context:\n")
             append("- Current date: ").append(dateStr).append(" (").append(tzId).append(")\n")
             append("- Device language: ").append(lang).append("\n")
-            append("- minis-model-use models available: ").append(modelUseCount)
+            append("- xiaoqiu-model-use models available: ").append(modelUseCount)
         }
     }
 
@@ -10397,7 +10397,7 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
         // T132: iOS-parity additions so the model sees the attachment as
         // a real file in the agent's sandbox (read_image / shell_execute can
         // open these paths).
-        //   imageUploadPaths: one /var/minis/attachments/uploads/<safe> per
+        //   imageUploadPaths: one /var/xiaoqiu/attachments/uploads/<safe> per
         //     inlined image, in the same order as `imageParts`.
         //   attachedFilesXml:  null when no attachments, otherwise the
         //     <user-attached-files> XML block iOS appends to the user turn.
@@ -10439,13 +10439,13 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
         val nonImageMediaRefPartsJson = mutableListOf<String>()
         val imageUploadPaths = mutableListOf<String>()
         // T132: also write the resized bytes into the session's iSH-bound
-        // attachments dir (filesDir/minis-sessions/<sid>/attachments/uploads/),
-        // which is mounted at /var/minis/attachments/ inside iSH. This makes
+        // attachments dir (filesDir/xiaoqiu-sessions/<sid>/attachments/uploads/),
+        // which is mounted at /var/xiaoqiu/attachments/ inside iSH. This makes
         // the same image accessible to the agent via shell tools (read_image
         // / cat / file) and matches the iOS uploads-directory convention.
         val uploadsHostDir = java.io.File(
             context.filesDir,
-            "minis-sessions/$sessionId/attachments/uploads",
+            "xiaoqiu-sessions/$sessionId/attachments/uploads",
         ).apply { mkdirs() }
         // Metadata captured per attachment for the <user-attached-files> XML.
         data class UploadMeta(val linuxPath: String, val size: Long, val modifiedIso: String)
@@ -10507,7 +10507,7 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
                     Log.w(TAG, "uploads write failed for ${attachment.fileName}: ${e.message}")
                     false
                 }
-                val linuxPath = if (uploadOk) "/var/minis/attachments/uploads/$safeName" else null
+                val linuxPath = if (uploadOk) "/var/xiaoqiu/attachments/uploads/$safeName" else null
                 if (linuxPath != null) {
                     imageUploadPaths.add(linuxPath)
                     metas.add(UploadMeta(linuxPath = linuxPath, size = rawBytes.size.toLong(), modifiedIso = nowStr))
@@ -10569,7 +10569,7 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
                 nonImageUris.add(Uri.fromFile(java.io.File(mediaStore.mediaBaseDir, ref.relativePath)))
             }
 
-            val linuxPath = "/var/minis/attachments/uploads/$safeName"
+            val linuxPath = "/var/xiaoqiu/attachments/uploads/$safeName"
             metas.add(UploadMeta(linuxPath = linuxPath, size = dest.length(), modifiedIso = nowStr))
         }
 
@@ -10616,10 +10616,10 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
         val xml = if (metas.isEmpty()) null else buildString {
             append("<user-attached-files>\n")
             for (m in metas) {
-                val urlPath = m.linuxPath.removePrefix("/var/minis/")
+                val urlPath = m.linuxPath.removePrefix("/var/xiaoqiu/")
                 append("  <file path=\"")
                 append(m.linuxPath)
-                append("\" url=\"minis://")
+                append("\" url=\"xiaoqiu://")
                 append(urlPath)
                 append("\" size=\"")
                 append(m.size)
@@ -10783,7 +10783,7 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
         // inventory (non-image file paths/sizes the model uses to `cat` the
         // file). iOS persists this same XML as a trailing text part so it
         // round-trips through retry / rerun / session-reload unchanged — the
-        // model keeps seeing the /var/minis/attachments/uploads/... paths.
+        // model keeps seeing the /var/xiaoqiu/attachments/uploads/... paths.
         // Android previously only added it to the in-memory agentHistory and
         // never persisted it, so a retry silently dropped the file inventory.
         // Persist it here as a text part (iOS parity); toLLMMessage restores
@@ -11506,7 +11506,7 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
         if (lastIdx < 0) return
         var last = msgs[lastIdx]
 
-        // T73: clear "Minis is thinking…" the moment the user taps Stop.
+        // T73: clear "XiaoQiu is thinking…" the moment the user taps Stop.
         // isAwaitingModelResponse is set true at runAgentLoop entry (≈ line
         // 2785) so the typing indicator shows during the initial request
         // gap before the first stream chunk. The cancel paths below didn't
@@ -11574,7 +11574,7 @@ Scheduled tasks: crontab / at / nohup loops will stop when the app is suspended,
         // Stop fired while still in the pre-first-chunk thinking gap (no
         // partial text, no tool_use emitted, no committed history for this
         // turn). The placeholder ChatMessage runAgentLoop pushed at L5248 is
-        // not in the DB and would otherwise render as an empty "Minis" header
+        // not in the DB and would otherwise render as an empty "XiaoQiu" header
         // bubble with no body. Drop it so the UI snaps back to idle the
         // instant the user taps Stop. Mirrors the iOS #566/#569 boundary:
         // a candidate WITH real text or any emitted tool_use is kept (handled

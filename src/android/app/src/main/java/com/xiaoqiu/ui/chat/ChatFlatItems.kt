@@ -138,9 +138,9 @@ import com.xiaoqiu.BuildConfig
 import com.xiaoqiu.R
 import com.xiaoqiu.data.FileMentionIndex
 import com.xiaoqiu.logging.AppLogger
-import com.xiaoqiu.ui.components.MinisAlertDialog
-import com.xiaoqiu.ui.components.MinisMenu
-import com.xiaoqiu.ui.components.MinisMenuDivider
+import com.xiaoqiu.ui.components.XiaoQiuAlertDialog
+import com.xiaoqiu.ui.components.XiaoQiuMenu
+import com.xiaoqiu.ui.components.XiaoQiuMenuDivider
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -269,7 +269,7 @@ import com.xiaoqiu.data.repository.MemoryRepository
 import com.xiaoqiu.data.repository.ProviderRepository
 import com.xiaoqiu.ui.browser.BrowserSheet
 import com.xiaoqiu.ui.theme.ChatColors
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 
 internal sealed class FlatChatItem {
     abstract val key: String
@@ -587,7 +587,7 @@ internal fun buildFlatChatItems(
             continue
         }
         // System messages (slash-command notices, compact divider, etc.) render
-        // as horizontal-divider rows — no "Minis" attribution, no card. Skip
+        // as horizontal-divider rows — no "XiaoQiu" attribution, no card. Skip
         // the assistant header so each info block stands on its own. Mirrors
         // iOS systemDividerRow / compactDividerRow.
         val isSystem = message.role == "system"
@@ -600,7 +600,7 @@ internal fun buildFlatChatItems(
         // T83: when Resume creates a fresh assistant bubble after the user
         // stopped a streaming turn, the previous (cancelled) assistant
         // message is right before this one in the list. Visually they should
-        // read as one continuous turn — suppress the duplicate "Minis"
+        // read as one continuous turn — suppress the duplicate "XiaoQiu"
         // header. Skip system rows when looking back since they render as
         // dividers, not as separate speaker turns. iOS achieves this by
         // reusing the existing ChatMessage in runAgentLoop(resumingAt:);

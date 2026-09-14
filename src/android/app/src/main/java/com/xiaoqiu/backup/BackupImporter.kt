@@ -20,7 +20,7 @@ import java.util.Locale
 import java.util.TimeZone
 
 /**
- * Restores a `.minisbak` package on Android (docs/backup-restore-design.md §8),
+ * Restores a `.xiaoqiubak` package on Android (docs/backup-restore-design.md §8),
  * mirroring `src/ios/Agent/Backup/BackupImporter.swift`.
  *
  * Scope: **Merge mode** (§8.2's default) — match by id, newer `updatedAt` wins.
@@ -542,7 +542,7 @@ class BackupImporter(
 
         // The session file trees. Containment root is the sessions directory:
         // a path in the index that escapes it is refused outright.
-        val sessionsRoot = File(context.filesDir, "minis-sessions")
+        val sessionsRoot = File(context.filesDir, "xiaoqiu-sessions")
         val files = BackupRestoreFiles.restore(
             packageRoot = root,
             fileIndex = fileIndex,
@@ -565,7 +565,7 @@ class BackupImporter(
         fileIndex: List<BackupFileIndexEntry>,
     ): CategoryReport {
         val report = CategoryReport(BackupCategory.SHARED_FILES.key)
-        val dest = File(context.filesDir, "minis-global/shared")
+        val dest = File(context.filesDir, "xiaoqiu-global/shared")
         val files = BackupRestoreFiles.restore(
             root, fileIndex, BackupCategory.SHARED_FILES, dest
         ) { path ->
@@ -580,7 +580,7 @@ class BackupImporter(
 
     private fun importSkills(root: File, fileIndex: List<BackupFileIndexEntry>): CategoryReport {
         val report = CategoryReport(BackupCategory.SKILLS.key)
-        val dest = File(context.filesDir, "minis-global/skills")
+        val dest = File(context.filesDir, "xiaoqiu-global/skills")
         val files = BackupRestoreFiles.restore(root, fileIndex, BackupCategory.SKILLS, dest) { path ->
             if (!path.startsWith("skills/")) null
             else File(dest, path.removePrefix("skills/"))
@@ -593,7 +593,7 @@ class BackupImporter(
         val report = CategoryReport(BackupCategory.MEMORY.key)
         val src = File(root, "data/memory")
         if (!src.isDirectory) return report
-        val dest = File(context.filesDir, "minis-global/memory").apply { mkdirs() }
+        val dest = File(context.filesDir, "xiaoqiu-global/memory").apply { mkdirs() }
         val destRoot = dest.canonicalFile
         for (file in src.walkTopDown().filter { it.isFile }) {
             val rel = file.relativeTo(src).path.replace(File.separatorChar, '/')
@@ -618,7 +618,7 @@ class BackupImporter(
         val report = CategoryReport(BackupCategory.MCP_SERVERS.key)
         val src = File(root, "data/mcp_servers.json")
         if (!src.isFile) return report
-        val dest = File(context.filesDir, "minis-global/mcp-servers/servers.json")
+        val dest = File(context.filesDir, "xiaoqiu-global/mcp-servers/servers.json")
         dest.parentFile?.mkdirs()
         src.copyTo(dest, overwrite = true)
         report.filesWritten = 1
@@ -629,8 +629,8 @@ class BackupImporter(
 
     // MARK: - Providers / thinking rules / environment variables
 
-    private val app: com.xiaoqiu.MinisApp?
-        get() = context.applicationContext as? com.xiaoqiu.MinisApp
+    private val app: com.xiaoqiu.XiaoQiuApp?
+        get() = context.applicationContext as? com.xiaoqiu.XiaoQiuApp
 
     /**
      * Restore `data/provider_config.json` via an order-preserving union merge

@@ -62,7 +62,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.xiaoqiu.sandbox.TerminalSession
-import com.xiaoqiu.terminal.MinisOpenUrlBroker
+import com.xiaoqiu.terminal.XiaoQiuOpenUrlBroker
 import com.xiaoqiu.ui.terminal.canvas.TerminalNativeViewCompose
 import com.xiaoqiu.ui.terminal.canvas.TerminalInputView
 import com.xiaoqiu.ui.terminal.canvas.rememberTerminalInputController
@@ -85,7 +85,7 @@ fun TerminalScreen(
     initCommand: String? = null,
     /**
      * When non-null, binds this terminal to the given chat session —
-     * TerminalSession.start() will chdir into /var/minis and pick up the
+     * TerminalSession.start() will chdir into /var/xiaoqiu and pick up the
      * session's env vars (mirrors iOS "Open Terminal" from chat).
      */
     sessionId: String? = null,
@@ -150,31 +150,31 @@ fun TerminalScreen(
 
     // [小丘] 离开终端页不停止会话（多标签后台跑）；仅清 URL broker 状态。
     DisposableEffect(Unit) {
-        onDispose { MinisOpenUrlBroker.setTerminalVisible(false) }
+        onDispose { XiaoQiuOpenUrlBroker.setTerminalVisible(false) }
     }
 
     // Claim the broker while the fullscreen terminal is up so ChatScreen
     // (still composed underneath this destination's stack) doesn't try to
     // present its own preview sheet on top — mirrors iOS ISHTerminalView.
     DisposableEffect(Unit) {
-        MinisOpenUrlBroker.setTerminalVisible(true)
-        onDispose { MinisOpenUrlBroker.setTerminalVisible(false) }
+        XiaoQiuOpenUrlBroker.setTerminalVisible(true)
+        onDispose { XiaoQiuOpenUrlBroker.setTerminalVisible(false) }
     }
 
-    // OSC 1337 MinisOpenURL emitted by `/usr/local/bin/minis-open` is parsed
-    // by TerminalEmulator and forwarded to MinisOpenUrlBroker. From the
+    // OSC 1337 XiaoQiuOpenURL emitted by `/usr/local/bin/xiaoqiu-open` is parsed
+    // by TerminalEmulator and forwarded to XiaoQiuOpenUrlBroker. From the
     // standalone terminal we only route web schemes (http(s)/about) into an
-    // in-app WebView preview; minis://-style chat resources need ChatScreen's
+    // in-app WebView preview; xiaoqiu://-style chat resources need ChatScreen's
     // resolver and aren't reachable here, so we still consume them to avoid
     // leaking a stale pendingUrl back to chat on next attach.
     var previewUrl by remember { mutableStateOf<String?>(null) }
-    val pendingUrl by MinisOpenUrlBroker.pendingUrl.collectAsStateEffect()
+    val pendingUrl by XiaoQiuOpenUrlBroker.pendingUrl.collectAsStateEffect()
     LaunchedEffect(pendingUrl) {
         val uri = pendingUrl ?: return@LaunchedEffect
-        if (MinisOpenUrlBroker.isWebScheme(uri.scheme)) {
+        if (XiaoQiuOpenUrlBroker.isWebScheme(uri.scheme)) {
             previewUrl = uri.toString()
         }
-        MinisOpenUrlBroker.consume()
+        XiaoQiuOpenUrlBroker.consume()
     }
 
     // T290: Layered layout — top bar fixed, canvas fills middle, accessory

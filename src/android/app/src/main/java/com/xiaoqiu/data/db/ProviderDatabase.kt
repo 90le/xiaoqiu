@@ -9,9 +9,9 @@ import androidx.sqlite.db.SupportSQLiteDatabase
 
 /**
  * Standalone Room database for provider config. Lives in `provider.db`,
- * separate from `minis.db` (sessions/messages/etc), so that downgrading
+ * separate from `xiaoqiu.db` (sessions/messages/etc), so that downgrading
  * to a version that doesn't know about these tables does NOT crash on
- * `minis.db`. Old builds simply ignore provider.db and continue to read
+ * `xiaoqiu.db`. Old builds simply ignore provider.db and continue to read
  * provider config from the legacy SharedPreferences JSON mirror — which
  * we keep writing on every save so it's never stale.
  *

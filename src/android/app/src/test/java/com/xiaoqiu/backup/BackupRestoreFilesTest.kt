@@ -24,7 +24,7 @@ class BackupRestoreFilesTest {
 
     @Before
     fun setUp() {
-        tmp = File.createTempFile("minisbak-restore", "").apply { delete(); mkdirs() }
+        tmp = File.createTempFile("xiaoqiubak-restore", "").apply { delete(); mkdirs() }
         pkg = File(tmp, "package").apply { mkdirs() }
         dest = File(tmp, "dest").apply { mkdirs() }
     }

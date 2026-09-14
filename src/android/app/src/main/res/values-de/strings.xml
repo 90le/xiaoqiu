@@ -282,7 +282,7 @@
     <string name="settings_section_logs">Logs</string>
     <string name="settings_logs_subtitle">App-Logs ansehen und exportieren</string>
     <string name="settings_section_about">Über</string>
-    <string name="settings_about_minis">Über 小丘</string>
+    <string name="settings_about_xiaoqiu">Über 小丘</string>
     <string name="settings_about_subtitle">Version und Projekt-Info</string>
     <string name="settings_privacy_policy">Datenschutzrichtlinie</string>
     <string name="settings_feedback">Feedback</string>
@@ -290,7 +290,7 @@
     <string name="settings_feedback_telegram">Feedback (Telegram)</string>
     <string name="settings_feedback_email">Feedback (E-Mail)</string>
     <string name="about_title">Über</string>
-    <string name="about_minis_tagline">小丘 ist dein vollständig lokaler, vollständig privater On-Device-Agent.</string>
+    <string name="about_xiaoqiu_tagline">小丘 ist dein vollständig lokaler, vollständig privater On-Device-Agent.</string>
     <string name="about_links">Links</string>
     <string name="about_github_repository">GitHub-Repository</string>
     <string name="about_version_format">Version %1$s (%2$s)</string>
@@ -507,7 +507,7 @@
     <string name="browser_nav_forward">Vorwärts</string>
     <string name="browser_stop">Stoppen</string>
     <string name="browser_reload">Neu laden</string>
-    <string name="browser_minis_browsing">小丘 surft</string>
+    <string name="browser_xiaoqiu_browsing">小丘 surft</string>
     <string name="chat_typing_indicator">%1$s denkt nach</string>
     <string name="read_aloud_unavailable">Vorlesen fehlgeschlagen: keine nutzbare Sprachausgabe. Prüfe die Sprachausgabe-Einstellungen oder installiere eine System-Sprachausgabe.</string>
     <string name="chat_error_stream_dropped_partial">Die Verbindung wurde unterbrochen — diese Antwort ist möglicherweise unvollständig. Zum Fortfahren erneut versuchen.</string>
@@ -718,8 +718,8 @@
     <string name="perm_agent_policy">Agent-Berechtigung</string>
     <string name="perm_a11y_system_ready">Dienst aktiviert</string>
     <string name="perm_a11y_system_disabled">Dienst nicht aktiviert</string>
-    <string name="perm_allow_minis_config">xiaoqiu-config zulassen</string>
-    <string name="perm_minis_config_desc">Wenn deaktiviert, kann der Agent über xiaoqiu-config keine Einstellungen lesen oder ändern. Der Verlauf unter Logs → Konfigurationsänderungen bleibt weiterhin zugänglich. Der Agent erhält einen permission_denied-Fehler und kann dich stattdessen über Deep Links anleiten.</string>
+    <string name="perm_allow_xiaoqiu_config">xiaoqiu-config zulassen</string>
+    <string name="perm_xiaoqiu_config_desc">Wenn deaktiviert, kann der Agent über xiaoqiu-config keine Einstellungen lesen oder ändern. Der Verlauf unter Logs → Konfigurationsänderungen bleibt weiterhin zugänglich. Der Agent erhält einen permission_denied-Fehler und kann dich stattdessen über Deep Links anleiten.</string>
     <string name="perm_section_privacy">Datenschutz</string>
     <string name="perm_section_media">Medien</string>
     <string name="perm_section_system">System</string>
@@ -797,7 +797,7 @@
     <string name="skill_empty_title">Keine Skills installiert</string>
     <string name="skill_empty_action">Auf + tippen, um SKILL.md zu importieren oder 小丘 Skills zu durchsuchen.</string>
     <string name="skill_import_modal_title">Skill importieren</string>
-    <string name="skill_minis_skills_modal">小丘 Skills</string>
+    <string name="skill_xiaoqiu_skills_modal">小丘 Skills</string>
     <string name="skill_delete_confirm_title">%1$s löschen?</string>
     <string name="skill_delete_confirm_text">Skill und zugehörige Dateien werden dauerhaft entfernt.</string>
     <string name="skill_import_sheet_title">Skill importieren</string>
@@ -861,8 +861,8 @@
     <string name="storage_overview_sessions">Sitzungsdateien</string>
     <string name="storage_section_sessions">Sitzungen</string>
     <string name="storage_no_sessions">Keine Sitzungen</string>
-    <string name="storage_section_minis_files">小丘-Dateien</string>
-    <string name="storage_no_minis_files">Keine 小丘-Dateien</string>
+    <string name="storage_section_xiaoqiu_files">小丘-Dateien</string>
+    <string name="storage_no_xiaoqiu_files">Keine 小丘-Dateien</string>
     <string name="storage_section_media">Mediendateien</string>
     <string name="storage_no_media_files">Keine Mediendateien</string>
     <string name="storage_clear_session_footer">Entfernt alle von dieser Sitzung erzeugten Dateien. Die Unterhaltung selbst bleibt erhalten.</string>
@@ -1597,7 +1597,7 @@
     <string name="webapp_pin_success">Zum Startbildschirm hinzugefügt</string>
     <string name="webapp_source_missing_title">Die Quelldatei existiert nicht mehr</string>
     <string name="webapp_source_missing_body">Die Datei hinter dieser Verknüpfung wurde verschoben oder gelöscht.</string>
-    <string name="webapp_open_in_minis">In 小丘 öffnen</string>
+    <string name="webapp_open_in_xiaoqiu">In 小丘 öffnen</string>
     <string name="webapp_action_close">Schließen</string>
     <string name="webapp_action_fullscreen">Vollbild</string>
     <string name="webapp_action_exit_fullscreen">Vollbild beenden</string>

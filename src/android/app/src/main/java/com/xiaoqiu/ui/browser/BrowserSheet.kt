@@ -600,7 +600,7 @@ private fun AgentBrowsingOverlay(accent: Color, onTakeover: () -> Unit) {
             )
             Spacer(Modifier.width(12.dp))
             Text(
-                stringResource(R.string.browser_minis_browsing),
+                stringResource(R.string.browser_xiaoqiu_browsing),
                 color = Color.White.copy(alpha = 0.9f),
                 fontSize = 13.sp,
                 fontWeight = FontWeight.Medium,

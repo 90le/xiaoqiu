@@ -44,8 +44,8 @@ import com.xiaoqiu.BuildConfig
 import com.xiaoqiu.R
 import com.xiaoqiu.data.UpdateChecker
 import kotlinx.coroutines.launch
-import com.xiaoqiu.ui.components.MinisButton
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 import com.xiaoqiu.i18n.uppercaseForDisplay
 
 /**
@@ -318,11 +318,11 @@ private fun UpdateDialog(
         },
         confirmButton = {
             if (needsInstallPerm) {
-                MinisButton(onClick = onOpenSettings) {
+                XiaoQiuButton(onClick = onOpenSettings) {
                     Text(stringResource(R.string.check_update_open_install_settings))
                 }
             } else {
-                MinisButton(
+                XiaoQiuButton(
                     onClick = onDownload,
                     enabled = downloadProgress == null,
                 ) {
@@ -344,7 +344,7 @@ private fun UpdateDialog(
             }
         },
         dismissButton = {
-            MinisTextButton(onClick = onDismiss, enabled = downloadProgress == null) {
+            XiaoQiuTextButton(onClick = onDismiss, enabled = downloadProgress == null) {
                 Text(stringResource(R.string.cancel))
             }
         },

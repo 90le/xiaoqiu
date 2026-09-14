@@ -1,7 +1,7 @@
 package com.xiaoqiu.ui.settings
 
 import com.xiaoqiu.R
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 
 import android.annotation.SuppressLint
 import android.content.Context
@@ -68,12 +68,12 @@ private enum class HudState {
 @SuppressLint("SetJavaScriptEnabled")
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun MinisSkillsBrowserScreen(
+fun XiaoQiuSkillsBrowserScreen(
     skillRepository: SkillRepository,
     onBack: () -> Unit,
 ) {
     val context = LocalContext.current
-    var currentUrl by remember { mutableStateOf("https://github.com/OpenMinis/MinisSkills") }
+    var currentUrl by remember { mutableStateOf("https://github.com/OpenXiaoQiu/XiaoQiuSkills") }
     var hudState by remember { mutableStateOf(HudState.HIDDEN) }
     var hudMessage by remember { mutableStateOf("") }
     var webViewRef by remember { mutableStateOf<WebView?>(null) }
@@ -107,7 +107,7 @@ fun MinisSkillsBrowserScreen(
                     }
                 },
                 actions = {
-                    MinisTextButton(
+                    XiaoQiuTextButton(
                         onClick = {
                             scope.launch {
                                 importSkillFromCurrentUrl(
@@ -187,7 +187,7 @@ fun MinisSkillsBrowserScreen(
 
                         webChromeClient = WebChromeClient()
 
-                        loadUrl("https://github.com/OpenMinis/MinisSkills")
+                        loadUrl("https://github.com/OpenXiaoQiu/XiaoQiuSkills")
                     }.also { webViewRef = it }
                 },
                 modifier = Modifier.fillMaxSize(),
@@ -331,9 +331,9 @@ private suspend fun importSkillFromCurrentUrl(
 
 /**
  * Check if the URL points to a specific skill directory (not repo root or non-skill pages).
- * e.g. github.com/OpenMinis/MinisSkills/tree/main/exa-search → true
- *      github.com/OpenMinis/MinisSkills → false
- *      github.com/OpenMinis/MinisSkills/issues → false
+ * e.g. github.com/OpenXiaoQiu/XiaoQiuSkills/tree/main/exa-search → true
+ *      github.com/OpenXiaoQiu/XiaoQiuSkills → false
+ *      github.com/OpenXiaoQiu/XiaoQiuSkills/issues → false
  */
 private fun isSkillDirectoryUrl(url: String): Boolean {
     if (!url.contains("github.com")) return true // Non-GitHub URL, let it try

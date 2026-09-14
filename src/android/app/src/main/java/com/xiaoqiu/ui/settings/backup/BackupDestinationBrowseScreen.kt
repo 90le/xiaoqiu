@@ -34,7 +34,7 @@ import androidx.compose.ui.unit.dp
 import com.xiaoqiu.R
 import com.xiaoqiu.backup.remote.RcloneChunkedUpload
 import com.xiaoqiu.backup.remote.RcloneRemoteStore
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 import com.xiaoqiu.ui.settings.SettingsScaffold
 import com.xiaoqiu.ui.settings.SettingsSection
 
@@ -128,7 +128,7 @@ fun BackupDestinationBrowseScreen(
             // record points at — say so before it goes.
             text = { Text(stringResource(R.string.backup_dest_delete_note, pkg.displayName)) },
             confirmButton = {
-                MinisTextButton(
+                XiaoQiuTextButton(
                     onClick = {
                         vm.deleteServerPackage(remote, pkg)
                         pendingDelete = null
@@ -141,7 +141,7 @@ fun BackupDestinationBrowseScreen(
                 }
             },
             dismissButton = {
-                MinisTextButton(onClick = { pendingDelete = null }) {
+                XiaoQiuTextButton(onClick = { pendingDelete = null }) {
                     Text(stringResource(R.string.backup_dest_cancel))
                 }
             },

@@ -41,10 +41,10 @@ import com.xiaoqiu.config.ConfigRisk
 import com.xiaoqiu.config.confirm.ConfigConfirmationGate
 import com.xiaoqiu.config.confirm.PendingConfigChange
 import com.xiaoqiu.config.confirm.PendingConfigChangeItem
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 
 /**
- * Root-level confirmation dialog for every minis-config write.
+ * Root-level confirmation dialog for every xiaoqiu-config write.
  * Mirrors iOS `ConfigConfirmSheet`. Mounted in [com.xiaoqiu.MainActivity]
  * so it shows over any active screen. Bound to
  * [ConfigConfirmationGate.pending].
@@ -114,7 +114,7 @@ private fun ConfigConfirmDialog(change: PendingConfigChange) {
         },
         confirmButton = {
             val applyText = if (approvedCount == 0) "Reject All" else "Apply"
-            MinisTextButton(
+            XiaoQiuTextButton(
                 onClick = { ConfigConfirmationGate.userApprove(workingItems.toList()) },
                 enabled = workingItems.isNotEmpty(),
             ) {
@@ -122,7 +122,7 @@ private fun ConfigConfirmDialog(change: PendingConfigChange) {
             }
         },
         dismissButton = {
-            MinisTextButton(onClick = { ConfigConfirmationGate.userReject() }) {
+            XiaoQiuTextButton(onClick = { ConfigConfirmationGate.userReject() }) {
                 Text("Cancel")
             }
         },

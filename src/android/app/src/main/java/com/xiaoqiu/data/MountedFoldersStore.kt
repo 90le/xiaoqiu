@@ -31,15 +31,15 @@ import java.util.UUID
  *     survives process death and reboots once persisted, so there's no
  *     "activation" step — access is always available while the permission
  *     grant is held.
- *   - The shell-level bind-mount at `/var/minis/mounts/<name>` is NOT
+ *   - The shell-level bind-mount at `/var/xiaoqiu/mounts/<name>` is NOT
  *     implemented in this pass. DocumentFile doesn't expose POSIX paths,
  *     so exposing these trees inside the PRoot / iSH rootfs needs a
  *     FUSE bridge or a periodic mirror pass. Spec §2.9.4 calls out the
  *     tradeoffs; we ship MVP scaffolding (persistence + CRUD + StateFlow)
  *     and leave the shell mount as a follow-up.
  *
- * Persistence: `filesDir/minis-config/mounted-folders.json`. The path is
- * intentionally outside `minis-global/` so it can't leak into the
+ * Persistence: `filesDir/xiaoqiu-config/mounted-folders.json`. The path is
+ * intentionally outside `xiaoqiu-global/` so it can't leak into the
  * DocumentsProvider-exposed tree.
  */
 class MountedFoldersStore(private val context: Context) {
@@ -66,7 +66,7 @@ class MountedFoldersStore(private val context: Context) {
     }
 
     private val storeFile: File by lazy {
-        File(context.filesDir, "minis-config/mounted-folders.json").apply {
+        File(context.filesDir, "xiaoqiu-config/mounted-folders.json").apply {
             parentFile?.mkdirs()
         }
     }
@@ -77,7 +77,7 @@ class MountedFoldersStore(private val context: Context) {
 
     /**
      * T219-5: fired after every CRUD operation that mutates the persisted
-     * list. MinisApp wires this to `PRootKernel.applyMountedFoldersSnapshot`
+     * list. XiaoQiuApp wires this to `PRootKernel.applyMountedFoldersSnapshot`
      * so future shells pick up the new bind specs without a process restart.
      * Note that already-running proot processes are unaffected — proot is
      * one-shot and the next `shell_execute` is what carries the new mounts.
@@ -302,7 +302,7 @@ class MountedFoldersStore(private val context: Context) {
     fun probeWritable(hostPath: String): Boolean {
         val dir = File(hostPath)
         if (!dir.isDirectory) return false
-        val probe = File(dir, ".minis-probe-${UUID.randomUUID()}")
+        val probe = File(dir, ".xiaoqiu-probe-${UUID.randomUUID()}")
         return runCatching {
             probe.outputStream().use { it.write(0) }
             true

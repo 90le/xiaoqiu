@@ -2,7 +2,7 @@ package com.xiaoqiu.ui.settings
 
 import com.xiaoqiu.R
 import com.xiaoqiu.data.repository.AppIconRepository
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 
 import android.content.Context
 import android.content.SharedPreferences
@@ -476,7 +476,7 @@ fun AppearanceScreen(
         // -- Chat Title (T-chat-title-pill) --
         // Sticky session-title pill that appears at the top of the chat
         // when the user scrolls back through history. Default ON; toggle
-        // also reachable via `minis-config set appearance.show_chat_title`.
+        // also reachable via `xiaoqiu-config set appearance.show_chat_title`.
         SettingsSection(
             header = stringResource(R.string.appearance_section_chat_title),
             footer = stringResource(R.string.appearance_show_chat_title_footer),
@@ -564,7 +564,7 @@ fun AppearanceScreen(
                         .padding(vertical = 4.dp),
                     horizontalArrangement = Arrangement.Center,
                 ) {
-                    MinisTextButton(onClick = {
+                    XiaoQiuTextButton(onClick = {
                         chatInputLevel = 0; messageLevel = 0; appBaseLevel = 0
                         prefs.edit()
                             .putInt(KEY_FONT_CHAT_INPUT, 0)

@@ -35,7 +35,7 @@ import com.xiaoqiu.data.repository.SkillRepository
 import com.xiaoqiu.ui.components.DialogTextField
 import com.xiaoqiu.ui.settings.SettingsSection
 import com.xiaoqiu.ui.settings.SkillRowItem
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 
 /**
  * Bottom sheet showing all skills with per-session enable/disable toggles.
@@ -129,7 +129,7 @@ fun SessionSkillsSheet(
                     Spacer(modifier = Modifier.weight(1f))
                     // Enable/Disable All operate on the FILTERED subset so a
                     // user can bulk-toggle the result of a search.
-                    MinisTextButton(
+                    XiaoQiuTextButton(
                         onClick = {
                             for (skill in filteredSkills) {
                                 overrides[skill.id] = true
@@ -142,7 +142,7 @@ fun SessionSkillsSheet(
                     ) {
                         Text(stringResource(R.string.session_skills_enable_all), fontSize = 12.sp)
                     }
-                    MinisTextButton(
+                    XiaoQiuTextButton(
                         onClick = {
                             for (skill in filteredSkills) {
                                 overrides[skill.id] = false

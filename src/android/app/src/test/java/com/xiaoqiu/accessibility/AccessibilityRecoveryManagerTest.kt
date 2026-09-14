@@ -18,7 +18,7 @@ import org.junit.Test
 class AccessibilityRecoveryManagerTest {
 
     private val PKG = "com.xiaoqiu"
-    private val CLS = "com.xiaoqiu.accessibility.MinisAccessibilityService"
+    private val CLS = "com.xiaoqiu.accessibility.XiaoQiuAccessibilityService"
 
     private fun revoked(value: String?) =
         AccessibilityRecoveryManager.isRevokedIn(value, PKG, CLS)
@@ -48,7 +48,7 @@ class AccessibilityRecoveryManagerTest {
     fun `abbreviated entry is recognized`() {
         // The framework normalizes to this form when it rewrites the value.
         // This is the regression that would otherwise loop the repair prompt.
-        assertFalse(revoked("$PKG/.accessibility.MinisAccessibilityService"))
+        assertFalse(revoked("$PKG/.accessibility.XiaoQiuAccessibilityService"))
     }
 
     @Test
@@ -73,7 +73,7 @@ class AccessibilityRecoveryManagerTest {
     @Test
     fun `other services present but ours absent reads as revoked`() {
         // The exact post-force-stop state observed when two services were
-        // enabled and only Minis was stopped: the framework surgically removed
+        // enabled and only XiaoQiu was stopped: the framework surgically removed
         // ours and kept TalkBack.
         val talkback = "com.google.android.marvin.talkback/.TalkBackService"
         assertTrue(revoked(talkback))
@@ -81,7 +81,7 @@ class AccessibilityRecoveryManagerTest {
 
     @Test
     fun `a different package with a same-named class does not match`() {
-        assertTrue(revoked("com.other.app/com.xiaoqiu.accessibility.MinisAccessibilityService"))
+        assertTrue(revoked("com.other.app/com.xiaoqiu.accessibility.XiaoQiuAccessibilityService"))
     }
 
     @Test

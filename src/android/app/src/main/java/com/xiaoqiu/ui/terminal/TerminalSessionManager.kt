@@ -177,7 +177,7 @@ class TerminalSessionManager(private val appContext: Context) {
                     .also { instance = it }
             }
         fun get(): TerminalSessionManager = requireNotNull(instance) {
-            "TerminalSessionManager 未初始化：MinisApp.onCreate 应先调用 init()"
+            "TerminalSessionManager 未初始化：XiaoQiuApp.onCreate 应先调用 init()"
         }
     }
 }

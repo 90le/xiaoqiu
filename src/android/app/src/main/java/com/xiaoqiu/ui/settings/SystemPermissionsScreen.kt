@@ -40,9 +40,9 @@ import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import com.xiaoqiu.R
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 import com.xiaoqiu.accessibility.AccessibilityRecoveryManager
-import com.xiaoqiu.accessibility.MinisAccessibilityService
+import com.xiaoqiu.accessibility.XiaoQiuAccessibilityService
 import com.xiaoqiu.accessibility.RestrictedSettingsManager
 import com.xiaoqiu.offload.ShizukuManager
 import com.xiaoqiu.power.PowerOptimizationManager
@@ -89,7 +89,7 @@ fun SystemPermissionsScreen(onBack: () -> Unit) {
     LaunchedEffect(Unit) {
         while (true) {
             val inSettings = isAccessibilityEnabled(context)
-            val connected = MinisAccessibilityService.getInstance() != null
+            val connected = XiaoQiuAccessibilityService.getInstance() != null
             a11yEnabled = inSettings || connected
             a11yDegraded = inSettings && !connected
             // Only claim "revoked" once the user has actually granted it at
@@ -192,7 +192,7 @@ fun SystemPermissionsScreen(onBack: () -> Unit) {
                         iconColor = Color(0xFFFF9500),
                         title = stringResource(R.string.system_permissions_a11y_restricted_manual),
                         subtitle = stringResource(R.string.system_permissions_a11y_restricted_manual_sub),
-                        // Lands on Minis' own App info page, where the
+                        // Lands on XiaoQiu' own App info page, where the
                         // "Allow restricted settings" item lives in the
                         // overflow menu. Reuses the existing helper, which
                         // already falls back when an OEM hides the page.
@@ -337,7 +337,7 @@ fun SystemPermissionsScreen(onBack: () -> Unit) {
                     onDismissRequest = { showClearCorrectionConfirm = false },
                     title = { Text(stringResource(R.string.voice_correction_clear_title)) },
                     confirmButton = {
-                        MinisTextButton(onClick = {
+                        XiaoQiuTextButton(onClick = {
                             showClearCorrectionConfirm = false
                             com.xiaoqiu.speech.correction.VoiceCorrection
                                 .clearAllData(context)
@@ -354,7 +354,7 @@ fun SystemPermissionsScreen(onBack: () -> Unit) {
                         }
                     },
                     dismissButton = {
-                        MinisTextButton(onClick = { showClearCorrectionConfirm = false }) {
+                        XiaoQiuTextButton(onClick = { showClearCorrectionConfirm = false }) {
                             Text(stringResource(R.string.voice_correction_consent_not_now))
                         }
                     },
@@ -365,7 +365,7 @@ fun SystemPermissionsScreen(onBack: () -> Unit) {
 }
 
 private fun isAccessibilityEnabled(context: Context): Boolean {
-    val expected = "${context.packageName}/${MinisAccessibilityService::class.java.name}"
+    val expected = "${context.packageName}/${XiaoQiuAccessibilityService::class.java.name}"
     val enabled = Settings.Secure.getString(
         context.contentResolver,
         Settings.Secure.ENABLED_ACCESSIBILITY_SERVICES,

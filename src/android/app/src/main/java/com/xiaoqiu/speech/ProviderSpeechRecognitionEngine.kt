@@ -6,7 +6,7 @@ import android.media.AudioFormat
 import android.media.AudioRecord
 import android.media.MediaRecorder
 import android.util.Log
-import com.xiaoqiu.MinisApp
+import com.xiaoqiu.XiaoQiuApp
 import com.xiaoqiu.provider.voice.VoiceInputRequest
 import com.xiaoqiu.provider.voice.VoiceProvider
 import com.xiaoqiu.provider.voice.VoiceProviderException
@@ -123,7 +123,7 @@ class ProviderSpeechRecognitionEngine(private val appContext: Context) : SpeechR
     // shortcut/assistant intent that never went through MainActivity's guard.
     // Every caller already treats null as "no provider configured".
     private fun repository() =
-        (appContext.applicationContext as? MinisApp)
+        (appContext.applicationContext as? XiaoQiuApp)
             ?.takeIf { it.subsystemsReady() }
             ?.providerRepository
 

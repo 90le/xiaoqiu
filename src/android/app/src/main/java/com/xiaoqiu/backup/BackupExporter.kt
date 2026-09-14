@@ -20,7 +20,7 @@ import java.util.TimeZone
 import java.util.UUID
 
 /**
- * Builds a `.minisbak` package on Android (docs/backup-restore-design.md §2,
+ * Builds a `.xiaoqiubak` package on Android (docs/backup-restore-design.md §2,
  * §9 stage 4), mirroring `src/ios/Agent/Backup/BackupExporter.swift`.
  *
  * Shape: stage everything into a scratch directory, then zip that directory
@@ -281,7 +281,7 @@ class BackupExporter(
 
                             // The session's whole on-disk tree: attachments /
                             // offloads / workspace / browser.
-                            val dir = File(context.filesDir, "minis-sessions/${session.id}")
+                            val dir = File(context.filesDir, "xiaoqiu-sessions/${session.id}")
                             val r = trees.export(
                                 dir, "chats/${session.id}", BackupCategory.CHATS, session.id
                             )
@@ -413,12 +413,12 @@ class BackupExporter(
     // MARK: - Shared files / Skills / Memory
 
     /**
-     * §3.2 — the cross-session `/var/minis/shared` bucket. Host-side this is
-     * `<filesDir>/minis-global/shared`, NOT anything inside the rootfs.
+     * §3.2 — the cross-session `/var/xiaoqiu/shared` bucket. Host-side this is
+     * `<filesDir>/xiaoqiu-global/shared`, NOT anything inside the rootfs.
      */
     private fun exportSharedFiles(trees: BackupFileTreeExporter): BackupManifest.CategoryStat {
         val r = trees.export(
-            File(context.filesDir, "minis-global/shared"), "shared", BackupCategory.SHARED_FILES
+            File(context.filesDir, "xiaoqiu-global/shared"), "shared", BackupCategory.SHARED_FILES
         )
         return BackupManifest.CategoryStat(r.filesIncluded, r.bytesIncluded, encrypted = false)
     }
@@ -439,7 +439,7 @@ class BackupExporter(
      * correct when the export runs before subsystems are ready.
      */
     private fun exportSkills(trees: BackupFileTreeExporter): BackupManifest.CategoryStat {
-        val root = File(context.filesDir, "minis-global/skills")
+        val root = File(context.filesDir, "xiaoqiu-global/skills")
         val r = trees.export(root, "skills", BackupCategory.SKILLS)
         return BackupManifest.CategoryStat(
             entries = Companion.skillCount(root),
@@ -451,7 +451,7 @@ class BackupExporter(
 
     /** `GLOBAL.md` / `SOUL.md` / daily notes, copied verbatim into `data/memory/`. */
     private fun exportMemory(dataDir: File): BackupManifest.CategoryStat {
-        val source = File(context.filesDir, "minis-global/memory")
+        val source = File(context.filesDir, "xiaoqiu-global/memory")
         val dest = File(dataDir, "memory").apply { mkdirs() }
         var entries = 0
         var bytes = 0L
@@ -472,7 +472,7 @@ class BackupExporter(
      * an absent MCP config contributes no category rather than an empty one.
      */
     private fun exportMcpServers(dataDir: File): BackupManifest.CategoryStat? {
-        val source = File(context.filesDir, "minis-global/mcp-servers/servers.json")
+        val source = File(context.filesDir, "xiaoqiu-global/mcp-servers/servers.json")
         if (!source.isFile) return null
         val dest = File(dataDir, "mcp_servers.json")
         source.copyTo(dest, overwrite = true)
@@ -492,8 +492,8 @@ class BackupExporter(
     // policy. These three write only the non-secret structure so a share copy
     // (includeCredentials=false) still carries the provider/model/rule layout.
 
-    private val app: com.xiaoqiu.MinisApp?
-        get() = context.applicationContext as? com.xiaoqiu.MinisApp
+    private val app: com.xiaoqiu.XiaoQiuApp?
+        get() = context.applicationContext as? com.xiaoqiu.XiaoQiuApp
 
     /**
      * `data/provider_config.json` (the whole [ProviderConfig], array order = the
@@ -732,7 +732,7 @@ class BackupExporter(
 
         // Write to a `.partial` sibling and rename on success. A kill or a full
         // disk mid-write would otherwise leave a TRUNCATED file carrying a
-        // perfectly valid `.minisbak` name, which then shows up in the restore
+        // perfectly valid `.xiaoqiubak` name, which then shows up in the restore
         // picker with a plausible size and date — discovered only when the
         // restore fails, plausibly on a new device after wiping the old one.
         val partial = File(out.parentFile, ".${out.name}.partial")
@@ -777,8 +777,8 @@ class BackupExporter(
 
         /**
          * Where finished packages live. A sibling of the agent-visible
-         * directories, NOT inside `minis-global/shared` — that path is
-         * bind-mounted into the guest at `/var/minis/shared`, so a package
+         * directories, NOT inside `xiaoqiu-global/shared` — that path is
+         * bind-mounted into the guest at `/var/xiaoqiu/shared`, so a package
          * (possibly holding API keys) would be readable and deletable by the
          * agent from a shell, and the next backup would sweep the previous one
          * in as user data, nesting packages without bound (§6.2.4).

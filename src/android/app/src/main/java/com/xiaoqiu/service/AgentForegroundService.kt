@@ -15,7 +15,7 @@ import android.os.PowerManager
 import android.os.SystemClock
 import android.util.Log
 import androidx.core.app.NotificationCompat
-import com.xiaoqiu.MinisApp
+import com.xiaoqiu.XiaoQiuApp
 import com.xiaoqiu.R
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
@@ -120,7 +120,7 @@ class AgentForegroundService : Service() {
      *      and we're in the 30-second linger window.
      * Falls back silently to Phase 1 notification when any precondition
      * fails. Bound to the service lifetime so onDestroy tears everything
-     * down deterministically.
+     * down deterxiaoqiutically.
      */
     private var overlayController: ToolOverlayController? = null
     private val overlayScope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
@@ -141,10 +141,10 @@ class AgentForegroundService : Service() {
     override fun onCreate() {
         super.onCreate()
         // Safe-mode bail-out. When CrashFrequencyDetector tripped in
-        // MinisApp.onCreate, the Application skipped its lateinit init
+        // XiaoQiuApp.onCreate, the Application skipped its lateinit init
         // for repositories — but a sticky FG service that was running
         // pre-crash will still be re-created by the system on the next
-        // process spawn. Reading MinisApp.backgroundSettingsRepository
+        // process spawn. Reading XiaoQiuApp.backgroundSettingsRepository
         // from ToolOverlayController.<init> here would throw
         // UninitializedPropertyAccessException and write a second crash
         // log, which is exactly the "detection logic recursively
@@ -189,7 +189,7 @@ class AgentForegroundService : Service() {
         if (com.xiaoqiu.crash.CrashFrequencyDetector.isSafeMode()) {
             try {
                 val stub = androidx.core.app.NotificationCompat.Builder(this, CHANNEL_ID)
-                    .setContentTitle("Minis")
+                    .setContentTitle("XiaoQiu")
                     .setSmallIcon(android.R.drawable.stat_sys_warning)
                     .setOngoing(false)
                     .build()
@@ -336,7 +336,7 @@ class AgentForegroundService : Service() {
      * overlay doesn't draw on top of the chat itself.
      */
     private fun startOverlayObserver() {
-        val app = applicationContext as? MinisApp ?: return
+        val app = applicationContext as? XiaoQiuApp ?: return
         overlayController = ToolOverlayController(applicationContext).apply {
             // [T-android-overlay-reply-status-34599] Tap-to-open or X
             // dismissal clears the lingered completion state so the
@@ -604,10 +604,10 @@ class AgentForegroundService : Service() {
             val pm = getSystemService(Context.POWER_SERVICE) as PowerManager
             wakeLock = pm.newWakeLock(
                 PowerManager.PARTIAL_WAKE_LOCK,
-                "minis:inference",
+                "xiaoqiu:inference",
             ).apply {
                 setReferenceCounted(false)
-                // No timeout — release happens deterministically in onDestroy
+                // No timeout — release happens deterxiaoqiutically in onDestroy
                 // when SessionActivityTracker reports zero active sessions.
                 acquire()
             }
@@ -755,7 +755,7 @@ class AgentForegroundService : Service() {
         )
 
         // T-bg-overlay phase 1: enrich the ongoing notification.
-        // Title:   "Minis is using <Tool>"  (or session-count summary when idle/between turns)
+        // Title:   "XiaoQiu is using <Tool>"  (or session-count summary when idle/between turns)
         // Text:    one-line "<sessionLabel> · <elapsed>" so the always-visible row stays compact
         // BigText: full status string from SessionActivityTracker.currentToolStatus when expanded
         // Progress: indeterminate while a tool is in flight (isToolRunning), hidden otherwise
@@ -766,7 +766,7 @@ class AgentForegroundService : Service() {
         // [T-android-live-update-completed] In the completed resting state the
         // title/status must stop describing work in progress. `toolName` is
         // already null by then (setInactive clears it), so the old code fell
-        // through to the generic "Minis is running" title while the icon fell
+        // through to the generic "XiaoQiu is running" title while the icon fell
         // through to the wrench (toolSmallIconRes' else branch) — a finished
         // task rendered exactly like a running one.
         val titleText = when {
@@ -802,13 +802,13 @@ class AgentForegroundService : Service() {
         // Application, NOT against an uninitialized lateinit — the safe call
         // succeeds and then the GETTER throws
         // UninitializedPropertyAccessException. This service can be restarted
-        // by the system with no Activity, so it can observe a MinisApp whose
+        // by the system with no Activity, so it can observe a XiaoQiuApp whose
         // onCreate early-returned under safe-mode. Gate on subsystemsReady()
         // first; a notification built without the dynamic-island style is a
         // cosmetic downgrade, a crash here kills the FGS mid-task.
-        val minisApp = (applicationContext as? MinisApp)?.takeIf { it.subsystemsReady() }
+        val xiaoqiuApp = (applicationContext as? XiaoQiuApp)?.takeIf { it.subsystemsReady() }
         val dynamicIslandUserEnabled =
-            minisApp?.backgroundSettingsRepository?.dynamicIslandEnabled?.value == true
+            xiaoqiuApp?.backgroundSettingsRepository?.dynamicIslandEnabled?.value == true
         val dynamicIslandOn = DynamicIslandSupport.isDynamicIslandActive(
             this,
             dynamicIslandUserEnabled,
@@ -979,15 +979,15 @@ class AgentForegroundService : Service() {
      * so the user still gets a hint about what's running.
      */
     private fun toolDisplayLabel(toolName: String): String = when (toolName) {
-        "shell_execute" -> "Minis is using Shell"
-        "file_read" -> "Minis is reading File"
-        "file_write" -> "Minis is using Editor"
-        "file_edit" -> "Minis is editing File"
-        "browser_use" -> "Minis is using Browser"
-        "read_image" -> "Minis is reading Image"
-        "memory_write", "memory_get" -> "Minis is using Memory"
-        "web_search" -> "Minis is using Search"
-        else -> "Minis is using $toolName"
+        "shell_execute" -> "XiaoQiu is using Shell"
+        "file_read" -> "XiaoQiu is reading File"
+        "file_write" -> "XiaoQiu is using Editor"
+        "file_edit" -> "XiaoQiu is editing File"
+        "browser_use" -> "XiaoQiu is using Browser"
+        "read_image" -> "XiaoQiu is reading Image"
+        "memory_write", "memory_get" -> "XiaoQiu is using Memory"
+        "web_search" -> "XiaoQiu is using Search"
+        else -> "XiaoQiu is using $toolName"
     }
 
     /**

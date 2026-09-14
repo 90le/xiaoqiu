@@ -19,9 +19,9 @@ import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.xiaoqiu.R
 import com.xiaoqiu.offload.OffloadPermissionManager
-import com.xiaoqiu.ui.components.MinisButton
-import com.xiaoqiu.ui.components.MinisOutlinedButton
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuButton
+import com.xiaoqiu.ui.components.XiaoQiuOutlinedButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 
 /**
  * Dialog shown when an ASK_ONCE tool requests permission.
@@ -88,21 +88,21 @@ fun OffloadPermissionDialog() {
                 verticalArrangement = Arrangement.spacedBy(8.dp),
             ) {
                 // Allow in this session — happy path goes first.
-                MinisButton(
+                XiaoQiuButton(
                     onClick = { OffloadPermissionManager.respondToRequest(OffloadPermissionManager.Response.ALLOW_SESSION) },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(stringResource(R.string.offload_perm_allow_session))
                 }
                 // Allow once — no caching; next call re-prompts.
-                MinisOutlinedButton(
+                XiaoQiuOutlinedButton(
                     onClick = { OffloadPermissionManager.respondToRequest(OffloadPermissionManager.Response.ALLOW_ONCE) },
                     modifier = Modifier.fillMaxWidth(),
                 ) {
                     Text(stringResource(R.string.offload_perm_allow_once))
                 }
                 // Deny in this session — refuse + remember.
-                MinisTextButton(
+                XiaoQiuTextButton(
                     onClick = { OffloadPermissionManager.respondToRequest(OffloadPermissionManager.Response.DENY_SESSION) },
                     modifier = Modifier.fillMaxWidth(),
                     colors = ButtonDefaults.textButtonColors(

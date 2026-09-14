@@ -28,8 +28,8 @@ import com.xiaoqiu.data.model.SystemVoiceEntries
 import com.xiaoqiu.data.repository.ProviderRepository
 import com.xiaoqiu.ui.components.PickerModalityFilter
 import com.xiaoqiu.ui.components.modelEntryPickerItems
-import com.xiaoqiu.ui.components.MinisButton
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -89,8 +89,8 @@ fun AddModelsToGroupScreen(
                     }
                 },
                 actions = {
-                    MinisTextButton(onClick = onBack) { Text(stringResource(R.string.common_cancel)) }
-                    MinisButton(
+                    XiaoQiuTextButton(onClick = onBack) { Text(stringResource(R.string.common_cancel)) }
+                    XiaoQiuButton(
                         onClick = {
                             val updated = group.copy(
                                 memberEntryIds = (group.memberEntryIds + selectedIds).toMutableList()

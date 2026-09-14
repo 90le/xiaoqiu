@@ -58,7 +58,7 @@ import com.xiaoqiu.ui.settings.SkillDetailScreen
 import com.xiaoqiu.ui.settings.StorageManagementScreen
 import com.xiaoqiu.ui.settings.SkillFileViewerScreen
 import com.xiaoqiu.ui.settings.UsageStatsScreen
-import com.xiaoqiu.ui.settings.MinisSkillsBrowserScreen
+import com.xiaoqiu.ui.settings.XiaoQiuSkillsBrowserScreen
 import com.xiaoqiu.ui.settings.MountDetailScreen
 import com.xiaoqiu.ui.settings.MountedFoldersScreen
 import com.xiaoqiu.ui.settings.SharedFolderDetailScreen
@@ -128,7 +128,7 @@ object Routes {
     const val SKILLS = "skills"
     const val SKILL_DETAIL = "skill/{skillId}"
     const val SKILL_FILE = "skill_file/{skillId}/{relativePath}"
-    const val MINIS_SKILLS_BROWSER = "minis_skills_browser"
+    const val XIAOQIU_SKILLS_BROWSER = "xiaoqiu_skills_browser"
 
     fun skillDetail(skillId: String) = "skill/$skillId"
     fun skillFile(skillId: String, relativePath: String = "SKILL.md"): String {
@@ -149,7 +149,7 @@ object Routes {
         }
         return if (params.isEmpty()) "terminal" else "terminal?${params.joinToString("&")}"
     }
-    /** Chat-files browser: opens FileBrowser rooted at /var/minis for the session. */
+    /** Chat-files browser: opens FileBrowser rooted at /var/xiaoqiu for the session. */
     const val CHAT_FILES = "chat_files/{sessionId}"
     fun chatFiles(sessionId: String) = "chat_files/$sessionId"
     const val MEMORY = "memory"
@@ -231,14 +231,14 @@ fun AppNavigation(
 ) {
     val context = LocalContext.current
 
-    // T219-5: use the application-scoped singleton from MinisApp so UI
+    // T219-5: use the application-scoped singleton from XiaoQiuApp so UI
     // add/remove shares state with PRootKernel and the lifecycle re-probe
     // path. Pre-T219-5 this `remember { MountedFoldersStore(...) }` created
     // a SECOND independent instance — UI list updated but PRoot never
     // saw the change because PRootKernel.mountedFoldersStore pointed at
-    // the application-scoped singleton in MinisApp.
+    // the application-scoped singleton in XiaoQiuApp.
     val mountedFoldersStore = remember {
-        (context.applicationContext as com.xiaoqiu.MinisApp).mountedFoldersStore
+        (context.applicationContext as com.xiaoqiu.XiaoQiuApp).mountedFoldersStore
     }
 
     // Handle initial deep link after composition
@@ -416,7 +416,7 @@ fun AppNavigation(
             // RESUMED to be safe. But this LaunchedEffect fires on the
             // first composition pass, when the start destination is
             // STARTED but not yet RESUMED. There's no race here: we're
-            // the deterministic startup dispatcher, the start destination
+            // the deterxiaoqiutic startup dispatcher, the start destination
             // hasn't even rendered, and we want to navigate to it BEFORE
             // it shows. Calling navigate() unconditionally produces the
             // intended cold-start dispatch (mode 1 → last session, mode 2
@@ -447,7 +447,7 @@ fun AppNavigation(
     }
 
     // Pinned-shortcut cold start: when launched via
-     // `minis://session/<id>/<resource-path>`, set the pending HTML
+     // `xiaoqiu://session/<id>/<resource-path>`, set the pending HTML
      // preview synchronously and start NavHost directly at the matching
      // chat so ChatScreen's LaunchedEffect consumes the pending state on
      // first composition — no sessions-list flash, no launch-session
@@ -772,7 +772,7 @@ fun AppNavigation(
                 onBack = { navController.safePopBackStack() },
                 onBrowseFiles = {
                     val rootfs = RootfsManager.getInstance(ctx.applicationContext)
-                    val hostPath = java.io.File(rootfs.rootfsDir, "var/minis/$folderId")
+                    val hostPath = java.io.File(rootfs.rootfsDir, "var/xiaoqiu/$folderId")
                     val label = when (folderId) {
                         "shared" -> ctx.getString(com.xiaoqiu.R.string.shared_folder_name_shared)
                         "skills" -> ctx.getString(com.xiaoqiu.R.string.shared_folder_name_skills)
@@ -783,9 +783,9 @@ fun AppNavigation(
                         rootPath = hostPath,
                         rootLabel = label,
                         // Route reads through PRoot bind mounts so the host
-                        // dirs that back /var/minis/{shared,skills,memory}
+                        // dirs that back /var/xiaoqiu/{shared,skills,memory}
                         // resolve, matching how chat-files browse works.
-                        linuxRootPath = "/var/minis/$folderId",
+                        linuxRootPath = "/var/xiaoqiu/$folderId",
                         appContext = ctx.applicationContext,
                     )
                     navController.safeNavigate(Routes.FILE_BROWSER)
@@ -1025,19 +1025,19 @@ fun AppNavigation(
                 onBack = { navController.safePopBackStack() },
                 onBrowseFiles = { rootPath ->
                     // [T-android-copy-abs-path-fullpath] This browser is rooted at
-                    // the per-session host dir (filesDir/minis-sessions/<sid>),
+                    // the per-session host dir (filesDir/xiaoqiu-sessions/<sid>),
                     // whose immediate children (workspace/ attachments/ offloads/
-                    // browser/) are exactly the PRoot /var/minis/* subdirs. The
+                    // browser/) are exactly the PRoot /var/xiaoqiu/* subdirs. The
                     // host listing already resolves correctly so we keep rootPath
                     // host-based (no linuxRootPath re-routing — that would redirect
-                    // /var/minis to the global/empty placeholder dir). We only pass
-                    // displayLinuxPrefix = "/var/minis" so "Copy Absolute Path"
-                    // emits the agent-visible /var/minis/workspace/foo.py instead of
-                    // the opaque /data/user/0/.../minis-sessions/<sid>/... host path.
+                    // /var/xiaoqiu to the global/empty placeholder dir). We only pass
+                    // displayLinuxPrefix = "/var/xiaoqiu" so "Copy Absolute Path"
+                    // emits the agent-visible /var/xiaoqiu/workspace/foo.py instead of
+                    // the opaque /data/user/0/.../xiaoqiu-sessions/<sid>/... host path.
                     FilePreviewHolder.fileBrowserViewModel = FileBrowserViewModel(
                         rootPath = java.io.File(rootPath),
                         rootLabel = "Session Files",
-                        displayLinuxPrefix = "/var/minis",
+                        displayLinuxPrefix = "/var/xiaoqiu",
                     )
                     navController.safeNavigate(Routes.FILE_BROWSER)
                 },
@@ -1092,29 +1092,29 @@ fun AppNavigation(
         }
 
         // Browse Chat Files (iOS parity: open FileBrowser rooted at the full
-        // Linux root, focused on /var/minis. Matches AIChatView.swift L490:
-        //   FileBrowserView(rootPath: dataPath, initialPath: dataPath/var/minis,
+        // Linux root, focused on /var/xiaoqiu. Matches AIChatView.swift L490:
+        //   FileBrowserView(rootPath: dataPath, initialPath: dataPath/var/xiaoqiu,
         //                   rootLabel: "/")
-        // so the user can navigate up out of /var/minis into the broader rootfs.
+        // so the user can navigate up out of /var/xiaoqiu into the broader rootfs.
         composable(
             route = Routes.CHAT_FILES,
             arguments = listOf(navArgument("sessionId") { type = NavType.StringType }),
         ) { backStackEntry ->
             val context = androidx.compose.ui.platform.LocalContext.current
             val rootfs = RootfsManager.getInstance(context.applicationContext)
-            val varMinis = java.io.File(rootfs.rootfsDir, "var/minis")
+            val varXiaoQiu = java.io.File(rootfs.rootfsDir, "var/xiaoqiu")
             val sessionId = backStackEntry.arguments?.getString("sessionId") ?: return@composable
-            val vm = remember(rootfs.rootfsDir.absolutePath, varMinis.absolutePath, sessionId) {
+            val vm = remember(rootfs.rootfsDir.absolutePath, varXiaoQiu.absolutePath, sessionId) {
                 FileBrowserViewModel(
                     rootPath = rootfs.rootfsDir,
-                    initialPath = varMinis.takeIf { it.exists() },
+                    initialPath = varXiaoQiu.takeIf { it.exists() },
                     rootLabel = "/",
                     // T121: route directory listings through PRootKernel bind
-                    // mounts so /var/minis/{skills,memory,shared} resolve to
-                    // their backing host dirs (filesDir/minis-global/<subdir>).
+                    // mounts so /var/xiaoqiu/{skills,memory,shared} resolve to
+                    // their backing host dirs (filesDir/xiaoqiu-global/<subdir>).
                     // Without this the browser walks the rootfs tarball
                     // directly and shows the empty placeholder dirs that ship
-                    // inside Alpine's var/minis/ — every subdir reads as
+                    // inside Alpine's var/xiaoqiu/ — every subdir reads as
                     // "Empty folder" even though the agent has files there.
                     linuxRootPath = "/",
                     // T147: scope per-session subdirs (attachments / workspace
@@ -1180,7 +1180,7 @@ fun AppNavigation(
                     skillRepository = skillRepository,
                     onBack = { navController.safePopBackStack() },
                     onSkillClick = { skillId -> navController.safeNavigate(Routes.skillDetail(skillId)) },
-                    onMinisSkillsClick = { navController.safeNavigate(Routes.MINIS_SKILLS_BROWSER) },
+                    onXiaoQiuSkillsClick = { navController.safeNavigate(Routes.XIAOQIU_SKILLS_BROWSER) },
                 )
             }
         }
@@ -1222,9 +1222,9 @@ fun AppNavigation(
             }
         }
 
-        composable(Routes.MINIS_SKILLS_BROWSER) {
+        composable(Routes.XIAOQIU_SKILLS_BROWSER) {
             if (skillRepository != null) {
-                MinisSkillsBrowserScreen(
+                XiaoQiuSkillsBrowserScreen(
                     skillRepository = skillRepository,
                     onBack = { navController.safePopBackStack() },
                 )

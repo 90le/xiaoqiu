@@ -53,11 +53,11 @@ import com.xiaoqiu.R
  *   - **Copy Rich Text** — same lookup, exported as HTML+plain dual ClipData.
  *
  * The toolbar is driven by a [mutableStateOf]-backed state holder; pair it
- * with [MinisMarkdownTextToolbarHost] which renders the floating popup. The
+ * with [XiaoQiuMarkdownTextToolbarHost] which renders the floating popup. The
  * split exists because [TextToolbar] is a non-composable platform interface
  * but our UI must live inside the composition.
  */
-internal class MinisMarkdownTextToolbar(
+internal class XiaoQiuMarkdownTextToolbar(
     private val context: Context,
     private val registry: MessageBoundsRegistry,
     /**
@@ -92,10 +92,10 @@ internal class MinisMarkdownTextToolbar(
      */
     private val isStreamingNow: () -> Boolean = { false },
     /**
-     * [T-android-markdown-table-copy-actions] The MinisTextKit selection
+     * [T-android-markdown-table-copy-actions] The XiaoQiuTextKit selection
      * controller. This toolbar is the one Compose's SelectionContainer shows
      * (via LocalTextToolbar), and a table-cell long-press also sets the
-     * MinisTextKit selection, so we read the table actions for the selected
+     * XiaoQiuTextKit selection, so we read the table actions for the selected
      * message off the controller and append "Copy Table" / "Copy Table Image"
      * to THIS bar — keeping all actions in one row instead of a separate popup.
      */
@@ -268,12 +268,12 @@ internal class MinisMarkdownTextToolbar(
 }
 
 /**
- * Renders the floating toolbar controlled by [MinisMarkdownTextToolbar]. Place
+ * Renders the floating toolbar controlled by [XiaoQiuMarkdownTextToolbar]. Place
  * exactly one instance under the same `CompositionLocalProvider` that supplies
  * the toolbar so it draws above the selected text.
  */
 @Composable
-internal fun MinisMarkdownTextToolbarHost(toolbar: MinisMarkdownTextToolbar) {
+internal fun XiaoQiuMarkdownTextToolbarHost(toolbar: XiaoQiuMarkdownTextToolbar) {
     val state = toolbar.state
     if (!state.visible) return
     val anchor = remember(state.rect) { state.rect.toIntRectRounded() }
@@ -305,7 +305,7 @@ internal fun MinisMarkdownTextToolbarHost(toolbar: MinisMarkdownTextToolbar) {
             ),
         ) {
             // [T-android-copy-full-reply-scope] Make the action row
-            // horizontally scrollable, matching the MinisTextKit selection bar.
+            // horizontally scrollable, matching the XiaoQiuTextKit selection bar.
             // Buttons never wrap (ToolbarButton is maxLines=1/softWrap=false to
             // avoid the truncation documented there), so without a scroll the
             // trailing actions simply fall off the screen edge and become
@@ -341,7 +341,7 @@ internal fun MinisMarkdownTextToolbarHost(toolbar: MinisMarkdownTextToolbar) {
                     }
                 }
                 // [T-android-selection-readaloud] Speak just the selected
-                // substring through Minis TTS (provider voice with the system
+                // substring through XiaoQiu TTS (provider voice with the system
                 // engine as fallback), mirroring iOS's "Read Aloud / Read
                 // Selection" selection-menu action. Available for any
                 // selection, like Add to Chat Input.

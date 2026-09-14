@@ -140,10 +140,10 @@ import com.xiaoqiu.BuildConfig
 import com.xiaoqiu.R
 import com.xiaoqiu.data.FileMentionIndex
 import com.xiaoqiu.logging.AppLogger
-import com.xiaoqiu.ui.components.MinisAlertDialog
+import com.xiaoqiu.ui.components.XiaoQiuAlertDialog
 import com.xiaoqiu.ui.settings.autoExpandThinkingEnabled
-import com.xiaoqiu.ui.components.MinisMenu
-import com.xiaoqiu.ui.components.MinisMenuDivider
+import com.xiaoqiu.ui.components.XiaoQiuMenu
+import com.xiaoqiu.ui.components.XiaoQiuMenuDivider
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -273,7 +273,7 @@ import com.xiaoqiu.data.repository.MemoryRepository
 import com.xiaoqiu.data.repository.ProviderRepository
 import com.xiaoqiu.ui.browser.BrowserSheet
 import com.xiaoqiu.ui.theme.ChatColors
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 
 @Composable
 internal fun AssistantHeader() {
@@ -794,7 +794,7 @@ internal fun ToolCallPill(
             }
         }
         // [T-android-tool-bubble-longpress-menu] Long-press menu anchored to
-        // the pill. Items mirror the user-bubble menu's style (MinisMenu +
+        // the pill. Items mirror the user-bubble menu's style (XiaoQiuMenu +
         // DropdownMenuItem + leading icon). Each item no-ops gracefully if
         // its callback is null (re-run is gated while streaming / when no
         // preceding user turn exists).
@@ -804,7 +804,7 @@ internal fun ToolCallPill(
         // dp; cap max to the same value so the widthIn(min,max) range is always
         // valid (min <= max) even on a sub-220dp display.
         val toolMenuWidthDp = minOf(220, LocalConfiguration.current.screenWidthDp).dp
-        MinisMenu(
+        XiaoQiuMenu(
             expanded = showToolMenu,
             onDismissRequest = { showToolMenu = false },
             offset = androidx.compose.ui.unit.DpOffset(0.dp, 6.dp),
@@ -1101,7 +1101,7 @@ private fun ThinkingFullContentDialog(content: String, onDismiss: () -> Unit) {
                         color = Color(0xFF007AFF),
                     )
                     Spacer(modifier = Modifier.weight(1f))
-                    MinisTextButton(onClick = onDismiss) {
+                    XiaoQiuTextButton(onClick = onDismiss) {
                         Text(text = stringResource(android.R.string.ok))
                     }
                 }

@@ -7,16 +7,16 @@ import kotlinx.coroutines.flow.asStateFlow
 
 /**
  * Process-wide broker for URLs captured from shell stdout via the OSC
- * `MinisOpenURL` marker (emitted by `/usr/local/bin/minis-open`). The active
+ * `XiaoQiuOpenURL` marker (emitted by `/usr/local/bin/xiaoqiu-open`). The active
  * chat screen collects [pendingUrl] and routes the captured URL into its
  * existing link-tap handler, which in turn dispatches:
  *
  *   * `http(s)://` / `about:`  → `UrlPreviewSheet` via `LocalInAppBrowserLauncher`
- *   * `minis://<deep-link>`    → `DeepLinkHandler`
- *   * `minis://<host>/<path>`  → in-app file preview by extension
+ *   * `xiaoqiu://<deep-link>`    → `DeepLinkHandler`
+ *   * `xiaoqiu://<host>/<path>`  → in-app file preview by extension
  *
  * Whichever observer handles the URL calls [consume] so sibling observers
- * skip it. This mirrors iOS `MinisOpenURLBroker`.
+ * skip it. This mirrors iOS `XiaoQiuOpenURLBroker`.
  *
  * The broker also tracks which top-most host ([toolSheetVisible] /
  * [terminalVisible]) is currently presented so the chat screen can defer web
@@ -25,7 +25,7 @@ import kotlinx.coroutines.flow.asStateFlow
  * flags are kept for parity so future callers can opt into the same
  * coordination pattern without reshuffling the API.
  */
-object MinisOpenUrlBroker {
+object XiaoQiuOpenUrlBroker {
     private val _pendingUrl = MutableStateFlow<Uri?>(null)
     val pendingUrl: StateFlow<Uri?> = _pendingUrl.asStateFlow()
 
@@ -49,13 +49,13 @@ object MinisOpenUrlBroker {
     fun setTerminalVisible(visible: Boolean) { _terminalVisible.value = visible }
 
     /**
-     * Schemes `minis-open` may emit and that the host knows how to route.
+     * Schemes `xiaoqiu-open` may emit and that the host knows how to route.
      *   * `http` / `https` / `about` → in-app WebView preview
-     *   * `minis`                    → deep link or in-app file preview
+     *   * `xiaoqiu`                    → deep link or in-app file preview
      */
     fun isSupportedScheme(scheme: String?): Boolean {
         val s = scheme?.lowercase() ?: return false
-        return s == "http" || s == "https" || s == "about" || s == "minis"
+        return s == "http" || s == "https" || s == "about" || s == "xiaoqiu"
     }
 
     /**

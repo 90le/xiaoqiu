@@ -55,10 +55,10 @@ import com.xiaoqiu.sandbox.offload.SpeakOffloadHandler
 import com.xiaoqiu.sandbox.offload.SpeechOffloadHandler
 import com.xiaoqiu.sandbox.offload.WeatherOffloadHandler
 import com.xiaoqiu.service.SessionActivityTracker
-import com.xiaoqiu.ui.MinisImageFetcher
+import com.xiaoqiu.ui.XiaoQiuImageFetcher
 import kotlinx.coroutines.launch
 
-class MinisApp : Application(), ImageLoaderFactory {
+class XiaoQiuApp : Application(), ImageLoaderFactory {
     /**
      * T-android-safemode-lateinit-crash: true once the heavy subsystem
      * block in [onCreate] has fully run (DB + every repository assigned).
@@ -201,12 +201,12 @@ class MinisApp : Application(), ImageLoaderFactory {
     val networkMonitor: NetworkMonitor = NetworkMonitor()
 
     /**
-     * Application-scoped BrowserTabPool for shell-invoked `minis-browser-use`.
+     * Application-scoped BrowserTabPool for shell-invoked `xiaoqiu-browser-use`.
      * Separate from the per-ChatViewModel pool so browser state driven from
      * within an ish shell doesn't collide with the agent's own tabs.
      */
     val sharedBrowserTabPool: BrowserTabPool by lazy {
-        BrowserTabPool(this).also { it.setSession("minis-browser-use") }
+        BrowserTabPool(this).also { it.setSession("xiaoqiu-browser-use") }
     }
 
     override fun attachBaseContext(base: Context) {
@@ -255,7 +255,7 @@ class MinisApp : Application(), ImageLoaderFactory {
         // done in attachBaseContext, which is what makes the :acra
         // process do its job).
         if (ACRA.isACRASenderServiceProcess()) {
-            Log.i("MinisApp", "skipping app init in :acra reporter process")
+            Log.i("XiaoQiuApp", "skipping app init in :acra reporter process")
             return
         }
 
@@ -289,7 +289,7 @@ class MinisApp : Application(), ImageLoaderFactory {
                 java.io.File(filesDir, "logs"),
             )
         } catch (t: Throwable) {
-            Log.w("MinisApp", "NativeCrashHandler install failed: ${t.message}")
+            Log.w("XiaoQiuApp", "NativeCrashHandler install failed: ${t.message}")
         }
 
         // T-android-fgs-timeout-crash: chain an UncaughtExceptionHandler
@@ -314,7 +314,7 @@ class MinisApp : Application(), ImageLoaderFactory {
                         throwable.message?.contains("did not stop within its timeout") == true)
                     if (isFgsTimeout) {
                         Log.w(
-                            "MinisApp",
+                            "XiaoQiuApp",
                             "FGS timeout caught; stopping service before deferring to ACRA: ${throwable.message}",
                         )
                         // Stop the service so the system tears the
@@ -326,14 +326,14 @@ class MinisApp : Application(), ImageLoaderFactory {
                         }
                     }
                 } catch (t: Throwable) {
-                    Log.w("MinisApp", "FGS-timeout handler internal failure: ${t.message}")
+                    Log.w("XiaoQiuApp", "FGS-timeout handler internal failure: ${t.message}")
                 }
                 // Always defer to the prior handler so ACRA's
                 // dump-and-relaunch flow runs intact.
                 priorHandler?.uncaughtException(thread, throwable)
             }
         } catch (t: Throwable) {
-            Log.w("MinisApp", "install FGS-timeout handler failed: ${t.message}")
+            Log.w("XiaoQiuApp", "install FGS-timeout handler failed: ${t.message}")
         }
 
         // T-android-crash-freq-share: local fallback for Crashlytics (#458).
@@ -351,7 +351,7 @@ class MinisApp : Application(), ImageLoaderFactory {
         // point of safe-mode is to stop the bleeding before another
         // segfault rewrites the log files.
         if (com.xiaoqiu.crash.CrashFrequencyDetector.isSafeMode()) {
-            Log.w("MinisApp", "safe-mode ON — skipping app subsystem init")
+            Log.w("XiaoQiuApp", "safe-mode ON — skipping app subsystem init")
             return
         }
 
@@ -359,7 +359,7 @@ class MinisApp : Application(), ImageLoaderFactory {
         // logging enabled in Settings, this also kicks off stdout/stderr
         // capture so subsequent println / Throwable.printStackTrace lines from
         // the rest of onCreate land in today's log file. Mirrors iOS
-        // `LoggingManager.startIfEnabled()` (called from MinisApp.swift:143).
+        // `LoggingManager.startIfEnabled()` (called from XiaoQiuApp.swift:143).
         AppLogger.init(this)
 
         // Bug 2 (MIUI silent kill) diagnostic: write a launch-cycle beacon
@@ -370,7 +370,7 @@ class MinisApp : Application(), ImageLoaderFactory {
         try {
             com.xiaoqiu.diagnostics.LaunchCycleBeacon.recordLaunch(this)
         } catch (t: Throwable) {
-            Log.w("MinisApp", "LaunchCycleBeacon.recordLaunch failed: ${t.message}")
+            Log.w("XiaoQiuApp", "LaunchCycleBeacon.recordLaunch failed: ${t.message}")
         }
 
         // Start the main-thread hang watchdog before the heavier subsystems
@@ -435,7 +435,7 @@ class MinisApp : Application(), ImageLoaderFactory {
         // breaks the Application and produces the GH#147 crash loop.
         skillRepository = SkillRepository(this)
         mcpRepository = MCPRepository(this)
-        memoryRepository = MemoryRepository(java.io.File(filesDir, "minis-global/memory"))
+        memoryRepository = MemoryRepository(java.io.File(filesDir, "xiaoqiu-global/memory"))
         webAppShortcutRepository = WebAppShortcutRepository(database.webAppShortcutDao())
 
         // T-android-safemode-lateinit-crash: every repository the UI layer
@@ -452,7 +452,7 @@ class MinisApp : Application(), ImageLoaderFactory {
             // crash-share dialog rather than composing against unassigned
             // repositories. Do NOT rethrow: that is what turns a one-off init
             // failure into an unrecoverable launch loop.
-            Log.e("MinisApp", "subsystem init failed — app will start in degraded mode", t)
+            Log.e("XiaoQiuApp", "subsystem init failed — app will start in degraded mode", t)
             return
         }
 
@@ -464,11 +464,11 @@ class MinisApp : Application(), ImageLoaderFactory {
         com.xiaoqiu.agent.SoulStore.ensureExists(this)
         com.xiaoqiu.agent.SoulStore.refreshCache(this)
 
-        // T-config: minis-config CLI surface — registry / audit log /
+        // T-config: xiaoqiu-config CLI surface — registry / audit log /
         // master-switch store. Initialized eagerly here so
         // ConfigRegistry.get() is safe from any thread for the rest of
         // the process. Mirrors iOS ConfigRegistry.shared.registerBuiltinsIfNeeded().
-        com.xiaoqiu.config.MinisConfigPermissionStore.init(this)
+        com.xiaoqiu.config.XiaoQiuConfigPermissionStore.init(this)
         com.xiaoqiu.config.audit.ConfigAuditLog.init(this)
         com.xiaoqiu.config.ConfigRegistry.init(
             this, providerRepository, envVarRepository, chatRepository,
@@ -493,14 +493,14 @@ class MinisApp : Application(), ImageLoaderFactory {
         // DNS servers after Wi-Fi ↔ cellular swaps or VPN toggles.
         networkMonitor.start(this)
 
-        // Register global /var/minis/{memory,skills,shared} bind mounts up-front
+        // Register global /var/xiaoqiu/{memory,skills,shared} bind mounts up-front
         // so direct file I/O tools (file_read) resolve these paths even before
         // PRoot has booted or any shell has started.
         PRootKernel.registerGlobalBindMounts(this)
 
         // T219-1: load user-mounted external folders and seed PRoot's
         // bindMounts before the first proot invocation, so the very first
-        // `shell_execute` already has `/var/minis/mounts/<name>/` visible.
+        // `shell_execute` already has `/var/xiaoqiu/mounts/<name>/` visible.
         // Entries whose SAF tree URI didn't resolve to a real POSIX path
         // (cloud providers, unmounted SD card) are silently skipped by
         // bindMountSpecs.
@@ -521,7 +521,7 @@ class MinisApp : Application(), ImageLoaderFactory {
         }
         // T219-6: route launch-time seeding through applyMountedFoldersSnapshot
         // so it (a) reads the live store consistently and (b) materializes the
-        // /var/minis/mounts/<name> placeholder dirs that PRoot's `-b` needs.
+        // /var/xiaoqiu/mounts/<name> placeholder dirs that PRoot's `-b` needs.
         // Note: this runs before PRootKernel.boot, so rootfs may not yet exist —
         // applyMountedFoldersSnapshot tolerates that case (mkdirs fails silently
         // and PRootKernel.boot calls applyMountedFoldersSnapshot again at the
@@ -545,29 +545,29 @@ class MinisApp : Application(), ImageLoaderFactory {
         NativeOffloadServer.register("android-speak", SpeakOffloadHandler(this))
         NativeOffloadServer.register("android-speech", SpeechOffloadHandler(this))
         NativeOffloadServer.register("android-weather", WeatherOffloadHandler(this))
-        // T323: UI-layer automation backed by MinisAccessibilityService.
+        // T323: UI-layer automation backed by XiaoQiuAccessibilityService.
         NativeOffloadServer.register("android-a11y-cli", AccessibilityOffloadHandler(this))
-        NativeOffloadServer.register("minis-model-use", ModelUseOffloadHandler(this, providerRepository))
-        // T-config: minis-config — agent-facing settings management
+        NativeOffloadServer.register("xiaoqiu-model-use", ModelUseOffloadHandler(this, providerRepository))
+        // T-config: xiaoqiu-config — agent-facing settings management
         // (read/write registered ConfigFields with audit + revert).
         // Mirrors iOS `config_offload_register()` in ISHKernel.m.
         NativeOffloadServer.register(
-            "minis-config",
+            "xiaoqiu-config",
             com.xiaoqiu.sandbox.offload.ConfigOffloadHandler(),
         )
-        NativeOffloadServer.register("minis-browser-use", BrowserUseOffloadHandler(this))
-        // T188: minis-sessions-cli — agent-side query of chat history.
-        // Registers next to the other minis-* tools so PRootKernel.
+        NativeOffloadServer.register("xiaoqiu-browser-use", BrowserUseOffloadHandler(this))
+        // T188: xiaoqiu-sessions-cli — agent-side query of chat history.
+        // Registers next to the other xiaoqiu-* tools so PRootKernel.
         // installHandlerStubs() picks it up on the next rootfs boot
-        // (writes a 17-byte exit-0 stub at /usr/local/bin/minis-sessions-cli
+        // (writes a 17-byte exit-0 stub at /usr/local/bin/xiaoqiu-sessions-cli
         // so PATH lookup succeeds; PRoot intercepts the execve before
         // the stub runs and routes to this handler).
-        NativeOffloadServer.register("minis-sessions-cli", SessionsOffloadHandler(chatRepository))
-        // [T-android-scheduled-tasks-full] minis-scheduled — create/list/run
+        NativeOffloadServer.register("xiaoqiu-sessions-cli", SessionsOffloadHandler(chatRepository))
+        // [T-android-scheduled-tasks-full] xiaoqiu-scheduled — create/list/run
         // timed AI tasks (new chat / follow-up / re-run), mirroring the in-app
         // Scheduled Tasks editor and the iOS Shortcuts intent set.
         NativeOffloadServer.register(
-            "minis-scheduled",
+            "xiaoqiu-scheduled",
             com.xiaoqiu.sandbox.offload.ScheduledTaskOffloadHandler(this),
         )
         // T322: android-shizuku-cli — privileged Android control via Shizuku.
@@ -578,14 +578,14 @@ class MinisApp : Application(), ImageLoaderFactory {
         NativeOffloadServer.register("android-shizuku-cli", ShizukuOffloadHandler(this))
         com.xiaoqiu.offload.ShizukuManager.init(this)
 
-        // T-android-minis-debug-cli: shell-side CLI wrapper around the in-app
+        // T-android-xiaoqiu-debug-cli: shell-side CLI wrapper around the in-app
         // DebugServer (127.0.0.1:5321) JSON-RPC. DEBUG-only — Release builds
         // ship neither the DebugServer nor this handler, so the
-        // `/usr/local/bin/minis-debug` stub is also absent (PRootKernel.
+        // `/usr/local/bin/xiaoqiu-debug` stub is also absent (PRootKernel.
         // installHandlerStubs enumerates currently-registered handlers).
         if (BuildConfig.DEBUG) {
             NativeOffloadServer.register(
-                "minis-debug",
+                "xiaoqiu-debug",
                 com.xiaoqiu.sandbox.offload.DebugOffloadHandler(this),
             )
         }
@@ -633,7 +633,7 @@ class MinisApp : Application(), ImageLoaderFactory {
         }
 
         // [T-android-config-confirm-timeout] Wire the config-confirm background
-        // notifier into the (Context-free) gate, so a minis-config approval that
+        // notifier into the (Context-free) gate, so a xiaoqiu-config approval that
         // is waiting while the app is backgrounded nudges the user before the
         // 120s timeout. Mirrors iOS ConfigConfirmationGate.notifyIfBackgrounded.
         val configConfirmNotifier = com.xiaoqiu.notification.ConfigConfirmNotifier(
@@ -724,7 +724,7 @@ class MinisApp : Application(), ImageLoaderFactory {
         // Initialize speech-recognition adapter layer (system + provider engines).
         com.xiaoqiu.speech.SpeechRecognitionManager.init(this)
 
-        // Refresh model lists once per calendar day (mirrors iOS MinisApp.swift).
+        // Refresh model lists once per calendar day (mirrors iOS XiaoQiuApp.swift).
         // Runs per-instance in parallel; `autoRefreshModels` skips instances with custom models.
         providerRepository.refreshAllModelsIfNeeded(
             kotlinx.coroutines.CoroutineScope(kotlinx.coroutines.Dispatchers.IO)
@@ -743,14 +743,14 @@ class MinisApp : Application(), ImageLoaderFactory {
                         try {
                             ExecutionCoordinator.broadcastTimezoneChange()
                         } catch (t: Throwable) {
-                            Log.w("MinisApp", "broadcastTimezoneChange failed: ${t.message}")
+                            Log.w("XiaoQiuApp", "broadcastTimezoneChange failed: ${t.message}")
                         }
                     }
                     android.net.Proxy.PROXY_CHANGE_ACTION -> scope.launch {
                         try {
                             ExecutionCoordinator.broadcastProxyChange()
                         } catch (t: Throwable) {
-                            Log.w("MinisApp", "broadcastProxyChange failed: ${t.message}")
+                            Log.w("XiaoQiuApp", "broadcastProxyChange failed: ${t.message}")
                         }
                     }
                 }
@@ -769,25 +769,25 @@ class MinisApp : Application(), ImageLoaderFactory {
             try {
                 com.xiaoqiu.debug.DebugServer(this).start()
             } catch (e: Exception) {
-                Log.w("MinisApp", "Failed to start debug server: ${e.message}")
+                Log.w("XiaoQiuApp", "Failed to start debug server: ${e.message}")
             }
         }
 
         // T268: one-shot migration of pre-T266 internal alarms into the
-        // system Clock app. Pre-T266 builds wrote alarms into Minis's own
+        // system Clock app. Pre-T266 builds wrote alarms into XiaoQiu's own
         // SharedPreferences + AlarmManager; T266 retired that path but old
-        // installs still have ghost entries that fire only inside Minis.
+        // installs still have ghost entries that fire only inside XiaoQiu.
         // Replay each future-dated entry through the same SET_ALARM /
         // SET_TIMER intents the new path uses, then clear prefs so the
         // migration runs at most once. Wrapped in runCatching so an
         // unexpected prefs shape never blocks app launch.
         runCatching { migrateGhostAlarms() }
-            .onFailure { Log.w("MinisApp", "ghost alarm migration failed: ${it.message}") }
+            .onFailure { Log.w("XiaoQiuApp", "ghost alarm migration failed: ${it.message}") }
     }
 
     /**
      * T268: replay any pre-T266 internal alarm/timer entries from
-     * minis_alarms_prefs through SET_ALARM / SET_TIMER, then clear the
+     * xiaoqiu_alarms_prefs through SET_ALARM / SET_TIMER, then clear the
      * prefs blob so subsequent launches no-op. Past-dated entries are
      * dropped (the OS never re-fires them anyway). Idempotent: if the
      * blob is missing or empty the function returns immediately.
@@ -801,7 +801,7 @@ class MinisApp : Application(), ImageLoaderFactory {
      * commands will no longer surface them.
      */
     private fun migrateGhostAlarms() {
-        val prefs = getSharedPreferences("minis_alarms_prefs", Context.MODE_PRIVATE)
+        val prefs = getSharedPreferences("xiaoqiu_alarms_prefs", Context.MODE_PRIVATE)
         val raw = prefs.getString("alarms_json", null) ?: return
         if (raw.isBlank() || raw == "[]") return
         val arr = org.json.JSONArray(raw)
@@ -852,24 +852,24 @@ class MinisApp : Application(), ImageLoaderFactory {
         // still useless ghosts, and leaving the blob would re-trigger
         // migration on every launch.
         prefs.edit().remove("alarms_json").apply()
-        Log.i("MinisApp", "T268 ghost alarm migration: migrated=$migrated skipped=$skipped (prefs cleared)")
+        Log.i("XiaoQiuApp", "T268 ghost alarm migration: migrated=$migrated skipped=$skipped (prefs cleared)")
     }
 
     /**
-     * Coil global ImageLoader — registers [MinisImageFetcher] so `minis://`
-     * URIs in Markdown images (e.g. `![alt](minis://attachments/x.png)`)
-     * resolve to local files under /var/minis/.
+     * Coil global ImageLoader — registers [XiaoQiuImageFetcher] so `xiaoqiu://`
+     * URIs in Markdown images (e.g. `![alt](xiaoqiu://attachments/x.png)`)
+     * resolve to local files under /var/xiaoqiu/.
      */
     override fun newImageLoader(): ImageLoader =
         ImageLoader.Builder(this)
             .components {
-                add(MinisImageFetcher.Factory())
-                add(MinisImageFetcher.UriFactory())
+                add(XiaoQiuImageFetcher.Factory())
+                add(XiaoQiuImageFetcher.UriFactory())
                 // T-image-cache-mtime-35133: include File.lastModified() in
                 // memory + disk cache key so Grok-style in-place rewrites of
-                // minis://attachments/foo.jpg invalidate Coil's cached bitmap.
-                add(MinisImageFetcher.MtimeKeyer())
-                add(MinisImageFetcher.StringMtimeKeyer())
+                // xiaoqiu://attachments/foo.jpg invalidate Coil's cached bitmap.
+                add(XiaoQiuImageFetcher.MtimeKeyer())
+                add(XiaoQiuImageFetcher.StringMtimeKeyer())
             }
             .build()
 
@@ -910,16 +910,16 @@ class MinisApp : Application(), ImageLoaderFactory {
         }
         if (!dropFormulaCaches) return
 
-        Log.i("MinisApp", "onTrimMemory(level=$level): releasing formula bitmap caches")
+        Log.i("XiaoQiuApp", "onTrimMemory(level=$level): releasing formula bitmap caches")
         runCatching { com.xiaoqiu.ui.chat.KatexWebViewPool.evictAll() }
-            .onFailure { Log.w("MinisApp", "KatexWebViewPool.evictAll failed: ${it.message}") }
+            .onFailure { Log.w("XiaoQiuApp", "KatexWebViewPool.evictAll failed: ${it.message}") }
         runCatching { com.xiaoqiu.ui.markdown.KaTeXRendererCache.evictAll() }
-            .onFailure { Log.w("MinisApp", "KaTeXRendererCache.evictAll failed: ${it.message}") }
+            .onFailure { Log.w("XiaoQiuApp", "KaTeXRendererCache.evictAll failed: ${it.message}") }
 
         if (level >= TRIM_MEMORY_COMPLETE) {
-            Log.i("MinisApp", "onTrimMemory(level=$level): tearing down the offscreen KaTeX WebView")
+            Log.i("XiaoQiuApp", "onTrimMemory(level=$level): tearing down the offscreen KaTeX WebView")
             runCatching { com.xiaoqiu.ui.chat.KatexWebViewPool.releaseWebView() }
-                .onFailure { Log.w("MinisApp", "KatexWebViewPool.releaseWebView failed: ${it.message}") }
+                .onFailure { Log.w("XiaoQiuApp", "KatexWebViewPool.releaseWebView failed: ${it.message}") }
         }
     }
 
@@ -932,7 +932,7 @@ class MinisApp : Application(), ImageLoaderFactory {
         try {
             com.xiaoqiu.diagnostics.LaunchCycleBeacon.recordCleanExit(this)
         } catch (t: Throwable) {
-            Log.w("MinisApp", "LaunchCycleBeacon.recordCleanExit failed: ${t.message}")
+            Log.w("XiaoQiuApp", "LaunchCycleBeacon.recordCleanExit failed: ${t.message}")
         }
         super.onTerminate()
     }

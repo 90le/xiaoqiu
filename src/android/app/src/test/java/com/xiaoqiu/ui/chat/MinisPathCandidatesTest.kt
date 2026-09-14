@@ -5,21 +5,21 @@ import org.junit.Assert.assertTrue
 import org.junit.Test
 
 /**
- * [T-android-minis-url-double-encoding] Decode candidates for a `minis://`
+ * [T-android-xiaoqiu-url-double-encoding] Decode candidates for a `xiaoqiu://`
  * path.
  *
- * The field report: `minis://workspace/厚升凭证拆分/厚博-2026-03-935.pdf` was
+ * The field report: `xiaoqiu://workspace/厚升凭证拆分/厚博-2026-03-935.pdf` was
  * unclickable in chat — tapping did nothing at all — while the same file under
  * an ASCII directory opened fine. A tap that resolves to no file falls through
- * to `ChatLinkAction.Web`, and a web preview of a `minis://` URL renders
+ * to `ChatLinkAction.Web`, and a web preview of a `xiaoqiu://` URL renders
  * nothing, so the link simply looks dead.
  *
- * Ported from iOS `MinisURLPathDecoding` (T-fix-double-encoding 2026-06-01),
+ * Ported from iOS `XiaoQiuURLPathDecoding` (T-fix-double-encoding 2026-06-01),
  * which fixed the same defect there.
  */
-class MinisPathCandidatesTest {
+class XiaoQiuPathCandidatesTest {
 
-    private fun candidates(path: String) = ChatLinkResolver.minisPathCandidates(path)
+    private fun candidates(path: String) = ChatLinkResolver.xiaoqiuPathCandidates(path)
 
     private val cjkDir = "%E5%8E%9A%E5%8D%87%E5%87%AD%E8%AF%81%E6%8B%86%E5%88%86"
     private val cjkFile = "%E5%8E%9A%E5%8D%9A-2026-03-935.pdf"

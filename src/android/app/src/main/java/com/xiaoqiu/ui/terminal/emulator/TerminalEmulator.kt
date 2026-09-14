@@ -385,10 +385,10 @@ class TerminalEmulator(cols: Int = 80, rows: Int = 24) {
 
     private fun handleITermOsc(payload: String) {
         val eq = payload.indexOf('=')
-        if (eq <= 0 || payload.substring(0, eq) != "MinisOpenURL") return
+        if (eq <= 0 || payload.substring(0, eq) != "XiaoQiuOpenURL") return
         val urlString = payload.substring(eq + 1)
         if (urlString.isEmpty()) return
-        com.xiaoqiu.terminal.MinisOpenUrlBroker.offer(urlString)
+        com.xiaoqiu.terminal.XiaoQiuOpenUrlBroker.offer(urlString)
     }
 
     private fun switchBuffer(toAlternate: Boolean) {

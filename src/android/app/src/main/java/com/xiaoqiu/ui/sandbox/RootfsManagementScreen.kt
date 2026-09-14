@@ -1,7 +1,7 @@
 package com.xiaoqiu.ui.sandbox
 
 import com.xiaoqiu.R
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 
 import android.text.format.Formatter
 import androidx.compose.foundation.background
@@ -316,7 +316,7 @@ fun RootfsManagementScreen(
             title = { Text(stringResource(R.string.rootfs_reset_confirm_title)) },
             text = { Text(stringResource(R.string.rootfs_reset_confirm_message)) },
             confirmButton = {
-                MinisTextButton(onClick = {
+                XiaoQiuTextButton(onClick = {
                     showResetDialog = false
                     viewModel.resetRootfs(context, keepUserData = false)
                 }) {
@@ -324,7 +324,7 @@ fun RootfsManagementScreen(
                 }
             },
             dismissButton = {
-                MinisTextButton(onClick = { showResetDialog = false }) {
+                XiaoQiuTextButton(onClick = { showResetDialog = false }) {
                     Text(stringResource(R.string.common_cancel))
                 }
             },
@@ -339,7 +339,7 @@ fun RootfsManagementScreen(
                 Text(stringResource(R.string.rootfs_reset_backup_confirm_message))
             },
             confirmButton = {
-                MinisTextButton(onClick = {
+                XiaoQiuTextButton(onClick = {
                     showResetBackupDialog = false
                     viewModel.resetRootfs(context, keepUserData = true)
                 }) {
@@ -347,7 +347,7 @@ fun RootfsManagementScreen(
                 }
             },
             dismissButton = {
-                MinisTextButton(onClick = { showResetBackupDialog = false }) {
+                XiaoQiuTextButton(onClick = { showResetBackupDialog = false }) {
                     Text(stringResource(R.string.common_cancel))
                 }
             },

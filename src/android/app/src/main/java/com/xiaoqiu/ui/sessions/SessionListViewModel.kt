@@ -506,7 +506,7 @@ class SessionListViewModel(
     }
 
     private suspend fun runGroupSuggestion(sessionIds: List<String>): GroupSuggestion {
-        // [T-ios-folder-suggest-anchor-nondeterminism] Walk the selection in a
+        // [T-ios-folder-suggest-anchor-nondeterxiaoqium] Walk the selection in a
         // STABLE (sorted) order and take the first session that actually
         // resolves a usable model, instead of letting one arbitrary session
         // decide whether the feature works. On iOS the ids arrived from a Set,

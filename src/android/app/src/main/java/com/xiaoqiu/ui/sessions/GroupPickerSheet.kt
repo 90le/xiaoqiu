@@ -38,7 +38,7 @@ import androidx.compose.ui.semantics.stateDescription
 import androidx.compose.ui.unit.dp
 import com.xiaoqiu.R
 import com.xiaoqiu.data.db.FolderEntity
-import com.xiaoqiu.ui.components.MinisSmallButton
+import com.xiaoqiu.ui.components.XiaoQiuSmallButton
 import com.xiaoqiu.ui.components.SectionDesign
 import com.xiaoqiu.ui.components.SectionTextField
 
@@ -249,7 +249,7 @@ fun GroupPickerSheet(
                     }
                 }
                 Spacer(Modifier.weight(1f))
-                MinisSmallButton(
+                XiaoQiuSmallButton(
                     onClick = {
                         onChoose(
                             GroupChoice.Create(

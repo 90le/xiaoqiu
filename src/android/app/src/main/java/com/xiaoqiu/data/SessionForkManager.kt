@@ -181,16 +181,16 @@ class SessionForkManager(
 
     /**
      * Persist a memory note (plain Markdown / text) under
-     * `<filesDir>/minis-global/memory/<fileName>`. Mirrors iOS
+     * `<filesDir>/xiaoqiu-global/memory/<fileName>`. Mirrors iOS
      * `SessionForkManager.copyRemoteMemory` which writes under
-     * `minisMemoryPersistentDir`. Overwrites if the file already exists.
+     * `xiaoqiuMemoryPersistentDir`. Overwrites if the file already exists.
      */
     fun copyMemory(fileName: String, content: String): Boolean {
         if (fileName.contains("/") || fileName.contains("..")) {
             AppLogger.warning(TAG, "copyMemory: rejecting unsafe fileName '$fileName'")
             return false
         }
-        val dir = File(filesDir, "minis-global/memory").apply { mkdirs() }
+        val dir = File(filesDir, "xiaoqiu-global/memory").apply { mkdirs() }
         return try {
             File(dir, fileName).writeText(content)
             true

@@ -83,10 +83,10 @@ import com.xiaoqiu.R
 import com.xiaoqiu.backup.BackupCategory
 import com.xiaoqiu.backup.BackupFormat
 import com.xiaoqiu.backup.BackupHistory
-import com.xiaoqiu.ui.components.MinisMenu
-import com.xiaoqiu.ui.components.MinisButton
-import com.xiaoqiu.ui.components.MinisOutlinedButton
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuMenu
+import com.xiaoqiu.ui.components.XiaoQiuButton
+import com.xiaoqiu.ui.components.XiaoQiuOutlinedButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 import com.xiaoqiu.ui.settings.SettingsScaffold
 import com.xiaoqiu.ui.settings.SettingsSection
 
@@ -386,7 +386,7 @@ private fun BackupTab(
         // Progress belongs in the run's own entry in Backup History below,
         // which shows the live status line and the whole log; the control
         // stays a control. Same reasoning, and the same shape, as iOS.
-        MinisButton(
+        XiaoQiuButton(
             onClick = {
                 if (running) vm.stopExport()
                 else vm.startExport(passphrase.takeIf { encrypt })
@@ -723,7 +723,7 @@ private fun MaxFileSizeRow(
                         modifier = Modifier.size(18.dp),
                     )
                 }
-                MinisMenu(
+                XiaoQiuMenu(
                     expanded = expanded,
                     onDismissRequest = { expanded = false },
                     alignEnd = true,
@@ -941,7 +941,7 @@ private fun RestoreTab(
     }
 
     Column(Modifier.padding(16.dp)) {
-        MinisButton(
+        XiaoQiuButton(
             onClick = { vm.startRestore(passphrase.takeIf { p.manifest.encryption != null }) },
             enabled = !running && restoreSelected.isNotEmpty(),
             modifier = Modifier.fillMaxWidth(),
@@ -990,7 +990,7 @@ private fun RestoreTab(
                 )
             }
         }
-        MinisOutlinedButton(
+        XiaoQiuOutlinedButton(
             onClick = { vm.cancelRestore(); onPassphraseChange("") },
             enabled = !running,
             modifier = Modifier.fillMaxWidth().padding(top = 8.dp),
@@ -1089,7 +1089,7 @@ private fun RestoreReport(
     }
 
     Column(Modifier.padding(16.dp)) {
-        MinisButton(onClick = onDone, modifier = Modifier.fillMaxWidth()) {
+        XiaoQiuButton(onClick = onDone, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.backup_done))
         }
     }
@@ -1400,7 +1400,7 @@ private fun ServerPackagePicker(
         },
         confirmButton = {},
         dismissButton = {
-            MinisTextButton(onClick = onDismiss) { Text(stringResource(R.string.backup_dest_cancel)) }
+            XiaoQiuTextButton(onClick = onDismiss) { Text(stringResource(R.string.backup_dest_cancel)) }
         },
     )
 }

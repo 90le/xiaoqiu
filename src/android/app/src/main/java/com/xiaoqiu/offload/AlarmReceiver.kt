@@ -15,7 +15,7 @@ class AlarmReceiver : BroadcastReceiver() {
 
     companion object {
         private const val TAG = "AlarmReceiver"
-        private const val NOTIFICATION_GROUP = "minis_alarm_group"
+        private const val NOTIFICATION_GROUP = "xiaoqiu_alarm_group"
     }
 
     override fun onReceive(context: Context, intent: Intent) {
@@ -71,7 +71,7 @@ class AlarmReceiver : BroadcastReceiver() {
 
         val notification = NotificationCompat.Builder(context, AlarmOffloadManager.CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_lock_idle_alarm)
-            .setContentTitle("Minis Alarm")
+            .setContentTitle("XiaoQiu Alarm")
             .setContentText(label)
             .setPriority(NotificationCompat.PRIORITY_HIGH)
             .setCategory(NotificationCompat.CATEGORY_ALARM)

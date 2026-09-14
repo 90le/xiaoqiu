@@ -64,7 +64,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.IntOffset
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
-import com.xiaoqiu.MinisApp
+import com.xiaoqiu.XiaoQiuApp
 import com.xiaoqiu.R
 import com.xiaoqiu.speech.VoiceOutputState
 import kotlinx.coroutines.delay
@@ -118,7 +118,7 @@ fun SpeechPlayerCapsule(
      * measured by ChatScreen's existing onGloballyPositioned. 0 when absent.
      * The composer itself needs no avoidance: the host Box ends above it.
      * This is the simplified stand-in for iOS's protectedRects/requiredLift
-     * machinery — deterministic lift over the one full-width obstacle that
+     * machinery — deterxiaoqiutic lift over the one full-width obstacle that
      * actually shares the capsule's corner.
      */
     bottomObstructionPx: Int = 0,
@@ -374,7 +374,7 @@ fun SpeechPlayerCapsule(
         // config .voiceOutput()): bound Voice Output group + System TTS + every
         // provider section with audio-output models and Quick Test — replacing
         // the first-cut flat candidate list.
-        val repo = (LocalContext.current.applicationContext as? MinisApp)?.providerRepository
+        val repo = (LocalContext.current.applicationContext as? XiaoQiuApp)?.providerRepository
         if (repo != null) {
             VoiceOutputPickerSheet(
                 providerRepository = repo,

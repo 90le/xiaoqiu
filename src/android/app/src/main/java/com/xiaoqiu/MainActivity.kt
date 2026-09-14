@@ -50,9 +50,9 @@ import com.xiaoqiu.ui.settings.PREF_APPEARANCE
 import com.xiaoqiu.ui.settings.getAppearancePrefs
 import com.xiaoqiu.ui.settings.fontScaleForLevel
 import com.xiaoqiu.ui.settings.keepScreenAwakeEnabled
-import com.xiaoqiu.ui.theme.MinisTheme
+import com.xiaoqiu.ui.theme.XiaoQiuTheme
 
-private const val KEY_CURRENT_CHAT_SESSION_ID = "minis.current_chat_session_id"
+private const val KEY_CURRENT_CHAT_SESSION_ID = "xiaoqiu.current_chat_session_id"
 
 class MainActivity : ComponentActivity() {
 
@@ -122,7 +122,7 @@ class MainActivity : ComponentActivity() {
 
     /**
      * T-android-safemode-lateinit-crash: escape hatch for a process whose
-     * [MinisApp.onCreate] early-returned under safe-mode.
+     * [XiaoQiuApp.onCreate] early-returned under safe-mode.
      *
      * That early return is irreversible within the process — the
      * repositories stay unassigned no matter what the safe-mode flag says
@@ -203,21 +203,21 @@ class MainActivity : ComponentActivity() {
         }
 
         // Safe-mode short-circuit: if CrashFrequencyDetector tripped in
-        // MinisApp.onCreate (≥THRESHOLD recent crash files), the
+        // XiaoQiuApp.onCreate (≥THRESHOLD recent crash files), the
         // Application skipped all heavy init — no DB, no repos, no
         // offload server. We must NOT call setContent() / ChatViewModel /
-        // any code that touches MinisApp's lateinit deps; doing so would
+        // any code that touches XiaoQiuApp's lateinit deps; doing so would
         // throw UninitializedPropertyAccessException and overwrite the
         // very crash logs we're trying to ship.
         //
         // Pop the share/dismiss dialog directly and finish() on close so
         // the user's next launch starts fresh. The dialog UI uses
-        // AlertDialog (system-level) which doesn't touch MinisApp state.
+        // AlertDialog (system-level) which doesn't touch XiaoQiuApp state.
         // T-android-safemode-lateinit-crash: gate on the Application's own
         // "did init actually run" flag, NOT on isSafeMode(). The two are
         // not equivalent, and the difference was a hard crash loop:
         // finishClose() sets safe-mode back to false as soon as the user
-        // dismisses the share dialog, but MinisApp.onCreate already
+        // dismisses the share dialog, but XiaoQiuApp.onCreate already
         // early-returned and never re-runs for the life of the process.
         // Any MainActivity created after that dismissal (launcher icon —
         // including the MainActivityIconDark alias — notification tap, or
@@ -232,7 +232,7 @@ class MainActivity : ComponentActivity() {
         // `subsystemsInitialized` only goes true after every repository is
         // assigned, so it stays false for exactly as long as composing is
         // genuinely unsafe.
-        val minisApp = application as? MinisApp
+        val xiaoqiuApp = application as? XiaoQiuApp
 
         // [T-android-downgrade-compat] A database written by a NEWER build is
         // not a crash — it is a recoverable state with a specific remedy, and
@@ -240,8 +240,8 @@ class MainActivity : ComponentActivity() {
         // generic crash-share path below, which would otherwise ask the user to
         // send a bug report for something that is not a bug and offer no way
         // out.
-        if (minisApp != null &&
-            minisApp.dbVersionDecision ==
+        if (xiaoqiuApp != null &&
+            xiaoqiuApp.dbVersionDecision ==
             com.xiaoqiu.data.db.DatabaseVersionGuard.Decision.SHOW_NEWER_DB_GUIDANCE
         ) {
             android.util.Log.w("MainActivity", "showing newer-database guidance screen")
@@ -249,7 +249,7 @@ class MainActivity : ComponentActivity() {
             return
         }
 
-        if (minisApp == null || !minisApp.subsystemsInitialized) {
+        if (xiaoqiuApp == null || !xiaoqiuApp.subsystemsInitialized) {
             android.util.Log.w(
                 "MainActivity",
                 "app subsystems not initialized (safeMode=" +
@@ -263,7 +263,7 @@ class MainActivity : ComponentActivity() {
                 // onClosed immediately when pendingShareFiles is null, which
                 // is exactly the state after the user dismissed the dialog on
                 // the previous launch — the app would close the instant it was
-                // tapped, reading as "Minis won't open at all". The process
+                // tapped, reading as "XiaoQiu won't open at all". The process
                 // still holds a permanently uninitialized Application, so the
                 // only real recovery is a fresh process: tell the user, then
                 // exit hard so the next tap gets a clean init.
@@ -456,7 +456,7 @@ class MainActivity : ComponentActivity() {
         //
         // [T-android-share-launch-crash] Deliberately UNCONDITIONAL, matching
         // iOS `checkForPendingShare()` which runs on every launch
-        // (MinisApp.swift:279) rather than keying off a launch parameter.
+        // (XiaoQiuApp.swift:279) rather than keying off a launch parameter.
         // Gating on the extra made the share unrecoverable in exactly the case
         // the OEM-crash fallback creates: when ShareReceiverActivity cannot
         // start MainActivity at all, the extra is never delivered, so a user
@@ -491,7 +491,7 @@ class MainActivity : ComponentActivity() {
         }
 
         // Non-null and fully initialized — proven by the guard above.
-        val app = requireNotNull(application as? MinisApp)
+        val app = requireNotNull(application as? XiaoQiuApp)
 
         // Parse deep link from launch intent. A real deep-link in the
         // launch intent always wins over a saved-state restore (the
@@ -554,7 +554,7 @@ class MainActivity : ComponentActivity() {
                 enableEdgeToEdge(statusBarStyle = barStyle, navigationBarStyle = barStyle)
             }
 
-            MinisTheme(darkTheme = darkTheme, fontScale = fontScale) {
+            XiaoQiuTheme(darkTheme = darkTheme, fontScale = fontScale) {
                 val navController = rememberNavController().also { this.navController = it }
 
                 // T166: drive `SessionActivityTracker.setPresent` /
@@ -596,12 +596,12 @@ class MainActivity : ComponentActivity() {
                     initialDeepLink = launchDeepLink,
                 )
 
-                // T-config: root-level minis-config confirm dialog.
+                // T-config: root-level xiaoqiu-config confirm dialog.
                 // Bound to ConfigConfirmationGate.pending — the gate
                 // fires whenever a CLI write is awaiting user OK. The
                 // dialog is rendered on top of any active screen, so
                 // it works regardless of where the user is when the
-                // agent triggers a change. Mirrors iOS MinisApp.swift
+                // agent triggers a change. Mirrors iOS XiaoQiuApp.swift
                 // root-level `.sheet(item: gate.pending)`.
                 com.xiaoqiu.ui.settings.ConfigConfirmDialogHost()
             }
@@ -770,7 +770,7 @@ class MainActivity : ComponentActivity() {
                 }
             }
             is DeepLinkAction.OpenAlarmList -> {
-                // T297: minis://views/alarm now opens the system Clock app
+                // T297: xiaoqiu://views/alarm now opens the system Clock app
                 // directly via AlarmClock.ACTION_SHOW_ALARMS — the in-app
                 // AlarmListScreen was a one-button passthrough that did the
                 // exact same thing. The android-alarm tool envelope still

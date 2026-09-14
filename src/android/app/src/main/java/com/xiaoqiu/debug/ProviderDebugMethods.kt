@@ -1,7 +1,7 @@
 package com.xiaoqiu.debug
 
 import android.content.Context
-import com.xiaoqiu.MinisApp
+import com.xiaoqiu.XiaoQiuApp
 import com.xiaoqiu.data.model.LLMModel
 import com.xiaoqiu.data.model.ProviderConfig
 import com.xiaoqiu.data.model.ProviderType
@@ -23,8 +23,8 @@ import org.json.JSONObject
 internal object ProviderDebugMethods {
 
     private fun repo(context: Context): ProviderRepository {
-        val app = context.applicationContext as? MinisApp
-            ?: throw RPCException(-32000, "MinisApp not initialized")
+        val app = context.applicationContext as? XiaoQiuApp
+            ?: throw RPCException(-32000, "XiaoQiuApp not initialized")
         // Force the lazy load HERE, once, for every provider.* handler. These
         // handlers read `config.value` directly, and ProviderRepository loads
         // config lazily on first mutation/access — so on a cold process (app

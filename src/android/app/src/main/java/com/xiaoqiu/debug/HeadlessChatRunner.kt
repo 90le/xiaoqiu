@@ -2,7 +2,7 @@ package com.xiaoqiu.debug
 
 import android.content.Context
 import androidx.lifecycle.ViewModelProvider
-import com.xiaoqiu.MinisApp
+import com.xiaoqiu.XiaoQiuApp
 import com.xiaoqiu.data.model.ThinkingLevel
 import com.xiaoqiu.ui.chat.ChatViewModel
 import com.xiaoqiu.ui.chat.ChatViewModelStore
@@ -33,9 +33,9 @@ internal object HeadlessChatRunner {
     /** sessionId → ViewModelProvider that owns its single ChatViewModel. */
     private val providers = mutableMapOf<String, ViewModelProvider>()
 
-    private fun app(context: Context): MinisApp =
-        context.applicationContext as? MinisApp
-            ?: throw RPCException(-32000, "MinisApp not initialized")
+    private fun app(context: Context): XiaoQiuApp =
+        context.applicationContext as? XiaoQiuApp
+            ?: throw RPCException(-32000, "XiaoQiuApp not initialized")
 
     @Synchronized
     private fun providerFor(context: Context, sessionId: String): ViewModelProvider {

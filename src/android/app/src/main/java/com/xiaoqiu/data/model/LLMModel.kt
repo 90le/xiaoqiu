@@ -20,7 +20,7 @@ data class LLMModel(
     // contents are the ALLOWED tiers, which the request builder clamps onto
     // (the catalog's sets vary: ["low","medium","high"], ["high","max"], …).
     val reasoningEffortValues: List<String>? = null,
-    // [OpenMinis#163] The catalog affirmatively declares NO effort tiers for
+    // [OpenXiaoQiu#163] The catalog affirmatively declares NO effort tiers for
     // this model — it reasons, but takes no `reasoning_effort` parameter.
     // Mirrors iOS LLMModel.declaresNoEffortTiers.
     //

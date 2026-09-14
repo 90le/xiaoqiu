@@ -120,9 +120,9 @@ private fun BlockContent(
             modifier = Modifier.padding(vertical = 4.dp),
             color = color.copy(alpha = 0.3f),
         )
-        is MarkdownParser.Block.Image -> MinisImageBlock(block)
-        is MarkdownParser.Block.Video -> MinisVideoBlock(block)
-        is MarkdownParser.Block.Audio -> MinisAudioBlock(block)
+        is MarkdownParser.Block.Image -> XiaoQiuImageBlock(block)
+        is MarkdownParser.Block.Video -> XiaoQiuVideoBlock(block)
+        is MarkdownParser.Block.Audio -> XiaoQiuAudioBlock(block)
     }
 }
 
@@ -678,22 +678,22 @@ private fun parseInline(
 // ─── Media blocks (inline image / video / audio) ────────────────────────────
 
 /**
- * Resolve a URL used in Markdown (`minis://...` or a plain path) to a host
+ * Resolve a URL used in Markdown (`xiaoqiu://...` or a plain path) to a host
  * File, suitable for MediaPlayer, MediaMetadataRetriever, or file share
  * intents. Returns null when the path can't be resolved or the file is
- * missing. Mirrors MinisImageFetcher's resolution logic so inline media
+ * missing. Mirrors XiaoQiuImageFetcher's resolution logic so inline media
  * tracks the same rules as inline images.
  */
 private fun resolveMediaFile(url: String): File? {
     if (url.isBlank()) return null
     // Strip a real query string, but NOT `#`: attachment filenames can
-    // contain '#' (e.g. `foo #China.mp4`). `minis://` URLs don't use
+    // contain '#' (e.g. `foo #China.mp4`). `xiaoqiu://` URLs don't use
     // fragments, so truncating at '#' would lose part of the filename.
     val stripped = url.substringBefore('?')
     val hostFile: File? = when {
-        stripped.startsWith("minis://") -> {
-            val decoded = java.net.URLDecoder.decode(stripped.removePrefix("minis://"), "UTF-8")
-            PRootKernel.resolveHostPath("/var/minis/$decoded")
+        stripped.startsWith("xiaoqiu://") -> {
+            val decoded = java.net.URLDecoder.decode(stripped.removePrefix("xiaoqiu://"), "UTF-8")
+            PRootKernel.resolveHostPath("/var/xiaoqiu/$decoded")
         }
         stripped.startsWith("file://") -> File(Uri.parse(stripped).path ?: return null)
         stripped.startsWith("/") -> File(stripped)
@@ -739,7 +739,7 @@ private fun openMediaExternally(context: Context, file: File, mime: String) {
 // -- Image block --
 
 @Composable
-private fun MinisImageBlock(block: MarkdownParser.Block.Image) {
+private fun XiaoQiuImageBlock(block: MarkdownParser.Block.Image) {
     val surfaceBg = MaterialTheme.colorScheme.surfaceVariant
     val borderColor = MaterialTheme.colorScheme.outline.copy(alpha = 0.3f)
     AsyncImage(
@@ -759,8 +759,8 @@ private fun MinisImageBlock(block: MarkdownParser.Block.Image) {
 // -- Video block (thumbnail card + tap to open system player) --
 
 @Composable
-private fun MinisVideoBlock(block: MarkdownParser.Block.Video) {
-    android.util.Log.d("MdMedia", "MinisVideoBlock url=${block.url} alt=${block.alt}")
+private fun XiaoQiuVideoBlock(block: MarkdownParser.Block.Video) {
+    android.util.Log.d("MdMedia", "XiaoQiuVideoBlock url=${block.url} alt=${block.alt}")
     val context = LocalContext.current
     val file = remember(block.url) { resolveMediaFile(block.url) }
     val filename = remember(block.url) { filenameFromUrl(block.url) }
@@ -850,7 +850,7 @@ private fun MinisVideoBlock(block: MarkdownParser.Block.Video) {
 // -- Audio block (inline play/pause + progress) --
 
 @Composable
-private fun MinisAudioBlock(block: MarkdownParser.Block.Audio) {
+private fun XiaoQiuAudioBlock(block: MarkdownParser.Block.Audio) {
     val file = remember(block.url) { resolveMediaFile(block.url) }
     val filename = remember(block.url) { filenameFromUrl(block.url) }
 

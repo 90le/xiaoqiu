@@ -48,8 +48,8 @@ import com.xiaoqiu.provider.ImageBudget
 import com.xiaoqiu.provider.LLMProvider
 import com.xiaoqiu.provider.ProviderFactory
 import com.xiaoqiu.sandbox.ExecutionCoordinator
-import com.xiaoqiu.terminal.MinisOpenUrlBroker
-import com.xiaoqiu.terminal.MinisUrlMarker
+import com.xiaoqiu.terminal.XiaoQiuOpenUrlBroker
+import com.xiaoqiu.terminal.XiaoQiuUrlMarker
 import com.xiaoqiu.tools.AgentTools
 import com.xiaoqiu.tools.FileEditTool
 import com.xiaoqiu.tools.FileReadTool

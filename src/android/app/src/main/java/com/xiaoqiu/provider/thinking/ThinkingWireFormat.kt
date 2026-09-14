@@ -24,8 +24,8 @@ sealed interface ThinkingWireFormat {
     /**
      * Send nothing at all. Not "send off" — send NO thinking key whatsoever.
      *
-     * Mistral (GH OpenMinis#87): `AssistantMessage` is a closed schema and the request
-     * rejects `reasoning` with `422 extra_forbidden`. Venice (GH OpenMinis#86) is the
+     * Mistral (GH OpenXiaoQiu#87): `AssistantMessage` is a closed schema and the request
+     * rejects `reasoning` with `422 extra_forbidden`. Venice (GH OpenXiaoQiu#86) is the
      * same class at the request level: `additionalProperties:false` means an unknown ROOT
      * key is rejected during schema validation, before model dispatch — which is why
      * every model failed there and why turning thinking off did not help, since the
@@ -96,8 +96,8 @@ sealed interface ThinkingWireFormat {
 
     /**
      * Nested boolean under `extra_body`, e.g. `extra_body.thinking.enabled`. DeepSeek's
-     * official endpoint reasons by default and its real switch lives here; Minis never
-     * sent it, so the official endpoint always ran its default config (GH OpenMinis#171).
+     * official endpoint reasons by default and its real switch lives here; XiaoQiu never
+     * sent it, so the official endpoint always ran its default config (GH OpenXiaoQiu#171).
      */
     data class ExtraBodyToggle(val path: String) : ThinkingWireFormat
 

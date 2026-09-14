@@ -23,14 +23,14 @@ import kotlinx.coroutines.withContext
 class ScheduledTasksViewModel(private val appContext: Context) : ViewModel() {
 
     private val manager = ScheduledTaskManager(appContext)
-    private val app get() = appContext as com.xiaoqiu.MinisApp
+    private val app get() = appContext as com.xiaoqiu.XiaoQiuApp
 
     /**
      * [T-android-scheduled-lateinit-crash-156] True when the Application's
      * repositories are actually assigned.
      *
      * Every `app.<repository>` read below is a lateinit getter that throws
-     * UninitializedPropertyAccessException if MinisApp.onCreate early-returned
+     * UninitializedPropertyAccessException if XiaoQiuApp.onCreate early-returned
      * (safe-mode) or aborted partway. The screens backing this ViewModel can be
      * composed in exactly that state — a scheduled-task notification tap
      * restores the task into an Activity while the Application behind it is
@@ -40,7 +40,7 @@ class ScheduledTasksViewModel(private val appContext: Context) : ViewModel() {
      * instead of taking the process down.
      */
     private fun ready(): Boolean =
-        (appContext as? com.xiaoqiu.MinisApp)?.subsystemsReady() == true
+        (appContext as? com.xiaoqiu.XiaoQiuApp)?.subsystemsReady() == true
 
     /** Exposed for the editor's ModelPickerSheet — read-only access to the
      *  same ProviderRepository the chat screen uses.

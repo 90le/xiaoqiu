@@ -42,7 +42,7 @@ import androidx.compose.material3.Switch
 import androidx.compose.material3.SwipeToDismissBox
 import androidx.compose.material3.SwipeToDismissBoxValue
 import androidx.compose.material3.Text
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 import androidx.compose.material3.TopAppBar
 import androidx.compose.material3.rememberModalBottomSheetState
 import androidx.compose.material3.rememberSwipeToDismissBoxState
@@ -322,7 +322,7 @@ fun MountedFoldersScreen(
         AlertDialog(
             onDismissRequest = { addError = null },
             confirmButton = {
-                MinisTextButton(onClick = { addError = null }) {
+                XiaoQiuTextButton(onClick = { addError = null }) {
                     Text(stringResource(android.R.string.ok))
                 }
             },
@@ -347,7 +347,7 @@ fun MountedFoldersScreen(
             title = { Text(stringResource(R.string.mount_picker_intro_title)) },
             text = { Text(stringResource(R.string.mount_picker_intro_message)) },
             confirmButton = {
-                MinisTextButton(onClick = {
+                XiaoQiuTextButton(onClick = {
                     showPickerIntro = false
                     pickerLauncher.launch(initialPickerUri())
                 }) {
@@ -355,7 +355,7 @@ fun MountedFoldersScreen(
                 }
             },
             dismissButton = {
-                MinisTextButton(onClick = { showPickerIntro = false }) {
+                XiaoQiuTextButton(onClick = { showPickerIntro = false }) {
                     Text(stringResource(R.string.cancel))
                 }
             },
@@ -546,7 +546,7 @@ private fun MountRow(
                 AccessBadge(entry = entry)
             }
             Text(
-                text = "/var/minis/mounts/${entry.name}",
+                text = "/var/xiaoqiu/mounts/${entry.name}",
                 style = MaterialTheme.typography.bodySmall,
                 fontFamily = FontFamily.Monospace,
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
@@ -675,11 +675,11 @@ private fun AddMountSheet(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.End,
             ) {
-                MinisTextButton(onClick = onDismiss) {
+                XiaoQiuTextButton(onClick = onDismiss) {
                     Text(stringResource(R.string.cancel))
                 }
                 Spacer(Modifier.width(8.dp))
-                MinisTextButton(
+                XiaoQiuTextButton(
                     onClick = { onConfirm(name.trim(), allowWrite) },
                     enabled = isValidMountName(name),
                 ) {

@@ -48,8 +48,8 @@ import com.xiaoqiu.provider.ImageBudget
 import com.xiaoqiu.provider.LLMProvider
 import com.xiaoqiu.provider.ProviderFactory
 import com.xiaoqiu.sandbox.ExecutionCoordinator
-import com.xiaoqiu.terminal.MinisOpenUrlBroker
-import com.xiaoqiu.terminal.MinisUrlMarker
+import com.xiaoqiu.terminal.XiaoQiuOpenUrlBroker
+import com.xiaoqiu.terminal.XiaoQiuUrlMarker
 import com.xiaoqiu.tools.AgentTools
 import com.xiaoqiu.tools.FileEditTool
 import com.xiaoqiu.tools.FileReadTool
@@ -148,7 +148,7 @@ internal fun ChatViewModel.filteredSlashCommands(): List<SlashCommand> {
     // tagged [mcp] with a wrench icon to distinguish them from skills (⚡).
     // All servers enabled for this session are shown (not just the Top-20
     // disclosed in the system prompt). Tapping fills the composer with the
-    // server name; discovery/call happens model-side via minis-mcp-cli.
+    // server name; discovery/call happens model-side via xiaoqiu-mcp-cli.
     val mcpRows: List<SlashCommand> = mcpRepository?.servers?.value
         ?.filter { mcpRepository.isEnabledForSession(it.id, sid) }
         ?.sortedBy { it.id.lowercase() }

@@ -14,7 +14,7 @@ import androidx.compose.ui.layout.positionInWindow
 import androidx.compose.ui.text.TextLayoutResult
 
 /**
- * MinisTextKit — a self-contained text selection layer that survives
+ * XiaoQiuTextKit — a self-contained text selection layer that survives
  * LazyColumn item recycling.
  *
  * Compose's built-in [androidx.compose.foundation.text.selection.SelectionContainer]
@@ -23,7 +23,7 @@ import androidx.compose.ui.text.TextLayoutResult
  * scrolls out of the viewport, its Selectable disposes → the registrar drops
  * the anchor → the active selection collapses.
  *
- * MinisTextKit avoids that by keeping the *authoritative selection state*
+ * XiaoQiuTextKit avoids that by keeping the *authoritative selection state*
  * outside the LazyColumn entirely. Each visible text fragment registers a
  * [TextShard] with [SelectionController] while it's composed; when it
  * scrolls off-screen the registration drops but the [selection] state, keyed
@@ -33,8 +33,8 @@ import androidx.compose.ui.text.TextLayoutResult
  *
  * This file defines only the state holder and the registration ABI.
  * Hit-test, drag gestures, and highlight drawing are implemented in
- * [MinisMarkdownView] and consumed by [StreamingMarkdownText] via
- * [LocalMinisSelectionController].
+ * [XiaoQiuMarkdownView] and consumed by [StreamingMarkdownText] via
+ * [LocalXiaoQiuSelectionController].
  */
 
 /**
@@ -254,7 +254,7 @@ class SelectionController {
      * Stricter hit-test that ONLY returns a position when the point falls
      * directly inside a registered shard's rect — no nearest-shard fallback.
      * Used by the long-press path so a press on a non-selectable region
-     * (e.g. a user message bubble, which intentionally skips MinisTextKit
+     * (e.g. a user message bubble, which intentionally skips XiaoQiuTextKit
      * shard registration so it can show its own long-press menu) doesn't
      * snap to whichever assistant shard happens to be closest.
      */
@@ -976,7 +976,7 @@ class SelectionController {
         // Only prefer the markdown slice when the selected span actually
         // crosses a NON-SHARD block — a fenced code block (``` / ~~~), a table
         // (pipe rows), or display math ($$). Those render via their own Text
-        // composables (no MinisTextKit shard), so the per-shard walk drops them
+        // composables (no XiaoQiuTextKit shard), so the per-shard walk drops them
         // and the markdown slice is the only way to recover them. For a plain
         // run of paragraphs / headings / list items (all shards), the walk is
         // already exact and formatting-free, so prefer it — returning the
@@ -987,7 +987,7 @@ class SelectionController {
 
     /**
      * [T-android-copy-selection-not-whole-message] Heuristic: does this raw-
-     * markdown slice contain a block that doesn't register as a MinisTextKit
+     * markdown slice contain a block that doesn't register as a XiaoQiuTextKit
      * text shard (fenced code, table, or display math)? Used to decide whether
      * the markdown slice carries content the per-shard walk would have dropped.
      */
@@ -1036,14 +1036,14 @@ class SelectionController {
  * shards composed without a real controller simply never participate in any
  * selection. Wrap with [ProvideSelectionController] at the ChatScreen level.
  */
-val LocalMinisSelectionController = compositionLocalOf<SelectionController?> { null }
+val LocalXiaoQiuSelectionController = compositionLocalOf<SelectionController?> { null }
 
 @Composable
 fun ProvideSelectionController(
     controller: SelectionController,
     content: @Composable () -> Unit,
 ) {
-    CompositionLocalProvider(LocalMinisSelectionController provides controller) {
+    CompositionLocalProvider(LocalXiaoQiuSelectionController provides controller) {
         content()
     }
 }
@@ -1059,7 +1059,7 @@ fun ProvideSelectionController(
  */
 @Composable
 fun RegisterSelectionShard(shard: TextShard?) {
-    val controller = LocalMinisSelectionController.current ?: return
+    val controller = LocalXiaoQiuSelectionController.current ?: return
     if (shard == null) return
     DisposableEffect(controller, shard.id, shard) {
         controller.register(shard)

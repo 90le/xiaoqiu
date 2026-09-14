@@ -140,7 +140,7 @@ class ThinkingRulesRegressionTest {
     /**
      * Rule: Mistral — no thinking request parameter may EVER be sent.
      * evidence §A "[Mistral] 完全禁止一切 reasoning 字段" · 4592ca9b (422
-     * `extra_forbidden body.reasoning`) · OpenMinis#87.
+     * `extra_forbidden body.reasoning`) · OpenXiaoQiu#87.
      * This is the single most likely rule to be broken by a future refactor, because
      * it is a pure absence — nothing in the body points at it.
      */
@@ -186,7 +186,7 @@ class ThinkingRulesRegressionTest {
      * `injectThinkingParams` — so the Chat-Completions `isMistral` gate does not
      * protect it. A Mistral instance with `useResponsesAPI = true` reached that
      * builder ungated and put `reasoning` back on the wire, re-triggering the
-     * `422 extra_forbidden body.reasoning` that OpenMinis#87 is about.
+     * `422 extra_forbidden body.reasoning` that OpenXiaoQiu#87 is about.
      *
      * Regression-guards the second injection site found while fixing the first.
      */
@@ -291,7 +291,7 @@ class ThinkingRulesRegressionTest {
      * root key is rejected at schema validation BEFORE model dispatch — which is why
      * the reporter saw every model fail and why turning thinking OFF did not help
      * (the `{"type":"disabled"}` branch still emitted the key).
-     * evidence §A "[Venice] 未知根键…" · 84f5c9e1 · OpenMinis#86.
+     * evidence §A "[Venice] 未知根键…" · 84f5c9e1 · OpenXiaoQiu#86.
      */
     @Test
     fun `venice never receives root thinking key even when off`() {

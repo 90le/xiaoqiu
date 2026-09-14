@@ -43,8 +43,8 @@ import androidx.compose.ui.unit.dp
 import com.xiaoqiu.R
 import com.xiaoqiu.data.repository.ProviderRepository
 import com.xiaoqiu.ui.components.modelEntryPickerItems
-import com.xiaoqiu.ui.components.MinisButton
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 
 /**
  * T185 — full-screen picker for adding model entries to the agent-loop
@@ -102,8 +102,8 @@ fun AddAgentLoopModelsScreen(
                     }
                 },
                 actions = {
-                    MinisTextButton(onClick = onBack) { Text(stringResource(R.string.common_cancel)) }
-                    MinisButton(
+                    XiaoQiuTextButton(onClick = onBack) { Text(stringResource(R.string.common_cancel)) }
+                    XiaoQiuButton(
                         onClick = {
                             // Add in stable order so the section renders
                             // pinned items in the order the user saw them
@@ -191,8 +191,8 @@ fun AddAgentLoopGroupsScreen(
                     }
                 },
                 actions = {
-                    MinisTextButton(onClick = onBack) { Text(stringResource(R.string.common_cancel)) }
-                    MinisButton(
+                    XiaoQiuTextButton(onClick = onBack) { Text(stringResource(R.string.common_cancel)) }
+                    XiaoQiuButton(
                         onClick = {
                             // Same stable-order add policy as the entries
                             // picker so the section ordering matches the

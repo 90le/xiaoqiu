@@ -21,21 +21,21 @@ import java.util.concurrent.CountDownLatch
 import java.util.concurrent.TimeUnit
 
 /**
- * MinisAccessibilityService — host-side AccessibilityService backing the
+ * XiaoQiuAccessibilityService — host-side AccessibilityService backing the
  * `android-a11y-cli` offload command. The user must enable it manually
  * under Settings → Accessibility; we never start it programmatically.
  */
-class MinisAccessibilityService : AccessibilityService() {
+class XiaoQiuAccessibilityService : AccessibilityService() {
 
     companion object {
-        private const val TAG = "MinisA11y"
-        const val SERVICE_ID = "com.xiaoqiu/.accessibility.MinisAccessibilityService"
+        private const val TAG = "XiaoQiuA11y"
+        const val SERVICE_ID = "com.xiaoqiu/.accessibility.XiaoQiuAccessibilityService"
         private const val EVENT_RING_CAP = 1024
 
         @Volatile
-        private var _instance: MinisAccessibilityService? = null
+        private var _instance: XiaoQiuAccessibilityService? = null
 
-        fun getInstance(): MinisAccessibilityService? = _instance
+        fun getInstance(): XiaoQiuAccessibilityService? = _instance
     }
 
     data class RecordedEvent(

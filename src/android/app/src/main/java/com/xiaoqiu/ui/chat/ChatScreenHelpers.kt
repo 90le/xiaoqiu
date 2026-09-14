@@ -138,9 +138,9 @@ import com.xiaoqiu.BuildConfig
 import com.xiaoqiu.R
 import com.xiaoqiu.data.FileMentionIndex
 import com.xiaoqiu.logging.AppLogger
-import com.xiaoqiu.ui.components.MinisAlertDialog
-import com.xiaoqiu.ui.components.MinisMenu
-import com.xiaoqiu.ui.components.MinisMenuDivider
+import com.xiaoqiu.ui.components.XiaoQiuAlertDialog
+import com.xiaoqiu.ui.components.XiaoQiuMenu
+import com.xiaoqiu.ui.components.XiaoQiuMenuDivider
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -269,7 +269,7 @@ import com.xiaoqiu.data.repository.MemoryRepository
 import com.xiaoqiu.data.repository.ProviderRepository
 import com.xiaoqiu.ui.browser.BrowserSheet
 import com.xiaoqiu.ui.theme.ChatColors
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 
 /**
  * Create an empty JPEG file under filesDir/camera-photos/ and return a

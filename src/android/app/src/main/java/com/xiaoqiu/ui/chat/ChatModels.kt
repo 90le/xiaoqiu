@@ -48,8 +48,8 @@ import com.xiaoqiu.provider.ImageBudget
 import com.xiaoqiu.provider.LLMProvider
 import com.xiaoqiu.provider.ProviderFactory
 import com.xiaoqiu.sandbox.ExecutionCoordinator
-import com.xiaoqiu.terminal.MinisOpenUrlBroker
-import com.xiaoqiu.terminal.MinisUrlMarker
+import com.xiaoqiu.terminal.XiaoQiuOpenUrlBroker
+import com.xiaoqiu.terminal.XiaoQiuUrlMarker
 import com.xiaoqiu.tools.AgentTools
 import com.xiaoqiu.tools.FileEditTool
 import com.xiaoqiu.tools.FileReadTool
@@ -245,7 +245,7 @@ data class SlashCommand(
      * configured MCP server (vs. a built-in command or a skill). Distinct from
      * [isSkill] so the picker can tag MCP rows with [mcp] + a wrench icon and
      * skills with ⚡. Tapping fills the composer with the server name; the
-     * actual discovery/call happens model-side via minis-mcp-cli.
+     * actual discovery/call happens model-side via xiaoqiu-mcp-cli.
      */
     val isMcp: Boolean = false,
 )

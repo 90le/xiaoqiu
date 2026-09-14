@@ -242,7 +242,7 @@ class OpenAIProvider private constructor(
 
     /**
      * Arbitrary extra fields merged into the /images/generations JSON body, so
-     * `minis-model-use` can pass provider-specific params our fixed schema never
+     * `xiaoqiu-model-use` can pass provider-specific params our fixed schema never
      * modeled (e.g. Volcengine Seedream's `image` for image-to-image,
      * `watermark`, `tools`). User keys WIN over our defaults (response_format)
      * but never replace the resolved `model`. Empty = no passthrough. Set
@@ -416,7 +416,7 @@ class OpenAIProvider private constructor(
     // arrive in between, and OkHttp's idle-data-read counter trips.
     // The 180s cap turned that normal reasoning silence into a hard
     // SocketTimeoutException (observed in 0.10-preview, log file
-    // minis-2026-05-27.log around 13:28 — 3:00 of silence then trip).
+    // xiaoqiu-2026-05-27.log around 13:28 — 3:00 of silence then trip).
     // Going back to 600s leaves room for the longest realistic
     // reasoning bursts; the cancel-race concern T171 hedged against
     // (OkHttp call.cancel() racing a thread inside execute()) is
@@ -451,7 +451,7 @@ class OpenAIProvider private constructor(
     private val isOpenRouter: Boolean = basePath.contains("openrouter.ai")
 
     /**
-     * [OpenMinis#191] OpenRouter does NOT enable Anthropic prompt caching
+     * [OpenXiaoQiu#191] OpenRouter does NOT enable Anthropic prompt caching
      * automatically — unlike the OpenAI / Grok / Moonshot / Groq models it
      * hosts, which cache with no opt-in. Claude requests must carry an explicit
      * `cache_control` breakpoint or nothing is cached at all, which is why the
@@ -480,7 +480,7 @@ class OpenAIProvider private constructor(
     private val isDashScope: Boolean = basePath.contains("dashscope")
 
     /**
-     * [T-android-mistral-reasoning-422] (GH OpenMinis#87, iOS 29065ca0)
+     * [T-android-mistral-reasoning-422] (GH OpenXiaoQiu#87, iOS 29065ca0)
      * Detect Mistral's OpenAI-compatible endpoint.
      *
      * Mistral's AssistantMessage is a CLOSED schema
@@ -504,7 +504,7 @@ class OpenAIProvider private constructor(
     private val isMistral: Boolean = basePath.lowercase().contains("mistral.ai")
 
     /**
-     * [OpenMinis#163] Talking to xAI's own API (api.x.ai), as opposed to a relay
+     * [OpenXiaoQiu#163] Talking to xAI's own API (api.x.ai), as opposed to a relay
      * that merely serves grok-named models. Mirrors iOS OpenAIProvider.isXAI.
      *
      * Scopes the "catalog declares no effort tiers → omit reasoning_effort" skip
@@ -535,7 +535,7 @@ class OpenAIProvider private constructor(
      *     `minimal`); the vendor-native `thinking:{}` shape is not honored.
      *   • Azure OpenAI ([isAzure]) — reasoning is `reasoning_effort` for every
      *     model surfaced through the deployment.
-     *   • Venice.ai (`api.venice.ai`) — [OpenMinis#86] resells deepseek / claude /
+     *   • Venice.ai (`api.venice.ai`) — [OpenXiaoQiu#86] resells deepseek / claude /
      *     aion behind one OpenAI-compatible surface. Its ChatCompletionRequest
      *     schema is `additionalProperties: false`, so an unknown root key is
      *     rejected at validation time — BEFORE model dispatch — with
@@ -603,7 +603,7 @@ class OpenAIProvider private constructor(
         var usage: LLMUsage? = null
         // [T-codex-gpt-image2-oauth-android] Collect model-generated media
         // (gpt-image-2 images) so non-streaming callers — notably
-        // minis-model-use (ModelUseOffloadHandler) — get them on
+        // xiaoqiu-model-use (ModelUseOffloadHandler) — get them on
         // LLMResponse.mediaAttachments and can write the image to --output.
         val media = mutableListOf<LLMMediaAttachment>()
         streamMessage(
@@ -1713,7 +1713,7 @@ class OpenAIProvider private constructor(
     /**
      * [T-android-image-edit-endpoint] Call `/images/edits` for image-to-image
      * (reference-image) generation. Android previously had no such endpoint, so
-     * minis-model-use returned `image_edit_not_supported` for every
+     * xiaoqiu-model-use returned `image_edit_not_supported` for every
      * input-image + pure-image-generator call — the gap this closes. Mirrors
      * iOS `OpenAIProvider.editImage`.
      *
@@ -1964,14 +1964,14 @@ class OpenAIProvider private constructor(
         // OpenAIAgentProvider.swift's `if !provider.isMistral` gate around this
         // same call (4592ca9b). Until now [isMistral] only suppressed the
         // message-level echo ([forbidReasoningField], 0839f019 / GH
-        // OpenMinis#87) — the request-parameter half of that fix was never
+        // OpenXiaoQiu#87) — the request-parameter half of that fix was never
         // ported, so an enabled thinking level still put `reasoning_effort` on
         // the wire to api.mistral.ai.
         if (!isMistral) {
             injectThinkingParams(body, thinkingLevel, maxTokens)
         }
 
-        // [OpenMinis#191] Opt this request into Anthropic prompt caching.
+        // [OpenXiaoQiu#191] Opt this request into Anthropic prompt caching.
         // OpenRouter passes the field through to Anthropic but never injects it
         // for us, so without it Claude requests cache nothing at all.
         //
@@ -2417,7 +2417,7 @@ class OpenAIProvider private constructor(
             // [T-android-default-ua] `defaultUserAgent = null` — keep the
             // codex_cli_rs fingerprint set above when no per-provider
             // override is configured. We must NOT fall back to the branded
-            // Minis UA here: the ChatGPT OAuth backend validates the
+            // XiaoQiu UA here: the ChatGPT OAuth backend validates the
             // client identity against this header.
             builder.applyUserAgentOverride(customUserAgent, defaultUserAgent = null)
             return builder.build()
@@ -2551,7 +2551,7 @@ class OpenAIProvider private constructor(
             instanceId = thinkingRuleInstanceId,
             supportsReasoning = model.supportsReasoning,
             declaredEffortValues = model.reasoningEffortValues,
-            // [OpenMinis#163] null (catalog silent) must read as false here —
+            // [OpenXiaoQiu#163] null (catalog silent) must read as false here —
             // only an affirmative declaration may suppress the field.
             declaresNoEffortTiers = model.declaresNoEffortTiers == true,
             level = level,
@@ -2564,9 +2564,9 @@ class OpenAIProvider private constructor(
             offEffort = explicitOffEffort(),
         )
         val trace = ThinkingRuleResolver.apply(body, ctx)
-        // [T-thinking-rules-observability] Design §8 / GH OpenMinis#100: which rule
+        // [T-thinking-rules-observability] Design §8 / GH OpenXiaoQiu#100: which rule
         // actually won must be inspectable, or a rule layer just replaces one hidden
-        // variable with a more complicated one. minis-config exposure is Phase 2.
+        // variable with a more complicated one. xiaoqiu-config exposure is Phase 2.
         com.xiaoqiu.logging.AppLogger.info(
             "Thinking",
             "[resolve] model=${model.id} level=${level.name} ${trace.logLine}",
@@ -2851,7 +2851,7 @@ class OpenAIProvider private constructor(
          * message — the same contract [buildRequestBody] implements.
          *
          * This parameter did not exist, and that was a silent data loss: every
-         * caller that supplies images this way (minis-model-use's `image_url`
+         * caller that supplies images this way (xiaoqiu-model-use's `image_url`
          * blocks, VisionGroupResolver.describeOnce, any direct
          * sendMessage(imageParts=…)) had its pixels dropped on the floor the
          * moment the provider was on the Responses path, with no error. The
@@ -2940,7 +2940,7 @@ class OpenAIProvider private constructor(
         when {
             // [T-android-mistral-reasoning-422] Mistral rejects the reasoning
             // request parameter outright (`422 extra_forbidden body.reasoning`,
-            // GH OpenMinis#87). The gate added alongside injectThinkingParams
+            // GH OpenXiaoQiu#87). The gate added alongside injectThinkingParams
             // covers only the Chat Completions path; this builder is a SECOND,
             // independent injection site that a Mistral instance with
             // useResponsesAPI enabled reaches ungated. For Mistral the answer to
@@ -3052,7 +3052,7 @@ class OpenAIProvider private constructor(
                             // Responses API requires both `id` (fc_…) and `call_id` (call_…).
                             // When the message was synthesized outside a Responses round-trip
                             // (e.g. injected from Chat Completions history) the fcId is null —
-                            // generate a deterministic synthetic so the API still accepts it.
+                            // generate a deterxiaoqiutic synthetic so the API still accepts it.
                             val safeFcId = fcId?.let { capResponsesId(it) }
                                 ?: "fc_syn_${safeCallId.takeLast(24)}"
                             input.put(JSONObject().apply {
@@ -3184,7 +3184,7 @@ class OpenAIProvider private constructor(
                         } else if (attachTopLevelImages) {
                             // [T-android-responses-toplevel-images] Structured
                             // message with no ImageData parts, but images were
-                            // supplied top-level (minis-model-use / Vision
+                            // supplied top-level (xiaoqiu-model-use / Vision
                             // Group). Previously this fell into the text-only
                             // branch below and the pixels vanished.
                             val contentArray = JSONArray()
@@ -3220,7 +3220,7 @@ class OpenAIProvider private constructor(
                 }
             } else if (msg.audioParts.isNotEmpty()) {
                 // [GH#67] Legacy (non-contentParts) message carrying audio —
-                // the minis-model-use path. The Responses API keeps the SAME
+                // the xiaoqiu-model-use path. The Responses API keeps the SAME
                 // nested input_audio shape as Chat Completions ({data,
                 // format}), unlike input_image which flattens image_url to a
                 // string. Text rides along as input_text.
@@ -3257,7 +3257,7 @@ class OpenAIProvider private constructor(
                 // [T-android-responses-toplevel-images] THE reported bug's path.
                 // A plain (contentParts-free) user message plus top-level
                 // images — what VisionGroupResolver.describeOnce and
-                // minis-model-use's image_url blocks produce. This builder had
+                // xiaoqiu-model-use's image_url blocks produce. This builder had
                 // no imageParts parameter at all, so the message was emitted as
                 // a bare text string and the pixels never reached the wire. The
                 // vision model then answered "no image was provided", with no
@@ -3322,7 +3322,7 @@ class OpenAIProvider private constructor(
      *     Completions request;
      *   - memory-tool / synthetic ids that are long by construction.
      * We keep only the call_-id half (before any '|') and, if still >64, replace
-     * it with a deterministic SHA-256-derived id. Determinism matters: the SAME
+     * it with a deterxiaoqiutic SHA-256-derived id. Deterxiaoqium matters: the SAME
      * raw id must map to the SAME capped id so the assistant tool_call and its
      * matching tool result still pair up (a mismatch is its own 400). The
      * downstream dedupe pass then guarantees uniqueness within the request.
@@ -3356,10 +3356,10 @@ class OpenAIProvider private constructor(
                 val digest = java.security.MessageDigest.getInstance("SHA-256")
                     .digest(text.toByteArray(Charsets.UTF_8))
                 val hex = digest.joinToString("") { "%02x".format(it) }
-                return "minis-${hex.take(32)}"
+                return "xiaoqiu-${hex.take(32)}"
             }
         }
-        return "minis-${java.util.UUID.randomUUID().toString().lowercase()}"
+        return "xiaoqiu-${java.util.UUID.randomUUID().toString().lowercase()}"
     }
 
     /**

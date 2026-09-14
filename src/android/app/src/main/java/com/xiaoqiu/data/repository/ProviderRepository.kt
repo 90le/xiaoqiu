@@ -84,7 +84,7 @@ class ProviderRepository(private val context: Context) {
 
     // [T-android-provider-room-store] Per-row provider config DB. Lives in
     // its own provider.db file so a downgrade to a build that doesn't know
-    // about provider tables can't crash the main minis.db open. The legacy
+    // about provider tables can't crash the main xiaoqiu.db open. The legacy
     // SharedPreferences JSON mirror under "provider_config / config" is
     // still written on every save so older builds keep reading current
     // config — losing nothing on downgrade. See [loadConfig] for the
@@ -156,7 +156,7 @@ class ProviderRepository(private val context: Context) {
     // SharedPreferences read (~3s first-touch as the XML is parsed) + a
     // Json.decodeFromString<ProviderConfig> (~8s on a large config). It used to
     // run INLINE in this field initializer, i.e. inside ProviderRepository's
-    // constructor, which MinisApp.onCreate() invokes on the MAIN THREAD — so
+    // constructor, which XiaoQiuApp.onCreate() invokes on the MAIN THREAD — so
     // cold start hung >11s. Now we start with an empty placeholder (instant, no
     // I/O) and load the real config on Dispatchers.IO, emitting it when ready.
     // Reactive consumers (config.collectAsState) update automatically on emit;
@@ -908,7 +908,7 @@ class ProviderRepository(private val context: Context) {
 
     /**
      * [T-model-release-ranking] Newest / most capable model first, so a picker
-     * never opens on a stale (or, as in OpenMinis#83, an uncallable) model.
+     * never opens on a stale (or, as in OpenXiaoQiu#83, an uncallable) model.
      * These lists previously came back in raw config order, which is insertion
      * order from the provider's /models response — effectively arbitrary.
      * Falls back to the model id so the ordering is total and stable when two
@@ -1503,7 +1503,7 @@ class ProviderRepository(private val context: Context) {
     }
 
     /**
-     * Resolve the effective model entries visible to the agent loop (minis-model-use).
+     * Resolve the effective model entries visible to the agent loop (xiaoqiu-model-use).
      * Expands groups to their members, unions with individual entries, dedupes by ID,
      * and filters to entries of enabled provider instances. Mirrors iOS
      * ProviderConfigStore.resolvedAgentLoopEntries.
@@ -2103,7 +2103,7 @@ class ProviderRepository(private val context: Context) {
     /**
      * All shadow voice providers: one per enabled instance that has audio
      * models and isn't shadow-disabled, FOLDED by normalized base URL so two
-     * instances on one host show a single deterministic representative row.
+     * instances on one host show a single deterxiaoqiutic representative row.
      */
     fun shadowVoiceProviders(): List<ShadowVoiceProvider> {
         ensureConfigLoaded()
@@ -2125,7 +2125,7 @@ class ProviderRepository(private val context: Context) {
                 .maxOrNull() ?: Long.MIN_VALUE
 
         return byKey.values.map { insts ->
-            // Representative selection — deterministic across devices: enabled
+            // Representative selection — deterxiaoqiutic across devices: enabled
             // first, then most-recently-modified entries, then oldest createdAt,
             // then id.
             val rep = insts.sortedWith(
@@ -2376,7 +2376,7 @@ class ProviderRepository(private val context: Context) {
 
         // [T-android-startup-config-stall] Config now loads asynchronously, so
         // at cold start `_config.value` may still be the empty placeholder when
-        // this fires from MinisApp.onCreate. Wait for the load before reading
+        // this fires from XiaoQiuApp.onCreate. Wait for the load before reading
         // the enabled-instance set, otherwise the daily refresh would no-op on
         // "no enabled instances" and skip this launch entirely. Runs on the
         // caller's (IO) scope — does not touch the main thread.

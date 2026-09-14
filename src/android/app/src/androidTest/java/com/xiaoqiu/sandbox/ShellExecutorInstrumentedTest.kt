@@ -141,10 +141,10 @@ class ShellExecutorInstrumentedTest {
     }
 
     @Test
-    fun executeCanAccessMinisDirectories() = runBlocking {
+    fun executeCanAccessXiaoQiuDirectories() = runBlocking {
         skipIfNoBoot()
 
-        val result = ShellExecutor.execute(context, "ls /var/minis/")
+        val result = ShellExecutor.execute(context, "ls /var/xiaoqiu/")
         assertEquals(0, result.exitCode)
         assertTrue("Should list workspace", result.output.contains("workspace"))
         assertTrue("Should list attachments", result.output.contains("attachments"))

@@ -38,7 +38,7 @@ class AlarmOffloadHandler(private val context: Context) : NativeOffloadHandler {
     // T268: AlarmOffloadManager dependency dropped — this handler is now a
     // pure intent-dispatch surface (system Clock's SET_ALARM / SET_TIMER /
     // SHOW_ALARMS). The manager + its SharedPreferences are still around so
-    // the one-shot ghost migration in MinisApp.onCreate can flush any
+    // the one-shot ghost migration in XiaoQiuApp.onCreate can flush any
     // pre-T266 entries; the manager will be deleted once that bake is over.
 
     override fun handle(request: NativeOffloadRequest): NativeOffloadResult {
@@ -57,7 +57,7 @@ class AlarmOffloadHandler(private val context: Context) : NativeOffloadHandler {
         } catch (e: SecurityException) {
             AppLogger.warning(TAG, "SecurityException: ${e.message}")
             val body = JSONObject().put("error", "exact_alarm_denied")
-                .put("message", "Exact alarms are blocked. On Android 14+ the user must grant 'Alarms & reminders' in Settings; on Xiaomi/Huawei/Oppo/OnePlus/Vivo, also enable autostart and disable battery optimization for Minis. Underlying: ${e.message}")
+                .put("message", "Exact alarms are blocked. On Android 14+ the user must grant 'Alarms & reminders' in Settings; on Xiaomi/Huawei/Oppo/OnePlus/Vivo, also enable autostart and disable battery optimization for XiaoQiu. Underlying: ${e.message}")
                 .toString()
             NativeOffloadResult(77, OffloadOutput.formatBody(body, args) + "\n")
         } catch (e: Throwable) {
@@ -89,7 +89,7 @@ class AlarmOffloadHandler(private val context: Context) : NativeOffloadHandler {
             )
         // T266: single-source schedule via the system Clock app. The internal
         // AlarmOffloadManager.scheduleAlarm + SharedPreferences path is gone:
-        // dual-writing produced ghost reminders that fired only inside Minis
+        // dual-writing produced ghost reminders that fired only inside XiaoQiu
         // and confused users who expected to manage everything in their phone
         // Clock UI. Any OEM that refuses ACTION_SET_ALARM (no Clock app, or a
         // permission-stripped fork) is now a hard error — no silent fallback.
@@ -121,8 +121,8 @@ class AlarmOffloadHandler(private val context: Context) : NativeOffloadHandler {
      *
      * Was previously called trySystemSchedule and returned
      * "ok" | "fallback_internal_only" so the caller could degrade to a
-     * Minis-internal AlarmManager copy. T266 retired that fallback —
-     * dual-writing produced ghost alarms that fired only inside Minis
+     * XiaoQiu-internal AlarmManager copy. T266 retired that fallback —
+     * dual-writing produced ghost alarms that fired only inside XiaoQiu
      * and confused users who managed everything in the phone Clock UI.
      */
     private fun scheduleViaSystemClock(
@@ -192,7 +192,7 @@ class AlarmOffloadHandler(private val context: Context) : NativeOffloadHandler {
         // T266b: single-source timer via the system Clock app
         // (AlarmClock.ACTION_SET_TIMER, API 19+). Same rationale as T266 set:
         // the previous internal AlarmManager.setExactAndAllowWhileIdle path
-        // produced timers that fired only inside Minis with no Clock UI to
+        // produced timers that fired only inside XiaoQiu with no Clock UI to
         // pause/resume/dismiss. Pixel/Google Clock honors EXTRA_SKIP_UI for
         // SET_TIMER too — verified via pm resolve-activity returning
         // com.google.android.deskclock/.HandleSetApiCalls on Pixel 4a + 6.
@@ -254,7 +254,7 @@ class AlarmOffloadHandler(private val context: Context) : NativeOffloadHandler {
             AppLogger.info(TAG, "open: launched system Clock SHOW_ALARMS")
             val data = JSONObject()
                 .put("opened", true)
-                .put("hint", "System Clock launched. Tell the user to view, edit, or cancel alarms in the Clock app's Alarms tab (or Timers tab for timers). Minis cannot enumerate or cancel alarms programmatically — Android's Clock API is fire-and-forget.")
+                .put("hint", "System Clock launched. Tell the user to view, edit, or cancel alarms in the Clock app's Alarms tab (or Timers tab for timers). XiaoQiu cannot enumerate or cancel alarms programmatically — Android's Clock API is fire-and-forget.")
             emitEnvelope("open", data, args)
         } catch (e: ActivityNotFoundException) {
             val body = JSONObject().put("error", "no_clock_app")
@@ -341,7 +341,7 @@ class AlarmOffloadHandler(private val context: Context) : NativeOffloadHandler {
         mode: RepeatMode,
     ): JSONObject {
         // T266: id no longer threaded through — system Clock owns the
-        // identity and there's no Minis-side equivalent to surface. Compute
+        // identity and there's no XiaoQiu-side equivalent to surface. Compute
         // the actual fire time (today vs tomorrow roll-forward) so the
         // model sees a real timestamp not just HH:MM.
         val cal = Calendar.getInstance().apply {
@@ -357,7 +357,7 @@ class AlarmOffloadHandler(private val context: Context) : NativeOffloadHandler {
             put("minute", minute)
             put("repeat", mode.name)
             put("view_url", VIEW_URL)
-            put("hint", "Alarm saved to the system Clock app. Open the Clock app, or $VIEW_URL inside Minis, to view or cancel.")
+            put("hint", "Alarm saved to the system Clock app. Open the Clock app, or $VIEW_URL inside XiaoQiu, to view or cancel.")
         }
     }
 
@@ -371,7 +371,7 @@ class AlarmOffloadHandler(private val context: Context) : NativeOffloadHandler {
             put("duration_seconds", durationSec)
             put("fires_at", formatIso(firesAt))
             put("view_url", VIEW_URL)
-            put("hint", "Timer started in the system Clock app. Open the Clock app's Timer tab, or $VIEW_URL inside Minis, to view or stop.")
+            put("hint", "Timer started in the system Clock app. Open the Clock app's Timer tab, or $VIEW_URL inside XiaoQiu, to view or stop.")
         }
     }
 
@@ -389,7 +389,7 @@ class AlarmOffloadHandler(private val context: Context) : NativeOffloadHandler {
         if (needsHint && (action == "set" || action == "timer")) {
             data.put(
                 "oem_hint",
-                "${OsCompat.oemLabel()} aggressively kills background alarms. Please enable Autostart and disable battery optimization for Minis in system settings to keep this alarm reliable.",
+                "${OsCompat.oemLabel()} aggressively kills background alarms. Please enable Autostart and disable battery optimization for XiaoQiu in system settings to keep this alarm reliable.",
             )
         }
         val envelope = JSONObject()
@@ -408,7 +408,7 @@ class AlarmOffloadHandler(private val context: Context) : NativeOffloadHandler {
 
     companion object {
         private const val TAG = "AlarmOffload"
-        private const val VIEW_URL = "minis://views/alarm"
+        private const val VIEW_URL = "xiaoqiu://views/alarm"
         private const val HELP = """android-alarm — schedule alarms and timers (mirrors apple-alarm)
 
 Usage:
@@ -436,7 +436,7 @@ Examples:
   android-alarm timer --duration 5m --label "Tea"
   android-alarm open
 
-set/timer return JSON with `view_url: minis://views/alarm` and
+set/timer return JSON with `view_url: xiaoqiu://views/alarm` and
 `system_alarm: "ok"` on success.
 """
     }

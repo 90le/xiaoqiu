@@ -33,7 +33,7 @@ import androidx.compose.ui.unit.sp
 import com.xiaoqiu.R
 import com.xiaoqiu.data.repository.MemoryRepository
 import com.xiaoqiu.ui.theme.ChatColors
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 import com.xiaoqiu.i18n.uppercaseForDisplay
 
 /**
@@ -257,7 +257,7 @@ fun RevokeConfirmDialog(
         title = { Text(stringResource(R.string.memory_revoke_dialog_title)) },
         text = { Text(stringResource(R.string.memory_revoke_dialog_message)) },
         confirmButton = {
-            MinisTextButton(onClick = onConfirm) {
+            XiaoQiuTextButton(onClick = onConfirm) {
                 Text(
                     stringResource(R.string.memory_action_revoke),
                     color = MaterialTheme.colorScheme.error,
@@ -265,7 +265,7 @@ fun RevokeConfirmDialog(
             }
         },
         dismissButton = {
-            MinisTextButton(onClick = onDismiss) {
+            XiaoQiuTextButton(onClick = onDismiss) {
                 Text(stringResource(R.string.cancel))
             }
         },
@@ -294,7 +294,7 @@ fun MutationResultDialog(
         onDismissRequest = onDismiss,
         text = { Text(msg) },
         confirmButton = {
-            MinisTextButton(onClick = onDismiss) { Text("OK") }
+            XiaoQiuTextButton(onClick = onDismiss) { Text("OK") }
         },
     )
 }

@@ -22,7 +22,7 @@ data class ThinkingRule(
     val label: String,
     /**
      * [T-android-thinking-rules-phase2] Stable identity. Custom rules carry their
-     * persisted UUID; built-ins get a deterministic id that INCLUDES THE SCOPE.
+     * persisted UUID; built-ins get a deterxiaoqiutic id that INCLUDES THE SCOPE.
      *
      * Deriving a built-in id from the label alone is a real bug: the five OpenAI-native
      * rules (o1, o3, o4, gpt-5, gpt-4 patterns) deliberately share the label
@@ -36,7 +36,7 @@ data class ThinkingRule(
     /** True when the user may edit/delete this rule. Built-ins are override-only. */
     val isEditable: Boolean get() = kind == Kind.CUSTOM
 
-    /** Deterministic id for built-ins (scope-inclusive); custom rules keep their own. */
+    /** Deterxiaoqiutic id for built-ins (scope-inclusive); custom rules keep their own. */
     val stableId: String
         get() {
             if (id.isNotEmpty()) return id
@@ -119,12 +119,12 @@ data class ThinkingRule(
  * PHASE 1: declared but not yet enforced through the resolver — the live behaviour still
  * lives in the provider's message flattening. Modelled here because the send-side and
  * echo-side are two halves of ONE vendor contract, and splitting them is exactly what let
- * GH OpenMinis#22 be fixed on the OpenAI path while #70 stayed broken on the Anthropic path.
+ * GH OpenXiaoQiu#22 be fixed on the OpenAI path while #70 stayed broken on the Anthropic path.
  */
 data class ReasoningEchoPolicy(
     /**
      * `reasoning_content` / `reasoning` / `reasoning_text` — the three spellings observed
-     * in the wild, sometimes three different ones on one gateway (GH OpenMinis#171).
+     * in the wild, sometimes three different ones on one gateway (GH OpenXiaoQiu#171).
      */
     val fieldName: String,
     val timing: Timing,

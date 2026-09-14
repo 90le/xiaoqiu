@@ -63,9 +63,9 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.res.stringResource
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
-import com.xiaoqiu.MinisApp
-import com.xiaoqiu.ui.components.MinisButton
-import com.xiaoqiu.ui.components.MinisOutlinedButton
+import com.xiaoqiu.XiaoQiuApp
+import com.xiaoqiu.ui.components.XiaoQiuButton
+import com.xiaoqiu.ui.components.XiaoQiuOutlinedButton
 import com.xiaoqiu.R
 import com.xiaoqiu.data.repository.WebAppShortcutRepository
 import kotlinx.coroutines.Dispatchers
@@ -78,7 +78,7 @@ import java.util.UUID
  * Source of HTML bytes for the "Add to Home Screen" sheet. T-pwa-2 only
  * supported chat-attachment URIs; T-pwa-3 adds [HostFile] for FileBrowser
  * rows where we already know an absolute Linux path under
- * `/var/minis/shared/...` or `/var/minis/mounts/<name>/...` and don't
+ * `/var/xiaoqiu/shared/...` or `/var/xiaoqiu/mounts/<name>/...` and don't
  * need to copy bytes — the shortcut links to the live file in place.
  */
 sealed class WebAppSource {
@@ -92,7 +92,7 @@ sealed class WebAppSource {
 
     /**
      * FileBrowser row → host file already on disk, link in place.
-     * [linuxPath] is the absolute `/var/minis/...` path the shortcut
+     * [linuxPath] is the absolute `/var/xiaoqiu/...` path the shortcut
      * persists; [pathScope] is `shared` or `mount`; [scopeContext] is
      * null for shared, the mount name for mount.
      */
@@ -346,17 +346,17 @@ fun AddToHomeSheet(
                 modifier = Modifier.fillMaxWidth(),
                 horizontalArrangement = Arrangement.spacedBy(12.dp),
             ) {
-                MinisOutlinedButton(
+                XiaoQiuOutlinedButton(
                     onClick = onDismiss,
                     modifier = Modifier.weight(1f),
                 ) {
                     Text(stringResource(android.R.string.cancel))
                 }
-                MinisButton(
+                XiaoQiuButton(
                     enabled = copiedFile != null && titleText.isNotBlank(),
                     modifier = Modifier.weight(1f),
                     onClick = {
-                        val target = copiedFile ?: return@MinisButton
+                        val target = copiedFile ?: return@XiaoQiuButton
                         val finalTitle = titleText.trim().ifBlank {
                             fileName.removeSuffix(".html").removeSuffix(".htm")
                         }
@@ -369,7 +369,7 @@ fun AddToHomeSheet(
                                 is IconChoice.Gallery -> "file:${c.uri}"
                                 is IconChoice.Preset -> "preset:${c.preset.name.lowercase()}"
                             }
-                            val app = context.applicationContext as MinisApp
+                            val app = context.applicationContext as XiaoQiuApp
                             val entity = when (source) {
                                 is WebAppSource.ChatAttachment -> {
                                     // htmlPath stays relative under the
@@ -389,7 +389,7 @@ fun AddToHomeSheet(
                                 }
                                 is WebAppSource.HostFile -> {
                                     // T-pwa-3: link in place — htmlPath is the
-                                    // /var/minis/... linux path; WebAppPathResolver
+                                    // /var/xiaoqiu/... linux path; WebAppPathResolver
                                     // routes through PRootKernel.resolveHostPath.
                                     app.webAppShortcutRepository.create(
                                         htmlPath = source.linuxPath,

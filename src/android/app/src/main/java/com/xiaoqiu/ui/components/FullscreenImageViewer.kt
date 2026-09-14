@@ -483,13 +483,13 @@ internal suspend fun shareImage(context: Context, model: Any) {
 internal suspend fun saveToGallery(context: Context, bitmap: Bitmap): Boolean =
     withContext(Dispatchers.IO) {
         try {
-            val filename = "minis_${System.currentTimeMillis()}.png"
+            val filename = "xiaoqiu_${System.currentTimeMillis()}.png"
             val stream: OutputStream?
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val values = ContentValues().apply {
                     put(MediaStore.Images.Media.DISPLAY_NAME, filename)
                     put(MediaStore.Images.Media.MIME_TYPE, "image/png")
-                    put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/Minis")
+                    put(MediaStore.Images.Media.RELATIVE_PATH, Environment.DIRECTORY_PICTURES + "/XiaoQiu")
                     put(MediaStore.Images.Media.IS_PENDING, 1)
                 }
                 val uri = context.contentResolver.insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values)
@@ -502,8 +502,8 @@ internal suspend fun saveToGallery(context: Context, bitmap: Bitmap): Boolean =
             } else {
                 @Suppress("DEPRECATION")
                 val dir = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES)
-                val minisDir = File(dir, "Minis").also { it.mkdirs() }
-                val file = File(minisDir, filename)
+                val xiaoqiuDir = File(dir, "XiaoQiu").also { it.mkdirs() }
+                val file = File(xiaoqiuDir, filename)
                 stream = file.outputStream()
                 stream.use { bitmap.compress(Bitmap.CompressFormat.PNG, 100, it) }
             }

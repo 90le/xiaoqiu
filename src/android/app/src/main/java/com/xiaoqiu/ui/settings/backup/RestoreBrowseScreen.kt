@@ -50,8 +50,8 @@ import androidx.compose.ui.unit.dp
 import com.xiaoqiu.R
 import com.xiaoqiu.backup.remote.RcloneChunkedUpload
 import com.xiaoqiu.backup.remote.RcloneRemoteStore
-import com.xiaoqiu.ui.components.MinisOutlinedButton
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuOutlinedButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 import com.xiaoqiu.ui.settings.SettingsScaffold
 import com.xiaoqiu.ui.settings.SettingsSection
 
@@ -169,7 +169,7 @@ fun RestoreBrowseScreen(
                 Text(stringResource(R.string.restore_download_note, e.name, humanBytes(e.size)))
             },
             confirmButton = {
-                MinisTextButton(onClick = {
+                XiaoQiuTextButton(onClick = {
                     confirming = null
                     vm.downloadServerPackage(
                         RcloneChunkedUpload.RemotePackage(
@@ -184,7 +184,7 @@ fun RestoreBrowseScreen(
                 }) { Text(stringResource(R.string.restore_download_confirm)) }
             },
             dismissButton = {
-                MinisTextButton(onClick = { confirming = null }) {
+                XiaoQiuTextButton(onClick = { confirming = null }) {
                     Text(stringResource(R.string.backup_dest_cancel))
                 }
             },
@@ -369,7 +369,7 @@ private fun ProgressSheet(
             Spacer(Modifier.height(14.dp))
             content()
             Spacer(Modifier.height(20.dp))
-            MinisOutlinedButton(
+            XiaoQiuOutlinedButton(
                 onClick = onCancel,
                 modifier = Modifier.fillMaxWidth(),
             ) { Text(stringResource(R.string.backup_dest_cancel)) }

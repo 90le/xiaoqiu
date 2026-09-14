@@ -11,7 +11,7 @@
 # Why a separate script from gen_debug_skill.sh (iOS): iOS embeds base64 into a
 # generated Swift source file; Android just needs plain files on disk. And the
 # CLIENT differs — Android's debug server uses plaintext JSON-RPC + an optional
-# X-Minis-Token header, NOT the iOS protocol-v1 encrypted envelope, so shipping
+# X-XiaoQiu-Token header, NOT the iOS protocol-v1 encrypted envelope, so shipping
 # the iOS envelope clients here would actively mislead.
 #
 # DO NOT COMMIT the output (src/debug/ is gitignored).
@@ -32,17 +32,17 @@ fi
 
 # 2. An Android-specific Python client (stdlib only). Deliberately NOT the iOS
 #    envelope clients: Android needs plaintext JSON-RPC + optional token.
-cat > "$OUT_DIR/examples/minis_rpc_android.py" <<'PYCLIENT'
+cat > "$OUT_DIR/examples/xiaoqiu_rpc_android.py" <<'PYCLIENT'
 #!/usr/bin/env python3
-"""Minis ANDROID debug server client (stdlib only).
+"""XiaoQiu ANDROID debug server client (stdlib only).
 
 Usage:
-    python3 minis_rpc_android.py [--host HOST:PORT] [--token TOKEN] <method> [params-json]
+    python3 xiaoqiu_rpc_android.py [--host HOST:PORT] [--token TOKEN] <method> [params-json]
 
 Examples:
     adb forward tcp:5321 tcp:5321
-    python3 minis_rpc_android.py debug.appInfo '{}'
-    python3 minis_rpc_android.py --host 10.0.0.5:5321 --token "$TOK" debug.logs.list '{}'
+    python3 xiaoqiu_rpc_android.py debug.appInfo '{}'
+    python3 xiaoqiu_rpc_android.py --host 10.0.0.5:5321 --token "$TOK" debug.logs.list '{}'
 
 Transport notes (Android differs from iOS!):
   - Port is 5321 (iOS uses 8321).
@@ -50,8 +50,8 @@ Transport notes (Android differs from iOS!):
     /pair step. Do not use the iOS protocol-v1 clients against this server.
   - Auth: loopback (via `adb forward`) needs no token. NON-loopback (LAN)
     clients must send the per-install device token:
-        adb shell run-as com.openminis.app cat files/debug_server_token
-    Passed as X-Minis-Token (Authorization: Bearer also accepted).
+        adb shell run-as com.openxiaoqiu.app cat files/debug_server_token
+    Passed as X-XiaoQiu-Token (Authorization: Bearer also accepted).
     Or set MINIS_DEBUG_TOKEN in the environment.
 """
 
@@ -68,7 +68,7 @@ def call(host: str, method: str, params: dict, token: str | None) -> dict:
     }).encode()
     headers = {"Content-Type": "application/json"}
     if token:
-        headers["X-Minis-Token"] = token
+        headers["X-XiaoQiu-Token"] = token
     req = urllib.request.Request(f"http://{host}/", data=body,
                                 headers=headers, method="POST")
     try:
@@ -80,7 +80,7 @@ def call(host: str, method: str, params: dict, token: str | None) -> dict:
             raise SystemExit(
                 "401 Unauthorized — this is a non-loopback (LAN) connection, so a token is\n"
                 "required. Read it with:\n"
-                "  adb shell run-as com.openminis.app cat files/debug_server_token\n"
+                "  adb shell run-as com.openxiaoqiu.app cat files/debug_server_token\n"
                 "then pass --token / MINIS_DEBUG_TOKEN. (Over `adb forward` no token is needed.)\n"
                 f"server said: {payload}"
             )
@@ -121,9 +121,9 @@ adb forward tcp:5321 tcp:5321
 curl -s localhost:5321/ -d '{"jsonrpc":"2.0","id":1,"method":"debug.appInfo","params":{}}'
 
 # LAN (non-loopback) — token required
-TOK=$(adb shell run-as com.openminis.app cat files/debug_server_token)
+TOK=$(adb shell run-as com.openxiaoqiu.app cat files/debug_server_token)
 curl -s http://<device-ip>:5321/ \
-     -H "X-Minis-Token: $TOK" \
+     -H "X-XiaoQiu-Token: $TOK" \
      -d '{"jsonrpc":"2.0","id":1,"method":"debug.appInfo","params":{}}'
 ```
 
@@ -132,7 +132,7 @@ Fetch this skill off the device (no auth on loopback):
 ```bash
 curl -H 'Accept: text/markdown' localhost:5321/skill        # the manual
 curl localhost:5321/skill                                   # JSON + inlined clients
-curl localhost:5321/skill/examples/python > minis_rpc_android.py
+curl localhost:5321/skill/examples/python > xiaoqiu_rpc_android.py
 ```
 CURLDOC
 

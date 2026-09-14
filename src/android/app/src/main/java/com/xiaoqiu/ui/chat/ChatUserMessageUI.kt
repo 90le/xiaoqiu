@@ -139,9 +139,9 @@ import com.xiaoqiu.BuildConfig
 import com.xiaoqiu.R
 import com.xiaoqiu.data.FileMentionIndex
 import com.xiaoqiu.logging.AppLogger
-import com.xiaoqiu.ui.components.MinisAlertDialog
-import com.xiaoqiu.ui.components.MinisMenu
-import com.xiaoqiu.ui.components.MinisMenuDivider
+import com.xiaoqiu.ui.components.XiaoQiuAlertDialog
+import com.xiaoqiu.ui.components.XiaoQiuMenu
+import com.xiaoqiu.ui.components.XiaoQiuMenuDivider
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -272,7 +272,7 @@ import com.xiaoqiu.data.repository.MemoryRepository
 import com.xiaoqiu.data.repository.ProviderRepository
 import com.xiaoqiu.ui.browser.BrowserSheet
 import com.xiaoqiu.ui.theme.ChatColors
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 
 // ─── User Message (right-aligned, iOS: tertiarySystemFill bubble, 18dp radius) ─
 
@@ -323,7 +323,7 @@ internal fun UserMessageBubble(
         Box(
             modifier = Modifier
                 .widthIn(max = bubbleMaxWidth)
-                // pointerInput on the OUTER box (= MinisMenu's anchor). Long-press
+                // pointerInput on the OUTER box (= XiaoQiuMenu's anchor). Long-press
                 // anywhere on the bubble (text or attachments) opens the menu;
                 // press coords are stored in this box's coordinate space, which
                 // is exactly what DropdownMenu's `offset` parameter expects.
@@ -469,14 +469,14 @@ internal fun UserMessageBubble(
             // alignEnd-branch max 280dp → 196dp) so the popup feels less
             // chunky on user bubbles, which only host 2-3 short items
             // (Copy / Retry / Edit). Override is local to the user-message
-            // call site — other MinisMenu callers keep the default 240dp
+            // call site — other XiaoQiuMenu callers keep the default 240dp
             // minimum.
             // [T-android-tool-menu-minwidth] Match the tool-pill long-press
             // menu: width = min(220dp, screen width). Wants 220dp but must never
             // exceed the device width on a narrow screen; cap max to the same
             // value so the widthIn(min,max) range is always valid.
             val userMenuWidthDp = minOf(220, LocalConfiguration.current.screenWidthDp).dp
-            MinisMenu(
+            XiaoQiuMenu(
                 expanded = showMenu,
                 onDismissRequest = { showMenu = false },
                 offset = androidx.compose.ui.unit.DpOffset(0.dp, 6.dp),
@@ -734,7 +734,7 @@ private fun ImageGalleryDialog(
     }
 }
 
-// ─── Assistant Message (left-aligned, no bubble, with "Minis" header like iOS) ─
+// ─── Assistant Message (left-aligned, no bubble, with "XiaoQiu" header like iOS) ─
 
 // ─── Flattened chat items ────────────────────────────────────────────────────
 // Each message is expanded into a sequence of independent LazyColumn items (header,

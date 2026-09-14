@@ -60,7 +60,7 @@ import androidx.compose.foundation.lazy.LazyListState
 import kotlin.math.abs
 
 /**
- * Long-press + drag selection gesture for MinisTextKit. Mounted on the
+ * Long-press + drag selection gesture for XiaoQiuTextKit. Mounted on the
  * scroll surface (the LazyColumn modifier) so the gesture handler receives
  * raw pointer events before LazyColumn's own scroll handler.
  *
@@ -106,7 +106,7 @@ import kotlin.math.abs
  * without any setting. Stylus deliberately keeps the TOUCH path: it shares
  * the fingertip's imprecision and has no second button to open a menu with.
  */
-fun Modifier.minisTextKitSelectionGesture(
+fun Modifier.xiaoqiuTextKitSelectionGesture(
     controller: SelectionController,
     listState: LazyListState,
     rootCoordinates: () -> LayoutCoordinates?,
@@ -262,7 +262,7 @@ private val MOUSE_NO_CLICK = MouseGestureOutcome(0L, Offset.Zero)
 
 /**
  * [T-android-mouse-text-selection] The mouse branch of
- * [minisTextKitSelectionGesture]. See that function's docs for why mouse
+ * [xiaoqiuTextKitSelectionGesture]. See that function's docs for why mouse
  * input does not go through the long-press contract.
  *
  * Recognises three gestures, decided in this order:
@@ -588,7 +588,7 @@ private fun localToWindow(
 /**
  * iOS-style draggable selection handles — a small filled circle below each
  * endpoint of the active selection. The handles are visual only; the
- * actual drag logic lives in [minisTextKitSelectionGesture] which routes
+ * actual drag logic lives in [xiaoqiuTextKitSelectionGesture] which routes
  * pointer events through [SelectionController.grabHandleAt]. Rendering
  * them as separate Popups means they can extend BELOW the LazyColumn item
  * (matching system text-selection handle UX) without being clipped.
@@ -604,7 +604,7 @@ private val HANDLE_HIT_SIZE_DP = 56.dp
 private val HANDLE_DOT_SIZE_DP = 14.dp
 
 @Composable
-fun MinisSelectionHandlesHost(
+fun XiaoQiuSelectionHandlesHost(
     controller: SelectionController,
     listState: LazyListState,
     reverseLayout: Boolean = false,
@@ -702,7 +702,7 @@ private fun SelectionHandleDot(
     ) {
         // The hit-target box has its OWN pointerInput because pointer events
         // inside a Popup do NOT bubble back into the LazyColumn that owns
-        // [minisTextKitSelectionGesture] — popups are separate windows. The
+        // [xiaoqiuTextKitSelectionGesture] — popups are separate windows. The
         // gesture here mirrors handleDragLoop's behavior: publish the latest
         // finger window-point through controller.dragIntent, and let
         // SelectionDragTracker convert that into actual selection updates.
@@ -843,7 +843,7 @@ private class HandlePositionProvider(
 
 /**
  * Floating action toolbar rendered above the active selection. Mirrors
- * [MinisMarkdownTextToolbarHost] (which is driven by Compose's
+ * [XiaoQiuMarkdownTextToolbarHost] (which is driven by Compose's
  * SelectionContainer) but consumes our SelectionController state directly.
  *
  * Empty selection → not rendered. Whenever the selection's bounding rect is
@@ -855,7 +855,7 @@ private class HandlePositionProvider(
  * Bundle of side-effecting callbacks the toolbar surfaces as buttons.
  * Pass null to hide a button (e.g. "Add to Input" is hidden when the
  * caller has no composer to receive the text). Mirrors the action set of
- * the older [MinisMarkdownTextToolbar] so the per-button UX stays the
+ * the older [XiaoQiuMarkdownTextToolbar] so the per-button UX stays the
  * same across both selection systems.
  */
 data class SelectionToolbarActions(
@@ -865,7 +865,7 @@ data class SelectionToolbarActions(
     val onAddToInput: ((String) -> Unit)? = null,
     /**
      * [T-android-selection-readaloud] Speak the currently-selected plain text
-     * through Minis TTS. Null hides the button. Mirrors iOS's "Read Selection".
+     * through XiaoQiu TTS. Null hides the button. Mirrors iOS's "Read Selection".
      */
     val onReadAloud: ((String) -> Unit)? = null,
     /**
@@ -888,7 +888,7 @@ data class SelectionToolbarActions(
 )
 
 @Composable
-fun MinisSelectionToolbarHost(
+fun XiaoQiuSelectionToolbarHost(
     controller: SelectionController,
     actions: SelectionToolbarActions? = null,
     /**
@@ -1082,10 +1082,10 @@ fun MinisSelectionToolbarHost(
                 // [T-android-markdown-table-copy-actions] Copy Table / Copy
                 // Table Image, when the selected message contains a table.
                 //
-                // This is the toolbar that ACTUALLY shows for a MinisTextKit
+                // This is the toolbar that ACTUALLY shows for a XiaoQiuTextKit
                 // selection (a table-cell long-press). The table actions were
-                // previously wired only into MinisMarkdownTextToolbar — the
-                // Compose-SelectionContainer toolbar that this MinisTextKit
+                // previously wired only into XiaoQiuMarkdownTextToolbar — the
+                // Compose-SelectionContainer toolbar that this XiaoQiuTextKit
                 // selection never triggers — so the buttons registered fine
                 // (debug.selectionState: tableActionsHit=true) but appeared in
                 // a toolbar the user never sees.
@@ -1159,7 +1159,7 @@ fun MinisSelectionToolbarHost(
                                 // lists and quotes as the user sees them, with no
                                 // `#`/`-`/`**`/`>` left behind. This bar never
                                 // offered it; the other selection toolbar
-                                // (MinisMarkdownTextToolbar) already did, so the
+                                // (XiaoQiuMarkdownTextToolbar) already did, so the
                                 // same long-press could yield two different menus
                                 // depending on which path raised it.
                                 SelectionAction(labelCopyAsPlainText) {
@@ -1281,9 +1281,9 @@ fun MinisSelectionToolbarHost(
                 val overflowItems = items.drop(inlineCount)
 
                 inlineItems.forEachIndexed { index, item ->
-                    if (index > 0) MinisToolbarDivider()
+                    if (index > 0) XiaoQiuToolbarDivider()
                     if (item.children.isEmpty()) {
-                        MinisToolbarButton(label = item.label, onClick = item.onClick)
+                        XiaoQiuToolbarButton(label = item.label, onClick = item.onClick)
                     } else {
                         // [T-android-selection-copy-full-inline] An inline
                         // parent opens its children in a menu anchored to its
@@ -1295,7 +1295,7 @@ fun MinisSelectionToolbarHost(
                             mutableStateOf(false)
                         }
                         var childAnchor by remember { mutableStateOf(Offset.Zero) }
-                        MinisToolbarButton(
+                        XiaoQiuToolbarButton(
                             label = item.label + "  ›",
                             modifier = Modifier.onGloballyPositioned { coords ->
                                 val pos = coords.positionOnScreen()
@@ -1351,7 +1351,7 @@ fun MinisSelectionToolbarHost(
                     }
                 }
                 if (overflowItems.isNotEmpty()) {
-                    MinisToolbarDivider()
+                    XiaoQiuToolbarDivider()
                     var overflowOpen by remember(items.size) { mutableStateOf(false) }
                     // [T-android-selection-overflow-anchor] Window coordinates of
                     // the "⋯" button, captured so the overflow menu can anchor to
@@ -1378,7 +1378,7 @@ fun MinisSelectionToolbarHost(
                     // agree on; the provider subtracts the new Popup's own screen
                     // origin to get back to its local space.
                     var overflowAnchor by remember { mutableStateOf(Offset.Zero) }
-                    MinisToolbarButton(
+                    XiaoQiuToolbarButton(
                         label = "⋯",
                         modifier = Modifier.onGloballyPositioned { coords ->
                             val pos = coords.positionOnScreen()
@@ -1529,7 +1529,7 @@ private class SelectionAction(
 private const val MAX_INLINE_SELECTION_ACTIONS = 3
 
 @Composable
-private fun MinisToolbarDivider() {
+private fun XiaoQiuToolbarDivider() {
     Box(
         modifier = Modifier
             .padding(vertical = 8.dp)
@@ -1540,7 +1540,7 @@ private fun MinisToolbarDivider() {
 }
 
 @Composable
-private fun MinisToolbarButton(
+private fun XiaoQiuToolbarButton(
     label: String,
     modifier: Modifier = Modifier,
     onClick: () -> Unit,

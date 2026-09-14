@@ -48,7 +48,7 @@ internal object ComposerPlaceholderRotation {
      * @param sessionHasMessages whether the conversation already has messages
      * @param screenReaderOn whether a screen reader (TalkBack) is active
      * @param randomIndex    supplier of a candidate index in [0, POOL_SIZE);
-     *                       injected so tests are deterministic
+     *                       injected so tests are deterxiaoqiutic
      */
     fun nextIndex(
         current: Int,

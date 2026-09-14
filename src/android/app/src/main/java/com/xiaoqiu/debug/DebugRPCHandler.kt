@@ -180,7 +180,7 @@ class DebugRPCHandler(private val context: Context) {
             }
             // [T-android-sessions-cli-full] DEBUG-only invocation of the
             // SessionsOffloadHandler — parallels debug.modelUse.exec so test
-            // harnesses can verify minis-sessions-cli (list / search /
+            // harnesses can verify xiaoqiu-sessions-cli (list / search /
             // messages, incl. --full) end-to-end without an in-shell prompt.
             "debug.sessions.exec" -> {
                 if (!BuildConfig.DEBUG) {
@@ -188,18 +188,18 @@ class DebugRPCHandler(private val context: Context) {
                 }
                 handleSessionsExec(params)
             }
-            // [T-minis-config-provider-add] DEBUG-only invocation of the
+            // [T-xiaoqiu-config-provider-add] DEBUG-only invocation of the
             // ConfigOffloadHandler — parallels debug.modelUse.exec so test
-            // harnesses can exercise minis-config (get / set / set-batch /
+            // harnesses can exercise xiaoqiu-config (get / set / set-batch /
             // audit-*) without driving an in-shell prompt. The handler
             // re-uses the production ConfigBridge code path; we override
             // skipConfirmation under the hood via a dedicated arg the
             // production CLI never exposes.
-            "debug.minisConfig.exec" -> {
+            "debug.xiaoqiuConfig.exec" -> {
                 if (!BuildConfig.DEBUG) {
                     throw RPCException(-32601, "Method not found: $method. Call 'rpc.discover' to list available methods.")
                 }
-                handleMinisConfigExec(params)
+                handleXiaoQiuConfigExec(params)
             }
 
             else -> throw RPCException(-32601, "Method not found: $method. Call 'rpc.discover' to list available methods.")
@@ -221,8 +221,8 @@ class DebugRPCHandler(private val context: Context) {
             put("totalLogSize", AppLogger.totalSize())
             put("diskUsage", JSONObject().apply {
                 put("filesDir", dirSize(filesDir))
-                put("sessions", dirSize(File(filesDir, "minis-sessions")))
-                put("global", dirSize(File(filesDir, "minis-global")))
+                put("sessions", dirSize(File(filesDir, "xiaoqiu-sessions")))
+                put("global", dirSize(File(filesDir, "xiaoqiu-global")))
             })
         }
     }
@@ -316,12 +316,12 @@ class DebugRPCHandler(private val context: Context) {
     /**
      * [diag] Raw list of a host-filesystem directory, bypassing the PRoot
      * bindMounts/rootfs resolver. Constrained to filesDir to avoid poking
-     * at arbitrary paths. Use `minis-sessions` (default) to enumerate every
+     * at arbitrary paths. Use `xiaoqiu-sessions` (default) to enumerate every
      * session's attachments/workspace/... directories and find files that
      * were written into a session we no longer have mounted.
      */
     private fun handleRawLS(params: JSONObject): Any {
-        val subPath = params.optString("path", "minis-sessions")
+        val subPath = params.optString("path", "xiaoqiu-sessions")
         if (subPath.contains("..")) throw RPCException(-32602, "Invalid path: '..' not allowed")
         val recursive = params.optBoolean("recursive", true)
         val maxDepth = params.optInt("maxDepth", 4)
@@ -666,12 +666,12 @@ class DebugRPCHandler(private val context: Context) {
      * same event a user's long-press → Paste generates.
      *
      * Debug-only by construction: DebugServer is started under
-     * `if (BuildConfig.DEBUG)` in MinisApp, so no release build carries this.
+     * `if (BuildConfig.DEBUG)` in XiaoQiuApp, so no release build carries this.
      */
     private suspend fun handleSetClipboard(params: JSONObject): JSONObject {
         val text = params.optString("text")
         if (text.isEmpty()) throw RPCException(-32602, "Invalid params: 'text' is required")
-        val label = params.optString("label", "minis-debug")
+        val label = params.optString("label", "xiaoqiu-debug")
 
         // ClipboardManager.setPrimaryClip must run on a Looper thread, and the
         // write is only honoured while this app holds focus.
@@ -780,7 +780,7 @@ class DebugRPCHandler(private val context: Context) {
 
     private fun metaObject(): JSONObject {
         return JSONObject().apply {
-            put("app", "MinisApp")
+            put("app", "XiaoQiuApp")
             put("version", BuildConfig.VERSION_NAME)
             put("build", BuildConfig.VERSION_CODE)
             put("device", "${Build.MANUFACTURER} ${Build.MODEL}")
@@ -878,7 +878,7 @@ class DebugRPCHandler(private val context: Context) {
      * Run a command inside the PRoot sandbox for the given session and return
      * `{ output, exit_code }`. Mirrors iOS `debug.shellExecute`. Debug-only;
      * meant for integration-test harnesses that need to drive shell tools
-     * (`minis-browser-use`, `minis-open`, …) without going through the agent.
+     * (`xiaoqiu-browser-use`, `xiaoqiu-open`, …) without going through the agent.
      *
      * Params:
      *   command  (string, required) — command line to run under /bin/sh -c.
@@ -895,9 +895,9 @@ class DebugRPCHandler(private val context: Context) {
         val timeoutSec = params.optInt("timeout", 60).coerceIn(1, 900)
 
         // Mirror ChatViewModel's terminal lineCallback: scan raw lines for
-        // OSC MinisOpenURL markers before TerminalSanitizer strips them and
+        // OSC XiaoQiuOpenURL markers before TerminalSanitizer strips them and
         // hand captured URLs to the broker so test harnesses driving
-        // `minis-open` via this RPC trigger the same in-app preview flow as
+        // `xiaoqiu-open` via this RPC trigger the same in-app preview flow as
         // real chat shell output.
         val capturedUrls = mutableListOf<String>()
         val result = try {
@@ -906,7 +906,7 @@ class DebugRPCHandler(private val context: Context) {
                 command = command,
                 timeout = timeoutSec * 1000L,
                 lineCallback = { rawLine ->
-                    val (_, urls) = com.xiaoqiu.terminal.MinisUrlMarker.extract(rawLine)
+                    val (_, urls) = com.xiaoqiu.terminal.XiaoQiuUrlMarker.extract(rawLine)
                     capturedUrls.addAll(urls)
                 },
             )
@@ -914,7 +914,7 @@ class DebugRPCHandler(private val context: Context) {
             throw RPCException(-32000, "Shell execute failed: ${e.message}")
         }
         for (raw in capturedUrls) {
-            com.xiaoqiu.terminal.MinisOpenUrlBroker.offer(raw)
+            com.xiaoqiu.terminal.XiaoQiuOpenUrlBroker.offer(raw)
         }
         return JSONObject()
             .put("output", result.output)
@@ -1026,7 +1026,7 @@ class DebugRPCHandler(private val context: Context) {
 
     /**
      * Stub for parity with iOS `debug.cloudSync`. Android does not have an
-     * iCloud-equivalent built into MinisApp, so we report disabled and an
+     * iCloud-equivalent built into XiaoQiuApp, so we report disabled and an
      * empty device list rather than fail the call. Lets cross-platform
      * harnesses skip the check uniformly.
      */
@@ -1189,7 +1189,7 @@ class DebugRPCHandler(private val context: Context) {
     /**
      * Direct invocation of [com.xiaoqiu.sandbox.offload.ModelUseOffloadHandler]
      * for e2e harnesses. Mirrors [handleShizukuExec]; lets callers exercise the
-     * `minis-model-use` CLI without going through a real Alpine shell prompt.
+     * `xiaoqiu-model-use` CLI without going through a real Alpine shell prompt.
      * DEBUG-only.
      */
     private fun handleModelUseExec(params: JSONObject): JSONObject {
@@ -1220,11 +1220,11 @@ class DebugRPCHandler(private val context: Context) {
         } else argvTail
 
         AppLogger.info("DebugRPC", "debug.modelUse.exec argv=${finalArgv.joinToString(" ")}")
-        val app = context.applicationContext as com.xiaoqiu.MinisApp
+        val app = context.applicationContext as com.xiaoqiu.XiaoQiuApp
         val handler = com.xiaoqiu.sandbox.offload.ModelUseOffloadHandler(context, app.providerRepository)
         val request = com.xiaoqiu.sandbox.NativeOffloadRequest(
             pid = -1,
-            argv = listOf("minis-model-use") + finalArgv,
+            argv = listOf("xiaoqiu-model-use") + finalArgv,
             env = emptyMap(),
             cwd = "/",
             sessionId = null,
@@ -1241,7 +1241,7 @@ class DebugRPCHandler(private val context: Context) {
      * [T-android-sessions-cli-full] Direct invocation of
      * [com.xiaoqiu.sandbox.offload.SessionsOffloadHandler] for e2e
      * harnesses. Mirrors [handleModelUseExec]; lets callers exercise the
-     * `minis-sessions-cli` CLI (list / search / messages, incl. --full)
+     * `xiaoqiu-sessions-cli` CLI (list / search / messages, incl. --full)
      * without going through a real Alpine shell prompt. DEBUG-only.
      */
     private fun handleSessionsExec(params: JSONObject): JSONObject {
@@ -1258,11 +1258,11 @@ class DebugRPCHandler(private val context: Context) {
         }
 
         AppLogger.info("DebugRPC", "debug.sessions.exec argv=${argvTail.joinToString(" ")}")
-        val app = context.applicationContext as com.xiaoqiu.MinisApp
+        val app = context.applicationContext as com.xiaoqiu.XiaoQiuApp
         val handler = com.xiaoqiu.sandbox.offload.SessionsOffloadHandler(app.chatRepository)
         val request = com.xiaoqiu.sandbox.NativeOffloadRequest(
             pid = -1,
-            argv = listOf("minis-sessions-cli") + argvTail,
+            argv = listOf("xiaoqiu-sessions-cli") + argvTail,
             env = emptyMap(),
             cwd = "/",
             sessionId = null,
@@ -1276,7 +1276,7 @@ class DebugRPCHandler(private val context: Context) {
     }
 
     /**
-     * [T-minis-config-provider-add] DEBUG-only minis-config invocation
+     * [T-xiaoqiu-config-provider-add] DEBUG-only xiaoqiu-config invocation
      * that BYPASSES the user-confirmation gate. Targets the same code
      * path the offload CLI hits (ConfigBridge.performWriteBatch /
      * readField / auditList), so harnesses can verify add / set / get
@@ -1288,7 +1288,7 @@ class DebugRPCHandler(private val context: Context) {
      *   - subcommand=get:    `path` (string)
      *   - subcommand=audit-list: optional `limit` (int)
      */
-    private fun handleMinisConfigExec(params: JSONObject): JSONObject {
+    private fun handleXiaoQiuConfigExec(params: JSONObject): JSONObject {
         val sub = params.optString("subcommand", "").takeIf { it.isNotEmpty() }
             ?: throw RPCException(
                 -32602,
@@ -1340,14 +1340,14 @@ class DebugRPCHandler(private val context: Context) {
                 val skip = params.optBoolean("skipConfirmation", true)
                 AppLogger.info(
                     "DebugRPC",
-                    "debug.minisConfig.exec set items=${items.length()} skipConfirmation=$skip",
+                    "debug.xiaoqiuConfig.exec set items=${items.length()} skipConfirmation=$skip",
                 )
                 // Hop to the main thread because performWriteBatch is a
                 // suspend fun that uses Dispatchers.Main internally.
                 kotlinx.coroutines.runBlocking {
                     com.xiaoqiu.config.ConfigBridge.performWriteBatch(
                         items = items,
-                        caption = "debug.minisConfig.exec",
+                        caption = "debug.xiaoqiuConfig.exec",
                         actorRaw = "debug-rpc",
                         sessionId = null,
                         skipConfirmation = skip,
@@ -1366,7 +1366,7 @@ class DebugRPCHandler(private val context: Context) {
                 val filter = params.optString("filter", "").takeIf { it.isNotEmpty() }
                 val page = params.optInt("page", 0)
                 val pageSize = params.optInt("pageSize", 0)
-                AppLogger.info("DebugRPC", "debug.minisConfig.exec get path=$path")
+                AppLogger.info("DebugRPC", "debug.xiaoqiuConfig.exec get path=$path")
                 com.xiaoqiu.config.ConfigBridge.readField(
                     path = path,
                     filter = filter,
@@ -1375,8 +1375,8 @@ class DebugRPCHandler(private val context: Context) {
                 )
             }
             // Discovery. Without these a caller has to know a collection's
-            // writable paths in advance; `topics` is `minis-config --help`'s
-            // index and `topic-help` is `minis-config <topic> --help`.
+            // writable paths in advance; `topics` is `xiaoqiu-config --help`'s
+            // index and `topic-help` is `xiaoqiu-config <topic> --help`.
             "topics" -> JSONObject().apply {
                 put("ok", true)
                 put("topics", com.xiaoqiu.config.ConfigBridge.allTopics())

@@ -1,18 +1,18 @@
 #!/bin/sh
-# minis-mcp-cli — MinisApp MCP (Model Context Protocol) client for iSH/PRoot.
+# xiaoqiu-mcp-cli — XiaoQiuApp MCP (Model Context Protocol) client for iSH/PRoot.
 #
 # Thin sh wrapper: ensures the python3 + httpx runtime is present, then execs
 # the shared Python implementation. The Python under
-# /usr/local/lib/minis-mcp-cli is platform-neutral and is shipped identically
+# /usr/local/lib/xiaoqiu-mcp-cli is platform-neutral and is shipped identically
 # on iOS (iSH) and Android (PRoot/Alpine) — keep it POSIX + dependency-light.
 #
-# Data file: /var/minis/mcp-servers/servers.json (mcpServers object format,
-# Claude-Desktop compatible). Logs: /var/minis/mcp-servers/mcp-cli.log.
+# Data file: /var/xiaoqiu/mcp-servers/servers.json (mcpServers object format,
+# Claude-Desktop compatible). Logs: /var/xiaoqiu/mcp-servers/mcp-cli.log.
 # Diagnostics go to the log, never to stdout (stdout is reserved for the
 # JSON the agent parses).
 
-LOG="/var/minis/mcp-servers/mcp-cli.log"
-mkdir -p /var/minis/mcp-servers 2>/dev/null
+LOG="/var/xiaoqiu/mcp-servers/mcp-cli.log"
+mkdir -p /var/xiaoqiu/mcp-servers 2>/dev/null
 _log() { echo "[$(date '+%Y-%m-%d %H:%M:%S')] $*" >> "$LOG" 2>/dev/null; }
 
 # Ensure python3 is available.
@@ -28,4 +28,4 @@ if ! python3 -c "import httpx" 2>/dev/null; then
     pip install --quiet --break-system-packages httpx >> "$LOG" 2>&1
 fi
 
-exec python3 /usr/local/lib/minis-mcp-cli/main.py "$@"
+exec python3 /usr/local/lib/xiaoqiu-mcp-cli/main.py "$@"

@@ -59,9 +59,9 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import com.xiaoqiu.R
-import com.xiaoqiu.ui.components.MinisButton
-import com.xiaoqiu.ui.components.MinisOutlinedButton
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuButton
+import com.xiaoqiu.ui.components.XiaoQiuOutlinedButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 import com.xiaoqiu.scheduled.ScheduledRepeatMode
 import com.xiaoqiu.scheduled.ScheduledTargetMode
 import com.xiaoqiu.scheduled.ScheduledTask
@@ -291,7 +291,7 @@ fun ScheduledTaskEditScreen(
                         }
                     },
                     confirmButton = {
-                        MinisTextButton(onClick = { vm.clearRunNowState() }) {
+                        XiaoQiuTextButton(onClick = { vm.clearRunNowState() }) {
                             Text(stringResource(R.string.scheduled_task_run_now_dismiss))
                         }
                     },
@@ -305,17 +305,17 @@ fun ScheduledTaskEditScreen(
                     confirmButton = {
                         val sid = state.sessionId
                         if (sid != null) {
-                            MinisTextButton(onClick = { vm.clearRunNowState(); onOpenSession(sid) }) {
+                            XiaoQiuTextButton(onClick = { vm.clearRunNowState(); onOpenSession(sid) }) {
                                 Text(stringResource(R.string.scheduled_task_run_now_open_session))
                             }
                         } else {
-                            MinisTextButton(onClick = { vm.clearRunNowState() }) {
+                            XiaoQiuTextButton(onClick = { vm.clearRunNowState() }) {
                                 Text(stringResource(R.string.ok))
                             }
                         }
                     },
                     dismissButton = if (state.sessionId != null) {
-                        { MinisTextButton(onClick = { vm.clearRunNowState() }) {
+                        { XiaoQiuTextButton(onClick = { vm.clearRunNowState() }) {
                             Text(stringResource(R.string.scheduled_task_run_now_dismiss))
                         } }
                     } else null,
@@ -327,7 +327,7 @@ fun ScheduledTaskEditScreen(
                     title = { Text(stringResource(R.string.scheduled_task_run_now_failed)) },
                     text = { Text(stringResource(R.string.scheduled_task_run_now_failed_body)) },
                     confirmButton = {
-                        MinisTextButton(onClick = { vm.clearRunNowState() }) {
+                        XiaoQiuTextButton(onClick = { vm.clearRunNowState() }) {
                             Text(stringResource(R.string.ok))
                         }
                     },
@@ -537,16 +537,16 @@ private fun EditFormBody(
 
         HorizontalDivider()
 
-        MinisOutlinedButton(onClick = onRunNow, enabled = canRunNow, modifier = Modifier.fillMaxWidth()) {
+        XiaoQiuOutlinedButton(onClick = onRunNow, enabled = canRunNow, modifier = Modifier.fillMaxWidth()) {
             Icon(Icons.Filled.PlayArrow, contentDescription = null, modifier = Modifier.size(18.dp))
             Spacer(Modifier.width(8.dp))
             Text(stringResource(R.string.scheduled_task_run_now))
         }
-        MinisButton(onClick = onSave, enabled = canSave, modifier = Modifier.fillMaxWidth()) {
+        XiaoQiuButton(onClick = onSave, enabled = canSave, modifier = Modifier.fillMaxWidth()) {
             Text(stringResource(R.string.scheduled_task_save))
         }
         if (!isNew) {
-            MinisOutlinedButton(
+            XiaoQiuOutlinedButton(
                 onClick = onDelete,
                 colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.error),
                 modifier = Modifier.fillMaxWidth(),
@@ -718,7 +718,7 @@ private fun SessionPickerDialog(
             }
         },
         confirmButton = {},
-        dismissButton = { MinisTextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+        dismissButton = { XiaoQiuTextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
 
@@ -757,7 +757,7 @@ private fun MessagePickerDialog(
             }
         },
         confirmButton = {},
-        dismissButton = { MinisTextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+        dismissButton = { XiaoQiuTextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     )
 }
 
@@ -768,11 +768,11 @@ private fun DateDialog(initialMs: Long?, onDismiss: () -> Unit, onPick: (Long) -
     DatePickerDialog(
         onDismissRequest = onDismiss,
         confirmButton = {
-            MinisTextButton(onClick = {
+            XiaoQiuTextButton(onClick = {
                 state.selectedDateMillis?.let { onPick(startOfLocalDay(it)) }
             }) { Text(stringResource(R.string.ok)) }
         },
-        dismissButton = { MinisTextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
+        dismissButton = { XiaoQiuTextButton(onClick = onDismiss) { Text(stringResource(R.string.cancel)) } },
     ) {
         DatePicker(state = state)
     }

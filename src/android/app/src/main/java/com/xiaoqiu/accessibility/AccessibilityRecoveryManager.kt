@@ -27,7 +27,7 @@ import kotlin.coroutines.resume
  * 0, and it never self-heals — waiting does nothing and relaunching the app
  * does nothing. The user has to walk back into Settings → Accessibility.
  *
- * This is deliberate AOSP behaviour, not a Minis defect: the same test against
+ * This is deliberate AOSP behaviour, not a XiaoQiu defect: the same test against
  * Google's own TalkBack, Bitwarden and AutoX reproduced it identically. With
  * two services enabled and only one force-stopped, the framework surgically
  * removes just the stopped one — i.e. it is a security decision (a
@@ -42,7 +42,7 @@ import kotlin.coroutines.resume
  *
  * Writing ENABLED_ACCESSIBILITY_SERVICES requires WRITE_SECURE_SETTINGS, which
  * is not grantable to a normal app. That is why none of the apps surveyed even
- * *detect* the loss. Minis is in a better position because it already ships a
+ * *detect* the loss. XiaoQiu is in a better position because it already ships a
  * Shizuku client: with Shizuku authorized we can run `settings put secure`
  * with shell privilege and repair the grant in place, which was verified to
  * take effect immediately (the service rebinds without a relaunch).
@@ -116,7 +116,7 @@ object AccessibilityRecoveryManager {
 
     /** The `pkg/cls` string the framework expects in ENABLED_ACCESSIBILITY_SERVICES. */
     private fun componentId(context: Context): String =
-        "${context.packageName}/${MinisAccessibilityService::class.java.name}"
+        "${context.packageName}/${XiaoQiuAccessibilityService::class.java.name}"
 
     private const val PREFS = "a11y_recovery"
     private const val KEY_EVER_GRANTED = "ever_granted"
@@ -138,7 +138,7 @@ object AccessibilityRecoveryManager {
 
     /**
      * Latch that the grant has existed. Called from
-     * [MinisAccessibilityService.onServiceConnected] — the one moment we know
+     * [XiaoQiuAccessibilityService.onServiceConnected] — the one moment we know
      * for certain the user granted it, whichever route they took (Settings
      * toggle, Shizuku repair, or a restore).
      */
@@ -155,7 +155,7 @@ object AccessibilityRecoveryManager {
      * i.e. the grant itself is gone and only a Settings write can restore it.
      *
      * This asks Settings.Secure rather than checking
-     * `MinisAccessibilityService.getInstance() != null`, because the two mean
+     * `XiaoQiuAccessibilityService.getInstance() != null`, because the two mean
      * different things and only one of them is repairable:
      *  - instance == null but grant present → the service is mid-(re)bind, or
      *    the OEM killed it and the framework will bring it back. Writing the
@@ -180,7 +180,7 @@ object AccessibilityRecoveryManager {
             isRevokedIn(
                 enabledValue = enabled,
                 pkg = context.packageName,
-                serviceClass = MinisAccessibilityService::class.java.name,
+                serviceClass = XiaoQiuAccessibilityService::class.java.name,
             )
         } catch (t: Throwable) {
             // A read failure is not evidence of revocation — do not prompt on it.
@@ -279,7 +279,7 @@ object AccessibilityRecoveryManager {
         // The write is async from the framework's perspective; wait for the
         // real signal (our service instance appearing) rather than assuming.
         val bound = withTimeoutOrNull(REBIND_TIMEOUT_MS) {
-            while (MinisAccessibilityService.getInstance() == null) delay(REBIND_POLL_MS)
+            while (XiaoQiuAccessibilityService.getInstance() == null) delay(REBIND_POLL_MS)
             true
         } == true
 

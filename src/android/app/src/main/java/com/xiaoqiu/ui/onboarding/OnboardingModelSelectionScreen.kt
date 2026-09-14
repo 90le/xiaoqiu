@@ -2,8 +2,8 @@ package com.xiaoqiu.ui.onboarding
 
 import com.xiaoqiu.R
 import androidx.compose.ui.res.stringResource
-import com.xiaoqiu.ui.components.MinisButton
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.shape.RoundedCornerShape
@@ -99,7 +99,7 @@ fun OnboardingModelSelectionScreen(
                     }
                 },
                 actions = {
-                    MinisTextButton(onClick = onBack) {
+                    XiaoQiuTextButton(onClick = onBack) {
                         Text(stringResource(R.string.common_skip))
                     }
                 },
@@ -217,7 +217,7 @@ fun OnboardingModelSelectionScreen(
 
             Spacer(Modifier.height(8.dp))
 
-            MinisButton(
+            XiaoQiuButton(
                 onClick = {
                     if (selected.isNotEmpty()) {
                         val group = ModelGroup(name = "Default Models")

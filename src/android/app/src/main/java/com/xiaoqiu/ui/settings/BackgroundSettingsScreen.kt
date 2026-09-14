@@ -55,7 +55,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.LifecycleEventObserver
-import com.xiaoqiu.MinisApp
+import com.xiaoqiu.XiaoQiuApp
 import com.xiaoqiu.R
 import com.xiaoqiu.power.PowerOptimizationManager
 import com.xiaoqiu.i18n.uppercaseForDisplay
@@ -85,9 +85,9 @@ fun BackgroundSettingsScreen(onBack: () -> Unit) {
 
     // T180-bg-notif: pull the BackgroundSettingsRepository off the
     // Application instance — keeps AppNavigation parameters unchanged
-    // (no plumbing churn through the nav graph). MinisApp.onCreate is
+    // (no plumbing churn through the nav graph). XiaoQiuApp.onCreate is
     // guaranteed to have run before any composable composes.
-    val app = context.applicationContext as MinisApp
+    val app = context.applicationContext as XiaoQiuApp
     val backgroundRepo = app.backgroundSettingsRepository
     val taskNotificationsEnabled by backgroundRepo.taskNotificationsEnabled.collectAsState()
     val backgroundOverlayEnabled by backgroundRepo.backgroundOverlayEnabled.collectAsState()

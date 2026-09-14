@@ -140,9 +140,9 @@ import com.xiaoqiu.BuildConfig
 import com.xiaoqiu.R
 import com.xiaoqiu.data.FileMentionIndex
 import com.xiaoqiu.logging.AppLogger
-import com.xiaoqiu.ui.components.MinisAlertDialog
-import com.xiaoqiu.ui.components.MinisMenu
-import com.xiaoqiu.ui.components.MinisMenuDivider
+import com.xiaoqiu.ui.components.XiaoQiuAlertDialog
+import com.xiaoqiu.ui.components.XiaoQiuMenu
+import com.xiaoqiu.ui.components.XiaoQiuMenuDivider
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -271,7 +271,7 @@ import com.xiaoqiu.data.repository.MemoryRepository
 import com.xiaoqiu.data.repository.ProviderRepository
 import com.xiaoqiu.ui.browser.BrowserSheet
 import com.xiaoqiu.ui.theme.ChatColors
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 
 // ─── Bordered Markdown Table (iOS style: bordered cells with grid lines) ─────
 
@@ -692,7 +692,7 @@ private fun CompactSummarySheet(
             }
             if (onRevert != null) {
                 HorizontalDivider(color = ChatColors.separator)
-                MinisTextButton(
+                XiaoQiuTextButton(
                     onClick = { showRevertConfirm = true },
                     modifier = Modifier.fillMaxWidth().padding(vertical = 4.dp),
                 ) {
@@ -715,7 +715,7 @@ private fun CompactSummarySheet(
     }
 
     if (showRevertConfirm && onRevert != null) {
-        MinisAlertDialog(
+        XiaoQiuAlertDialog(
             onDismissRequest = { showRevertConfirm = false },
             title = "Revert this compact?",
             text = "The summary will be discarded and the messages it covered " +
@@ -842,7 +842,7 @@ private fun parseInlineMarkdown(
 //
 // Mirrors iOS `takeBrowserSnapshot()` timer (ToolLiveSheet.swift:1803-1825):
 // while a browser_use block is RUNNING/STREAMING, poll the active WebView at
-// a fixed interval so the Minis Computer sheet, detail sheet, and floating
+// a fixed interval so the XiaoQiu Computer sheet, detail sheet, and floating
 // thumbnail can show the current page state — not just screenshots saved by
 // visualChangeActions (NAVIGATE/CLICK/SCROLL/HOVER/TYPE). Actions like
 // get_readable, get_text, execute_js, fetch never save an imageFilePath, so

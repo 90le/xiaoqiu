@@ -1,7 +1,7 @@
 package com.xiaoqiu.debug
 
 import android.content.Context
-import com.xiaoqiu.MinisApp
+import com.xiaoqiu.XiaoQiuApp
 import com.xiaoqiu.browser.BrowserAction
 import com.xiaoqiu.browser.BrowserActionInput
 import com.xiaoqiu.browser.BrowserTabPool
@@ -13,8 +13,8 @@ import org.json.JSONObject
  * Browser-debug RPC handlers (`debug.browser.*`).
  *
  * Mirrors the iOS `debug.browser.*` surface in `docs/debug-server-api.md`. All
- * methods operate on the application-scoped [MinisApp.sharedBrowserTabPool]
- * (the same pool the in-shell `minis-browser-use` agent drives) so external
+ * methods operate on the application-scoped [XiaoQiuApp.sharedBrowserTabPool]
+ * (the same pool the in-shell `xiaoqiu-browser-use` agent drives) so external
  * automation sees the tabs the user has actually opened.
  *
  * Tab-id conventions mirror iOS: each method accepts an optional `tabId`. When
@@ -24,8 +24,8 @@ import org.json.JSONObject
 internal object BrowserDebugMethods {
 
     private fun pool(context: Context): BrowserTabPool {
-        val app = context.applicationContext as? MinisApp
-            ?: throw RPCException(-32000, "MinisApp not initialized")
+        val app = context.applicationContext as? XiaoQiuApp
+            ?: throw RPCException(-32000, "XiaoQiuApp not initialized")
         return app.sharedBrowserTabPool
     }
 

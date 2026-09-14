@@ -28,7 +28,7 @@ import java.util.UUID
  *     every provider from the UI. Room's migrations are version-to-version
  *     edges with no "repair regardless of version" slot.
  *
- * It also lives in its OWN file, not in minis.db: "clear my correction data" is
+ * It also lives in its OWN file, not in xiaoqiu.db: "clear my correction data" is
  * then one file to wipe, and a corrupt learning DB can never take the rest of
  * the app down with it.
  *

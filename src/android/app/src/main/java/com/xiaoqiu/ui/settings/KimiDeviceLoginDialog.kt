@@ -38,7 +38,7 @@ import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
 import com.xiaoqiu.R
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 
 /**
  * [T-kimi-oauth] Device-code login dialog for Kimi Code (RFC 8628): shows the
@@ -152,7 +152,7 @@ fun KimiDeviceLoginDialog(
         },
         confirmButton = {},
         dismissButton = {
-            MinisTextButton(onClick = onCancel) {
+            XiaoQiuTextButton(onClick = onCancel) {
                 Text(stringResource(R.string.common_cancel))
             }
         },

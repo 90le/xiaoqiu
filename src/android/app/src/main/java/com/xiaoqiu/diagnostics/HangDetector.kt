@@ -69,7 +69,7 @@ object HangDetector {
      * [T-android-render-breaker] Once `count >= this`, streaming markdown
      * rendering degrades to plain text until the hang count resets (quiet
      * period or manual reset). Deliberately one step EARLIER than the launch
-     * breaker: the ANR-loop baseline (minis-2026-06-10.log) shows the system
+     * breaker: the ANR-loop baseline (xiaoqiu-2026-06-10.log) shows the system
      * kills the process between hang #2 and #3, so a count-3 gate never fires
      * in the scenario it exists for.
      */
@@ -109,7 +109,7 @@ object HangDetector {
      */
     val renderBreakerActive: StateFlow<Boolean> = _renderBreakerActive.asStateFlow()
 
-    /** Start the watchdog. Idempotent; safe to call from MinisApp.onCreate(). */
+    /** Start the watchdog. Idempotent; safe to call from XiaoQiuApp.onCreate(). */
     fun start(context: Context) {
         if (!started.compareAndSet(false, true)) return
         appContext = context.applicationContext

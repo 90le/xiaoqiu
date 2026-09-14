@@ -32,7 +32,7 @@ class CrashFileSender : ReportSender {
         val out = File(dir, "crash-$stamp.log")
 
         val body = buildString {
-            appendLine("=== Minis Java/Kotlin Crash ===")
+            appendLine("=== XiaoQiu Java/Kotlin Crash ===")
             appendLine("Time: $stamp")
             appendLine("Version: ${errorContent.getString(ReportField.APP_VERSION_NAME)} " +
                 "(${errorContent.getString(ReportField.APP_VERSION_CODE)})")
@@ -55,7 +55,7 @@ class CrashFileSender : ReportSender {
 
     companion object {
         // Match LogManagementScreen's expected naming so the row sorts
-        // alongside the daily minis-YYYY-MM-DD.log files (which AppLogger
+        // alongside the daily xiaoqiu-YYYY-MM-DD.log files (which AppLogger
         // sorts by `name` descending — newest first).
         private val STAMP_FMT = SimpleDateFormat("yyyy-MM-dd_HH-mm-ss", Locale.US)
     }

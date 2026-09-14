@@ -72,8 +72,8 @@ import com.xiaoqiu.data.model.ModelGroup
 import com.xiaoqiu.data.model.RoutingStrategy
 import com.xiaoqiu.data.repository.ProviderRepository
 import com.xiaoqiu.R
-import com.xiaoqiu.ui.components.MinisOutlinedButton
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuOutlinedButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 import androidx.compose.material.icons.filled.Edit
 import androidx.compose.material.icons.filled.Delete
 import com.xiaoqiu.ui.components.SwipeRowAction
@@ -392,7 +392,7 @@ fun ModelGroupsScreen(
                 }
             },
             confirmButton = {
-                MinisTextButton(
+                XiaoQiuTextButton(
                     onClick = {
                         if (newGroupName.isNotBlank()) {
                             val newGroup = ModelGroup(name = newGroupName.trim())
@@ -411,7 +411,7 @@ fun ModelGroupsScreen(
                 }
             },
             dismissButton = {
-                MinisTextButton(onClick = {
+                XiaoQiuTextButton(onClick = {
                     showNewGroupDialog = false
                     newGroupName = ""
                 }) {
@@ -437,7 +437,7 @@ fun ModelGroupsScreen(
                 )
             },
             confirmButton = {
-                MinisTextButton(
+                XiaoQiuTextButton(
                     onClick = {
                         providerRepository.removeGroup(target.id)
                         groupToDelete = null
@@ -450,7 +450,7 @@ fun ModelGroupsScreen(
                 }
             },
             dismissButton = {
-                MinisTextButton(onClick = { groupToDelete = null }) {
+                XiaoQiuTextButton(onClick = { groupToDelete = null }) {
                     Text(stringResource(R.string.common_cancel))
                 }
             },
@@ -668,7 +668,7 @@ private fun LazyListScope.agentLoopModelsSectionItems(
                 .padding(horizontal = 16.dp, vertical = 8.dp),
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
-            MinisOutlinedButton(
+            XiaoQiuOutlinedButton(
                 onClick = onAddModelsTap,
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(50),
@@ -682,7 +682,7 @@ private fun LazyListScope.agentLoopModelsSectionItems(
                 Spacer(modifier = Modifier.width(4.dp))
                 Text(stringResource(R.string.agent_loop_section_add_models))
             }
-            MinisOutlinedButton(
+            XiaoQiuOutlinedButton(
                 onClick = onAddGroupsTap,
                 modifier = Modifier.weight(1f),
                 shape = RoundedCornerShape(50),

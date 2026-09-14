@@ -145,9 +145,9 @@ import com.xiaoqiu.BuildConfig
 import com.xiaoqiu.R
 import com.xiaoqiu.data.FileMentionIndex
 import com.xiaoqiu.logging.AppLogger
-import com.xiaoqiu.ui.components.MinisAlertDialog
-import com.xiaoqiu.ui.components.MinisMenu
-import com.xiaoqiu.ui.components.MinisMenuDivider
+import com.xiaoqiu.ui.components.XiaoQiuAlertDialog
+import com.xiaoqiu.ui.components.XiaoQiuMenu
+import com.xiaoqiu.ui.components.XiaoQiuMenuDivider
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -285,7 +285,7 @@ import com.xiaoqiu.data.repository.MemoryRepository
 import com.xiaoqiu.data.repository.ProviderRepository
 import com.xiaoqiu.ui.browser.BrowserSheet
 import com.xiaoqiu.ui.theme.ChatColors
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 
 // iOS ChatColors equivalent
 internal val ToolCheckColor = Color(0xFF34C759) // iOS .green
@@ -686,7 +686,7 @@ fun ChatScreen(
     }
 
     // T311: publish "this is the active chat" while ChatScreen is composed,
-    // so `minis-config session.*` reads/writes target it. Mirrors iOS
+    // so `xiaoqiu-config session.*` reads/writes target it. Mirrors iOS
     // `AIChatViewModel.activeSessionId` which is updated on appear / disappear.
     // [T-HANG-DIAG] capture the application context so we can read the
     // current hang count from non-composable scopes below. LocalContext is
@@ -1010,7 +1010,7 @@ fun ChatScreen(
         // [T-android-overlay-hide-camera] Suppress the floating bg-overlay
         // BEFORE handing off to the system camera. The camera Activity
         // takes foreground, which by #451's rule would otherwise satisfy
-        // "Minis backgrounded → show overlay" and the capsule would draw
+        // "XiaoQiu backgrounded → show overlay" and the capsule would draw
         // on top of the viewfinder. Cleared in the ActivityResult callback.
         com.xiaoqiu.service.SessionActivityTracker.setCameraSuppressActive(true)
         runCatching { cameraLauncher.launch(intent) }
@@ -1031,7 +1031,7 @@ fun ChatScreen(
     }
 
     // App-icon quick action: when the user launched via
-    // `minis://action/camera_chat`, auto-open the camera on first compose.
+    // `xiaoqiu://action/camera_chat`, auto-open the camera on first compose.
     // Consumed exactly once so re-entering the chat later does NOT re-trigger.
     // Voice variant lives next to the MicButton because it needs sttAvailable
     // — camera is always available so it can fire from the top-level scope.
@@ -1783,7 +1783,7 @@ fun ChatScreen(
     // [T-android-tool-autoscroll] Start-of-turn edge from ViewModel: resume() /
     // retryLast() / retryFromMessage() / rerunFromToolBlock() emit Unit on
     // forceScrollToBottom because they don't append a new user-message row, so
-    // LE(messages.size) below skips them. Without this collector the "Minis is
+    // LE(messages.size) below skips them. Without this collector the "XiaoQiu is
     // thinking…" placeholder stays parked behind the input bar until the first
     // streamed token finally bumps the auto-follow tuple.
     LaunchedEffect(listState, viewModel) {
@@ -2280,7 +2280,7 @@ fun ChatScreen(
     var chatInputLevel by remember { mutableStateOf(appearancePrefs.getInt(com.xiaoqiu.ui.settings.KEY_FONT_CHAT_INPUT, 0)) }
     var toolPreviewEnabled by remember { mutableStateOf(appearancePrefs.getBoolean(com.xiaoqiu.ui.settings.KEY_TOOL_PREVIEW, true)) }
     // T-chat-title-pill: live-toggled by Settings → Appearance and by
-    // `minis-config set appearance.show_chat_title …`. Default ON.
+    // `xiaoqiu-config set appearance.show_chat_title …`. Default ON.
     var showChatTitlePill by remember { mutableStateOf(appearancePrefs.getBoolean(com.xiaoqiu.ui.settings.KEY_SHOW_CHAT_TITLE, true)) }
     // T-chat-title-pill-edit: state for the in-chat edit-title sheet (the
     // exact same SessionEditSheet hosted by the session list home screen,
@@ -2328,7 +2328,7 @@ fun ChatScreen(
             htmlPreviewFullscreen = false
         }
     }
-    // Pinned-shortcut deep link: minis://session/<id>/<resource-path>
+    // Pinned-shortcut deep link: xiaoqiu://session/<id>/<resource-path>
     // consumes here on first composition iff this screen is showing the
     // matching session; opens fullscreen HTML preview backed by a fresh
     // holder. Pending state is left untouched when a different chat is on
@@ -2338,7 +2338,7 @@ fun ChatScreen(
             .pendingHtmlPreview.value ?: return@LaunchedEffect
         if (pending.sessionId != sessionId) return@LaunchedEffect
         com.xiaoqiu.deeplink.DeepLinkCoordinator.consumePendingHtmlPreview()
-        val absPath = "/var/minis" + pending.resourcePath
+        val absPath = "/var/xiaoqiu" + pending.resourcePath
         val file = java.io.File(absPath)
         if (!file.exists()) {
             com.xiaoqiu.logging.AppLogger.warning(
@@ -2360,7 +2360,7 @@ fun ChatScreen(
     var previewImageGallery by remember {
         mutableStateOf<Pair<List<com.xiaoqiu.ui.components.ImageGalleryItem>, Int>?>(null)
     }
-    // Video links from chat go through MinisFullscreenVideoPlayer rather than
+    // Video links from chat go through XiaoQiuFullscreenVideoPlayer rather than
     // FilePreviewScreen → InlineVideoPlayer. The inline player wraps a bare
     // VideoView with an anchored MediaController and never starts playback,
     // so a tap on an mp4 link rendered as a black surface until the user
@@ -2373,7 +2373,7 @@ fun ChatScreen(
     var webAppSheetTarget by remember { mutableStateOf<InputAttachment?>(null) }
     val urlClickHandler = remember<(String) -> Unit>(viewModel) {
         { url ->
-            // Pass the current session id so `minis://attachments/...` resolves
+            // Pass the current session id so `xiaoqiu://attachments/...` resolves
             // against this chat's session directory rather than whichever
             // session booted its PRoot shell most recently (which is what
             // the global bindMounts map would answer).
@@ -2426,23 +2426,23 @@ fun ChatScreen(
     }
 
     // Auto-present the in-app preview when a shell tool's stdout emits an
-    // OSC MinisOpenURL marker (via /usr/local/bin/minis-open). The broker is
+    // OSC XiaoQiuOpenURL marker (via /usr/local/bin/xiaoqiu-open). The broker is
     // populated by ChatViewModel's shell lineCallback; forwarding the URL
     // into `urlClickHandler` routes it exactly like a chat-link tap —
-    // http(s)/about → UrlPreviewSheet, minis:// deep links → DeepLinkHandler,
-    // minis://<host>/<path> → in-app file preview by extension.
-    val pendingMinisOpenUrl by com.xiaoqiu.terminal.MinisOpenUrlBroker.pendingUrl
+    // http(s)/about → UrlPreviewSheet, xiaoqiu:// deep links → DeepLinkHandler,
+    // xiaoqiu://<host>/<path> → in-app file preview by extension.
+    val pendingXiaoQiuOpenUrl by com.xiaoqiu.terminal.XiaoQiuOpenUrlBroker.pendingUrl
         .collectAsState()
-    val minisOpenTerminalVisible by com.xiaoqiu.terminal.MinisOpenUrlBroker.terminalVisible
+    val xiaoqiuOpenTerminalVisible by com.xiaoqiu.terminal.XiaoQiuOpenUrlBroker.terminalVisible
         .collectAsState()
-    LaunchedEffect(pendingMinisOpenUrl, minisOpenTerminalVisible) {
-        val url = pendingMinisOpenUrl ?: return@LaunchedEffect
+    LaunchedEffect(pendingXiaoQiuOpenUrl, xiaoqiuOpenTerminalVisible) {
+        val url = pendingXiaoQiuOpenUrl ?: return@LaunchedEffect
         // The fullscreen TerminalScreen owns the broker while it's up —
         // let it present its own web preview (mirrors iOS ISHTerminalView)
         // so we don't try to open a sheet on a covered ChatScreen.
-        if (minisOpenTerminalVisible) return@LaunchedEffect
+        if (xiaoqiuOpenTerminalVisible) return@LaunchedEffect
         urlClickHandler(url.toString())
-        com.xiaoqiu.terminal.MinisOpenUrlBroker.consume()
+        com.xiaoqiu.terminal.XiaoQiuOpenUrlBroker.consume()
     }
 
     // [T-android-markdown-image-gallery-cross-message] Collect every
@@ -2453,8 +2453,8 @@ fun ChatScreen(
     // matches the standard inline image form; tool-block content stays
     // untouched (toolBlocks live in a separate AssistantBlock list, not
     // in `content`). Video/audio extensions are filtered out so the gallery
-    // only contains still images. Resolution of `minis://` → host File is
-    // deferred to the gallery's Coil model — Coil's MinisImageFetcher walks
+    // only contains still images. Resolution of `xiaoqiu://` → host File is
+    // deferred to the gallery's Coil model — Coil's XiaoQiuImageFetcher walks
     // the same session-aware resolver we use for inline rendering.
     val markdownImageTapHandler = remember<(String, String) -> Unit>(messages, sessionId) {
         handler@{ tappedMessageId, tappedUrl ->
@@ -2472,7 +2472,7 @@ fun ChatScreen(
                     val pathPart = src.substringBefore('?').substringBefore('#')
                     val ext = pathPart.substringAfterLast('.', "").lowercase()
                     // Skip non-image media so the gallery stays still-image only,
-                    // matching iOS minisVideoExtensions / minisAudioExtensions.
+                    // matching iOS xiaoqiuVideoExtensions / xiaoqiuAudioExtensions.
                     if (ext in setOf("mp4", "mov", "avi", "mkv", "webm",
                                      "mp3", "wav", "aac", "flac", "ogg", "m4a")) continue
                     val title = alt.ifEmpty { pathPart.substringAfterLast('/').ifEmpty { src } }
@@ -2492,10 +2492,10 @@ fun ChatScreen(
                 ?: refs.indexOfFirst { it.source == tappedUrl }.takeIf { it >= 0 }
                 ?: 0
             val items = refs.map { ref ->
-                // Resolve minis://... / file:// / /abs → host File so Coil
+                // Resolve xiaoqiu://... / file:// / /abs → host File so Coil
                 // doesn't have to re-walk PRootKernel for every page swipe.
                 // Falls back to the raw URL string when resolution misses —
-                // AsyncImage will route it through MinisImageFetcher anyway.
+                // AsyncImage will route it through XiaoQiuImageFetcher anyway.
                 val resolved = resolveMdMediaFile(context, ref.source, sessionId)
                 com.xiaoqiu.ui.components.ImageGalleryItem(
                     model = resolved ?: ref.source,
@@ -2513,7 +2513,7 @@ fun ChatScreen(
         LocalMarkdownUrlClickHandler provides urlClickHandler,
         LocalMarkdownImageTapHandler provides markdownImageTapHandler,
         // Route markdown media resolution through this chat's session so
-        // minis://attachments/* lookups don't rely on the global bindMounts
+        // xiaoqiu://attachments/* lookups don't rely on the global bindMounts
         // map (which is last-writer-wins across sessions).
         LocalMarkdownSessionId provides sessionId,
     ) {
@@ -2523,7 +2523,7 @@ fun ChatScreen(
         topBar = {
             TopAppBar(
                 title = {
-                    // iOS-style centered layout: "Minis" + group row + provider·model row
+                    // iOS-style centered layout: "XiaoQiu" + group row + provider·model row
                     Box(
                         modifier = Modifier.fillMaxWidth(),
                         contentAlignment = Alignment.Center,
@@ -2560,7 +2560,7 @@ fun ChatScreen(
                             // exists and the toggle is on, else fall back to
                             // the Soul name (matches the input placeholder
                             // "Message <SoulName>"), then to app_name
-                            // ("Minis") as the terminal fallback.
+                            // ("XiaoQiu") as the terminal fallback.
                             // Tap opens the same SessionEditSheet used from
                             // the session list — drafts return null from
                             // loadSessionEntity so the sheet stays closed.
@@ -2871,11 +2871,11 @@ fun ChatScreen(
                         IconButton(onClick = { showChatMenu = true }) {
                             Icon(Icons.Default.MoreVert, contentDescription = "More")
                         }
-                        MinisMenu(
+                        XiaoQiuMenu(
                             expanded = showChatMenu,
                             onDismissRequest = { showChatMenu = false },
                         ) {
-                            // [T-android-memory-enabled-minisconfig] Gate the
+                            // [T-android-memory-enabled-xiaoqiuconfig] Gate the
                             // "Memories in Session" item below on the session's
                             // live memoryEnabled — when memory is off the entry
                             // disappears, consistent with the per-session gating
@@ -2899,7 +2899,7 @@ fun ChatScreen(
                                     Icon(Icons.Outlined.Forum, contentDescription = null)
                                 },
                             )
-                            MinisMenuDivider()
+                            XiaoQiuMenuDivider()
                             // Clear Chat (iOS parity, red)
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.chat_menu_clear_chat), color = MaterialTheme.colorScheme.error) },
@@ -2911,8 +2911,8 @@ fun ChatScreen(
                                     Icon(Icons.Default.Delete, contentDescription = null, tint = MaterialTheme.colorScheme.error)
                                 },
                             )
-                            MinisMenuDivider()
-                            // Open Terminal (iOS parity) — session-bound, starts in /var/minis
+                            XiaoQiuMenuDivider()
+                            // Open Terminal (iOS parity) — session-bound, starts in /var/xiaoqiu
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.chat_menu_open_terminal)) },
                                 onClick = {
@@ -2934,7 +2934,7 @@ fun ChatScreen(
                                     Icon(Icons.Default.Language, contentDescription = null)
                                 },
                             )
-                            // Browse Chat Files (iOS parity) — opens file browser at /var/minis
+                            // Browse Chat Files (iOS parity) — opens file browser at /var/xiaoqiu
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.chat_menu_browse_chat_files)) },
                                 onClick = {
@@ -2945,7 +2945,7 @@ fun ChatScreen(
                                     Icon(Icons.Default.Description, contentDescription = null)
                                 },
                             )
-                            MinisMenuDivider()
+                            XiaoQiuMenuDivider()
                             // Session Skills (iOS parity)
                             if (skillRepository != null) {
                                 DropdownMenuItem(
@@ -2985,7 +2985,7 @@ fun ChatScreen(
                                     },
                                 )
                             }
-                            MinisMenuDivider()
+                            XiaoQiuMenuDivider()
                             // Token Usage (iOS parity)
                             DropdownMenuItem(
                                 text = { Text(stringResource(R.string.settings_token_usage)) },
@@ -3091,7 +3091,7 @@ fun ChatScreen(
                             // uncaught-exception handler catches it and writes
                             // a crash-<stamp>.log under filesDir/logs/.
                             if (BuildConfig.DEBUG) {
-                                MinisMenuDivider()
+                                XiaoQiuMenuDivider()
                                 DropdownMenuItem(
                                     text = {
                                         Text(
@@ -3223,7 +3223,7 @@ fun ChatScreen(
                 // in-flight tool is invisible to this predicate → reserve
                 // collapsed to 20dp while a 65dp+6dp floating bar covered
                 // the bottom of the LazyColumn. The new arrivals (status
-                // pill, "Minis is thinking" indicator, inline retry banner) landed
+                // pill, "XiaoQiu is thinking" indicator, inline retry banner) landed
                 // behind the bar with no way to scroll them into view.
                 //
                 // Fix: also subscribe to streamingById so the predicate
@@ -3357,7 +3357,7 @@ fun ChatScreen(
                     // ALL messages (1146 rows on the ANR-loop session), re-ran
                     // splitMarkdownIntoBlockTexts over every frozen message,
                     // and allocated the whole row set fresh — the 130–180MB/s
-                    // GC storm and the 100s builds in minis-2026-06-10.log.
+                    // GC storm and the 100s builds in xiaoqiu-2026-06-10.log.
                     //
                     // Row-for-row equivalence with the old full build holds by
                     // construction: buildFlatChatItems' neighbor lookbacks
@@ -3652,7 +3652,7 @@ fun ChatScreen(
                 // (controller may be null pre-attach); focus is guarded against
                 // FocusRequester-not-attached the same way the auto-focus path
                 // elsewhere in this file is.
-                // MinisTextKit selection controller — declared BEFORE the
+                // XiaoQiuTextKit selection controller — declared BEFORE the
                 // markdown toolbar so the toolbar can read table actions off it
                 // ([T-android-markdown-table-copy-actions]). Hoisted ABOVE the
                 // LazyColumn so item dispose can't kill the selection: when a
@@ -3681,7 +3681,7 @@ fun ChatScreen(
                     viewModel.stopStaleReadAloud.collect { selectionReader.stop() }
                 }
                 val markdownToolbar = remember(context, messageBounds, viewModel, inputFocusRequester, keyboardController, selectionController, selectionReader) {
-                    MinisMarkdownTextToolbar(
+                    XiaoQiuMarkdownTextToolbar(
                         context = context,
                         registry = messageBounds,
                         onAddToInput = { snippet ->
@@ -3738,7 +3738,7 @@ fun ChatScreen(
                 androidx.compose.runtime.CompositionLocalProvider(
                     LocalMessageBoundsRegistry provides messageBounds,
                     androidx.compose.ui.platform.LocalTextToolbar provides markdownToolbar,
-                    LocalMinisSelectionController provides selectionController,
+                    LocalXiaoQiuSelectionController provides selectionController,
                 ) {
                 // Hoisted out of AlwaysStretchOverscrollBox lambda so
                 // SelectionDragTracker (which lives outside the lambda) can
@@ -3804,7 +3804,7 @@ fun ChatScreen(
                                 )
                             }
                         }
-                        .minisTextKitSelectionGesture(
+                        .xiaoqiuTextKitSelectionGesture(
                             controller = selectionController,
                             listState = listState,
                             rootCoordinates = { listRootCoords },
@@ -3884,7 +3884,7 @@ fun ChatScreen(
                                 viewModel.resume()
                                 // T282: same dual-scroll trick as the regular
                                 // send paths (T281). Resume kicks off a fresh
-                                // stream, so the "Minis is thinking" indicator
+                                // stream, so the "XiaoQiu is thinking" indicator
                                 // mounts a frame or two later — pin once now,
                                 // then again after 100ms so the indicator
                                 // doesn't land below the fold.
@@ -4011,7 +4011,7 @@ fun ChatScreen(
                         when (item) {
                             is FlatChatItem.UserBubble -> {
                                 // User bubbles intentionally don't register
-                                // MinisTextKit shards — long-press on a user
+                                // XiaoQiuTextKit shards — long-press on a user
                                 // bubble shows its own action menu (Copy /
                                 // Retry / Edit) instead of starting text
                                 // selection, matching iOS UX.
@@ -4296,9 +4296,9 @@ fun ChatScreen(
                     listRootCoordinates = { listRootCoords },
                     reverseLayout = true,
                 )
-                MinisMarkdownTextToolbarHost(markdownToolbar)
-                // MinisTextKit floating toolbar — driven by selectionController.
-                MinisSelectionToolbarHost(
+                XiaoQiuMarkdownTextToolbarHost(markdownToolbar)
+                // XiaoQiuTextKit floating toolbar — driven by selectionController.
+                XiaoQiuSelectionToolbarHost(
                     controller = selectionController,
                     // Clamp the menu's vertical position inside the
                     // LazyColumn's viewport in window coords, so it can't
@@ -4359,7 +4359,7 @@ fun ChatScreen(
                     ),
                 )
                 // iOS-style selection handle dots, one at each endpoint.
-                MinisSelectionHandlesHost(
+                XiaoQiuSelectionHandlesHost(
                     controller = selectionController,
                     listState = listState,
                     reverseLayout = true,
@@ -4453,7 +4453,7 @@ fun ChatScreen(
                 // the FAB stack is currently visible, and drops back when the
                 // FABs hide. This is the Android stand-in for iOS's
                 // protectedRects: derived from the same layout constants
-                // instead of measured rects, which keeps it deterministic.
+                // instead of measured rects, which keeps it deterxiaoqiutic.
                 val upFabVisible = messages.isNotEmpty() && !isNearBottom.value
                 val downFabVisible =
                     userScrolledAway && contentOverflows.value && messages.isNotEmpty()
@@ -5498,7 +5498,7 @@ fun ChatScreen(
                                 // feature not yet validated/complete. Re-enable
                                 // by removing `false &&` from the guard below.
                                 if (false && isHtmlAttachment) {
-                                    com.xiaoqiu.ui.components.MinisMenu(
+                                    com.xiaoqiu.ui.components.XiaoQiuMenu(
                                         expanded = webAppMenuExpanded,
                                         onDismissRequest = { webAppMenuExpanded = false },
                                     ) {
@@ -5584,7 +5584,7 @@ fun ChatScreen(
                             }
                         }
                     } else
-                    // Text field (iOS: placeholder "Message Minis", no border)
+                    // Text field (iOS: placeholder "Message XiaoQiu", no border)
                     run {
                         val interactionSource = remember { MutableInteractionSource() }
                         // [T-android-composer-placeholder-rotation] Which entry
@@ -6048,7 +6048,7 @@ fun ChatScreen(
                                     modifier = Modifier.size(20.dp),
                                 )
                             }
-                            MinisMenu(
+                            XiaoQiuMenu(
                                 expanded = showAttachMenu,
                                 onDismissRequest = { showAttachMenu = false },
                             ) {
@@ -6214,7 +6214,7 @@ fun ChatScreen(
                         }
 
                         // App-icon quick action: when the user launched via
-                        // `minis://action/voice_chat`, auto-fire the mic on
+                        // `xiaoqiu://action/voice_chat`, auto-fire the mic on
                         // first compose. Consumed exactly once so re-entering
                         // the chat later does NOT re-trigger.
                         //
@@ -6397,7 +6397,7 @@ fun ChatScreen(
                             //     alreadySeen=true, whole message suppressed.
                             // Net effect: TTS engines bound and initialized on
                             // every panel entry and speak() was never called
-                            // once — minis-2026-08-16.log has 5 "suppressed"
+                            // once — xiaoqiu-2026-08-16.log has 5 "suppressed"
                             // lines, 0 "feeding" lines, which is exactly the
                             // reported "朗读回复开了但没有任何声音". The
                             // self-poisoning also explains the paradoxical
@@ -6677,7 +6677,7 @@ fun ChatScreen(
             //                                  now on (iOS T-chat-auto-compact-opt-in)
             val showCompactBeforeSend by viewModel.showCompactBeforeSendPrompt.collectAsState()
             if (showCompactBeforeSend) {
-                MinisAlertDialog(
+                XiaoQiuAlertDialog(
                     // Back-gesture / scrim dismissal must NOT silently drop the
                     // user's text — cancelCompactBeforeSend puts it back in the
                     // composer.
@@ -6699,7 +6699,7 @@ fun ChatScreen(
             // compact markers; the session row, workspace files, attachments,
             // and offload payloads are intentionally preserved (iOS parity).
             if (showClearChatDialog) {
-                MinisAlertDialog(
+                XiaoQiuAlertDialog(
                     onDismissRequest = { showClearChatDialog = false },
                     title = stringResource(R.string.chat_menu_clear_chat),
                     text = stringResource(R.string.chat_clear_dialog_body),
@@ -6723,7 +6723,7 @@ fun ChatScreen(
                     val idx = messages.indexOfFirst { it.id == targetId }
                     if (idx < 0) 0 else messages.size - idx
                 }
-                MinisAlertDialog(
+                XiaoQiuAlertDialog(
                     onDismissRequest = { deleteFromHereTargetId = null },
                     title = stringResource(R.string.chat_longpress_delete_from_here),
                     text = pluralStringResource(
@@ -6743,7 +6743,7 @@ fun ChatScreen(
             // confirm → stop the running task, then navigate to a fresh draft;
             // dismiss → stay in the current chat.
             if (showNewChatStopDialog) {
-                MinisAlertDialog(
+                XiaoQiuAlertDialog(
                     onDismissRequest = { showNewChatStopDialog = false },
                     title = stringResource(R.string.chat_menu_new_chat),
                     text = stringResource(R.string.chat_new_chat_stop_dialog_body),
@@ -6760,7 +6760,7 @@ fun ChatScreen(
             // before the first enable. Accepting records the durable ack and
             // turns the toggle on; subsequent enables skip the dialog.
             if (showEnhancedCacheDialog) {
-                MinisAlertDialog(
+                XiaoQiuAlertDialog(
                     onDismissRequest = { showEnhancedCacheDialog = false },
                     title = stringResource(R.string.chat_menu_enhanced_cache),
                     text = stringResource(R.string.enhanced_cache_dialog_body),
@@ -6941,7 +6941,7 @@ fun ChatScreen(
         )
 
         pendingNonTextSelection?.let { pending ->
-            MinisAlertDialog(
+            XiaoQiuAlertDialog(
                 onDismissRequest = { pendingNonTextSelection = null },
                 title = stringResource(R.string.model_picker_non_text_warning_title),
                 text = stringResource(
@@ -7033,10 +7033,10 @@ fun ChatScreen(
 
     // Fullscreen video player — tapped video link (mp4/mov/m4v/…) from chat
     // markdown. Reuses the same dialog player as the markdown-rendered
-    // ![](minis://...) syntax so behaviour is consistent regardless of how
+    // ![](xiaoqiu://...) syntax so behaviour is consistent regardless of how
     // the LLM emitted the reference.
     previewVideoFile?.let { file ->
-        com.xiaoqiu.ui.media.MinisFullscreenVideoPlayer(
+        com.xiaoqiu.ui.media.XiaoQiuFullscreenVideoPlayer(
             file = file,
             onDismiss = { previewVideoFile = null },
         )

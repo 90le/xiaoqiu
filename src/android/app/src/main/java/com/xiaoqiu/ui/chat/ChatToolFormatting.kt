@@ -75,7 +75,7 @@ internal fun toolIconFor(toolName: String) = when (toolName) {
     else -> Icons.Default.Build
 }
 
-// Helper: tool display name for "Minis is using X"
+// Helper: tool display name for "XiaoQiu is using X"
 internal fun toolDisplayName(toolName: String): String = when (toolName) {
     "shell_execute" -> "terminal"
     "file_read" -> "file reader"
@@ -90,19 +90,19 @@ internal fun toolDisplayName(toolName: String): String = when (toolName) {
 }
 
 /**
- * Full "Minis is …" label shown in the tool detail sheet's bottom bar.
+ * Full "XiaoQiu is …" label shown in the tool detail sheet's bottom bar.
  * Mirrors iOS ToolLiveSheet.toolTitle so the wording matches per tool.
  */
 internal fun toolTitleLabel(toolName: String): String = when (toolName) {
-    "shell_execute" -> "Minis is using Shell"
-    "file_read" -> "Minis is reading File"
-    "file_write" -> "Minis is using Editor"
-    "file_edit" -> "Minis is editing File"
-    "browser_use" -> "Minis is using Browser"
-    "read_image" -> "Minis is reading Image"
-    "memory_write", "memory_get" -> "Minis is using Memory"
-    "web_search" -> "Minis is using Search"
-    else -> "Minis is using ${toolDisplayName(toolName)}"
+    "shell_execute" -> "XiaoQiu is using Shell"
+    "file_read" -> "XiaoQiu is reading File"
+    "file_write" -> "XiaoQiu is using Editor"
+    "file_edit" -> "XiaoQiu is editing File"
+    "browser_use" -> "XiaoQiu is using Browser"
+    "read_image" -> "XiaoQiu is reading Image"
+    "memory_write", "memory_get" -> "XiaoQiu is using Memory"
+    "web_search" -> "XiaoQiu is using Search"
+    else -> "XiaoQiu is using ${toolDisplayName(toolName)}"
 }
 
 // Helper: format duration (iOS: < 1s → "0.1s", < 60s → "45s", >= 60s → "2m 10s")

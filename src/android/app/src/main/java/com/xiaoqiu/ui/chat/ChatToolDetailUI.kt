@@ -140,9 +140,9 @@ import com.xiaoqiu.BuildConfig
 import com.xiaoqiu.R
 import com.xiaoqiu.data.FileMentionIndex
 import com.xiaoqiu.logging.AppLogger
-import com.xiaoqiu.ui.components.MinisAlertDialog
-import com.xiaoqiu.ui.components.MinisMenu
-import com.xiaoqiu.ui.components.MinisMenuDivider
+import com.xiaoqiu.ui.components.XiaoQiuAlertDialog
+import com.xiaoqiu.ui.components.XiaoQiuMenu
+import com.xiaoqiu.ui.components.XiaoQiuMenuDivider
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Surface
 import androidx.compose.material3.ExperimentalMaterial3Api
@@ -271,7 +271,7 @@ import com.xiaoqiu.data.repository.MemoryRepository
 import com.xiaoqiu.data.repository.ProviderRepository
 import com.xiaoqiu.ui.browser.BrowserSheet
 import com.xiaoqiu.ui.theme.ChatColors
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
@@ -303,7 +303,7 @@ internal fun ToolDetailSheet(
                 .fillMaxHeight(0.85f)
                 .background(ChatColors.secondaryBg),
         ) {
-            // ── Top Nav Bar (iOS: X button + "Minis Computer" + action button) ──
+            // ── Top Nav Bar (iOS: X button + "XiaoQiu Computer" + action button) ──
             Row(
                 modifier = Modifier
                     .fillMaxWidth()
@@ -337,7 +337,7 @@ internal fun ToolDetailSheet(
                 // the elapsed-duration text) so it sits next to where the
                 // user is already scanning timing info.
                 Text(
-                    text = "Minis Computer",
+                    text = "XiaoQiu Computer",
                     fontSize = 15.sp,
                     fontWeight = FontWeight.SemiBold,
                     color = ChatColors.primaryText,
@@ -541,7 +541,7 @@ internal fun ToolDetailSheet(
                                         if (block.content.isNotEmpty()) {
                                             // T38: linkify http/https URLs in shell output so the user can
                                             // tap them to open the in-app web preview (matches iOS
-                                            // TerminalCanvasView.addURLLinks → MinisOpenURLBroker).
+                                            // TerminalCanvasView.addURLLinks → XiaoQiuOpenURLBroker).
                                             val urlClick = LocalMarkdownUrlClickHandler.current
                                             val linkified = remember(block.content, urlClick) {
                                                 if (urlClick != null) {
@@ -647,14 +647,14 @@ internal fun ToolDetailSheet(
                                     .fillMaxWidth()
                                     // T260: bound the Column to the parent
                                     // BoxWithConstraints' maxHeight so the inner
-                                    // verticalScroll ribbon (Minis Computer sheet
+                                    // verticalScroll ribbon (XiaoQiu Computer sheet
                                     // edit-card body) actually scrolls. Without
                                     // fillMaxHeight the Column's vertical constraint
                                     // is unbounded, the inner Column.verticalScroll
                                     // degenerates (each row laid out at full height
                                     // instead of scrolling), and the overflow
                                     // bleeds past the parent Box(weight=1f) onto
-                                    // the footer ("Minis is editing File / 2/3 /
+                                    // the footer ("XiaoQiu is editing File / 2/3 /
                                     // prev-next" at L5094). Mirrors the shell
                                     // branch (L4489) which already does this.
                                     .fillMaxHeight()
@@ -1390,7 +1390,7 @@ internal fun extractPartialJsonString(key: String, json: String): String? {
 // "Load more" / "Load all". Only the revealed Texts are composed, so open is
 // cheap regardless of total size. Still scrollable and still selectable —
 // rendered inside the caller's SelectionContainer; the reveal window's Texts
-// register with the same plain-Compose SelectionRegistrar (NOT MinisTextKit,
+// register with the same plain-Compose SelectionRegistrar (NOT XiaoQiuTextKit,
 // which is the chat-list markdown layer and isn't involved here).
 
 private const val LAZY_TOOL_CHUNK_LINES = 40

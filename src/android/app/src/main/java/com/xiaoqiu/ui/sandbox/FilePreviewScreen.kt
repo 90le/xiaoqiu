@@ -90,7 +90,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.io.File
 import java.io.OutputStream
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 
 private const val MAX_TEXT_PREVIEW_BYTES = 512_000 // 500 KB
 
@@ -622,7 +622,7 @@ private fun PdfOpenExternalFallback(item: FileItem, reason: String) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(16.dp))
-            MinisTextButton(onClick = { openExternally(context, item, "application/pdf") }) {
+            XiaoQiuTextButton(onClick = { openExternally(context, item, "application/pdf") }) {
                 Text(stringResource(R.string.filepreview_open_externally))
             }
         }
@@ -842,7 +842,7 @@ private fun ApkPreview(item: FileItem) {
                     null
                 } else {
                     // Without these the icon/label lookups resolve against the
-                    // HOST package and silently return Minis' own assets.
+                    // HOST package and silently return XiaoQiu' own assets.
                     pkg.applicationInfo?.let { app ->
                         app.sourceDir = item.file.absolutePath
                         app.publicSourceDir = item.file.absolutePath
@@ -947,7 +947,7 @@ private fun ApkPreview(item: FileItem) {
             // what reaches the system installer. It is offered even when the
             // manifest failed to parse: the installer does its own, stricter
             // validation and will report a bad package better than we can.
-            MinisTextButton(onClick = {
+            XiaoQiuTextButton(onClick = {
                 openExternally(context, item, "application/vnd.android.package-archive")
             }) {
                 Text(stringResource(R.string.filepreview_apk_install))
@@ -1078,7 +1078,7 @@ private fun OfficeOpenExternal(item: FileItem) {
                 color = MaterialTheme.colorScheme.onSurfaceVariant,
             )
             Spacer(Modifier.height(16.dp))
-            MinisTextButton(onClick = {
+            XiaoQiuTextButton(onClick = {
                 val mime = MimeTypeMap.getSingleton()
                     .getMimeTypeFromExtension(item.file.extension.lowercase())
                     ?: "application/octet-stream"
@@ -1293,14 +1293,14 @@ private suspend fun saveImageToGallery(context: Context, src: File): Boolean =
         try {
             val ext = src.extension.lowercase().ifEmpty { "png" }
             val mime = MimeTypeMap.getSingleton().getMimeTypeFromExtension(ext) ?: "image/png"
-            val filename = "minis_${System.currentTimeMillis()}.$ext"
+            val filename = "xiaoqiu_${System.currentTimeMillis()}.$ext"
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
                 val values = ContentValues().apply {
                     put(MediaStore.Images.Media.DISPLAY_NAME, filename)
                     put(MediaStore.Images.Media.MIME_TYPE, mime)
                     put(
                         MediaStore.Images.Media.RELATIVE_PATH,
-                        Environment.DIRECTORY_PICTURES + "/Minis",
+                        Environment.DIRECTORY_PICTURES + "/XiaoQiu",
                     )
                     put(MediaStore.Images.Media.IS_PENDING, 1)
                 }
@@ -1318,8 +1318,8 @@ private suspend fun saveImageToGallery(context: Context, src: File): Boolean =
                 val dir = Environment.getExternalStoragePublicDirectory(
                     Environment.DIRECTORY_PICTURES,
                 )
-                val minisDir = File(dir, "Minis").also { it.mkdirs() }
-                val dest = File(minisDir, filename)
+                val xiaoqiuDir = File(dir, "XiaoQiu").also { it.mkdirs() }
+                val dest = File(xiaoqiuDir, filename)
                 src.inputStream().use { input ->
                     dest.outputStream().use { input.copyTo(it) }
                 }

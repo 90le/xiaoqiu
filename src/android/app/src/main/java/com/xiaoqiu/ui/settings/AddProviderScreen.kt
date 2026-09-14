@@ -78,7 +78,7 @@ import com.xiaoqiu.data.repository.ProviderRepository
 import com.xiaoqiu.R
 import kotlinx.coroutines.launch
 import java.util.UUID
-import com.xiaoqiu.ui.components.MinisButton
+import com.xiaoqiu.ui.components.XiaoQiuButton
 import com.xiaoqiu.ui.components.RowLabel
 import com.xiaoqiu.ui.components.SectionTextField
 
@@ -650,7 +650,7 @@ private fun ColumnScope.ApiKeyConfigSection(
 
     // ── Save button (outside any section — terminal action) ────────────
     Spacer(Modifier.height(20.dp))
-    MinisButton(
+    XiaoQiuButton(
         onClick = {
             val trimmedBase = customBaseURL.trim()
             val instance = ProviderInstance(
@@ -775,7 +775,7 @@ private fun ColumnScope.OAuthConfigSection(
             }
         }
         Spacer(Modifier.height(20.dp))
-        MinisButton(
+        XiaoQiuButton(
             onClick = {
                 val instance = ProviderInstance(
                     id = pendingInstanceId,
@@ -801,7 +801,7 @@ private fun ColumnScope.OAuthConfigSection(
             footer = stringResource(R.string.add_provider_opens_the_provider_s_web_sign_in_flow_af),
         ) {
             SettingsCardBlock {
-                MinisButton(
+                XiaoQiuButton(
                     onClick = {
                         isAuthenticating = true
                         errorMessage = null
@@ -937,7 +937,7 @@ private fun ColumnScope.OAuthConfigSection(
         }
 
         Spacer(Modifier.height(20.dp))
-        MinisButton(
+        XiaoQiuButton(
             onClick = {
                 val trimmedBase = customBaseURL.trim()
                 val instance = ProviderInstance(

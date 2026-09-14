@@ -20,7 +20,7 @@ data class ThinkingResolveContext(
     val supportsReasoning: Boolean?,
     val declaredEffortValues: List<String>?,
     /**
-     * [OpenMinis#163] The catalog affirmatively declares this model has NO effort
+     * [OpenXiaoQiu#163] The catalog affirmatively declares this model has NO effort
      * tiers (it reasons, but takes no `reasoning_effort`). Distinct from
      * `declaredEffortValues == null`, which also means "the catalog never heard
      * of it" — only the affirmative case suppresses the field. Defaults false so
@@ -42,7 +42,7 @@ data class ThinkingResolveContext(
     val isMistral: Boolean,
     val isDashScope: Boolean,
     /**
-     * [OpenMinis#163] Endpoint is xAI's own API (api.x.ai), not a relay that
+     * [OpenXiaoQiu#163] Endpoint is xAI's own API (api.x.ai), not a relay that
      * merely serves grok-named models. Scopes the empty-tier skip to the vendor
      * where the 400 was actually observed. Defaults false so existing
      * construction sites are unchanged.
@@ -56,7 +56,7 @@ data class ThinkingResolveContext(
 )
 
 /**
- * Why a particular wire shape was chosen. Design §8 / GH OpenMinis#100: the resolved
+ * Why a particular wire shape was chosen. Design §8 / GH OpenXiaoQiu#100: the resolved
  * outcome must be inspectable, otherwise a user-editable rule layer just replaces one
  * hidden variable with a more complicated one.
  */
@@ -140,7 +140,7 @@ object ThinkingRuleResolver {
      * total prohibition that outranks every shape below it.
      */
     fun builtInRules(ctx: ThinkingResolveContext): List<ThinkingRule> = buildList {
-        // Mistral — GH OpenMinis#87 / iOS 4592ca9b / 29065ca0. Total prohibition: the
+        // Mistral — GH OpenXiaoQiu#87 / iOS 4592ca9b / 29065ca0. Total prohibition: the
         // request rejects `reasoning` (422 extra_forbidden) and AssistantMessage is a
         // closed schema that rejects `reasoning_content`. Must outrank everything.
         if (ctx.isMistral) {
@@ -396,7 +396,7 @@ object ThinkingRuleResolver {
                 ) {
                     return null to null
                 }
-                // [OpenMinis#163] xAI-scoped skip. grok-build-0.1 answers
+                // [OpenXiaoQiu#163] xAI-scoped skip. grok-build-0.1 answers
                 // reasoning_effort with "HTTP 400: Model grok-build-0.1 does not
                 // support parameter reasoningEffort"; the catalog describes
                 // exactly that state as "reasoning": true with
@@ -543,7 +543,7 @@ object ThinkingRuleResolver {
     }
 
     fun geminiThinkingConfig(modelId: String, level: ThinkingLevel): JSONObject? {
-        // [T-gemini-tts-thinking-400 / OpenMinis#226] Specialized modalities take
+        // [T-gemini-tts-thinking-400 / OpenXiaoQiu#226] Specialized modalities take
         // precedence over EVERY family rule and over the requested level: these models
         // reject the thinking parameter outright, so sending one is a hard 400
         // ("Thinking level is not supported for this model.").

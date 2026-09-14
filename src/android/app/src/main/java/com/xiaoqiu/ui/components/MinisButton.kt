@@ -20,19 +20,19 @@ import androidx.compose.ui.unit.dp
 
 // Material3 ButtonDefaults.MinHeight = 40dp; tuned to 48dp for touch
 // ergonomics on phones. IconButton family is unaffected (icon-sized).
-val MinisButtonHeight = 48.dp
+val XiaoQiuButtonHeight = 48.dp
 
 // Compact button height for actions embedded inside section cards
 // (e.g. "Sign out" inside a credentials card, "Set Bearer Token" inside
-// a token section). Visually subordinate to MinisButtonHeight (48dp)
+// a token section). Visually subordinate to XiaoQiuButtonHeight (48dp)
 // which remains the size for primary screen actions ("Add Custom Model",
 // TopAppBar Save, AlertDialog confirm).
-val MinisSmallButtonHeight = 32.dp
+val XiaoQiuSmallButtonHeight = 32.dp
 
 private val SmallButtonContentPadding = PaddingValues(horizontal = 14.dp, vertical = 4.dp)
 
 @Composable
-fun MinisButton(
+fun XiaoQiuButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
@@ -46,7 +46,7 @@ fun MinisButton(
 ) {
     Button(
         onClick = onClick,
-        modifier = modifier.heightIn(min = MinisButtonHeight),
+        modifier = modifier.heightIn(min = XiaoQiuButtonHeight),
         enabled = enabled,
         shape = shape,
         colors = colors,
@@ -59,7 +59,7 @@ fun MinisButton(
 }
 
 @Composable
-fun MinisOutlinedButton(
+fun XiaoQiuOutlinedButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
@@ -73,7 +73,7 @@ fun MinisOutlinedButton(
 ) {
     OutlinedButton(
         onClick = onClick,
-        modifier = modifier.heightIn(min = MinisButtonHeight),
+        modifier = modifier.heightIn(min = XiaoQiuButtonHeight),
         enabled = enabled,
         shape = shape,
         colors = colors,
@@ -86,7 +86,7 @@ fun MinisOutlinedButton(
 }
 
 @Composable
-fun MinisTextButton(
+fun XiaoQiuTextButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
@@ -100,7 +100,7 @@ fun MinisTextButton(
 ) {
     TextButton(
         onClick = onClick,
-        modifier = modifier.heightIn(min = MinisButtonHeight),
+        modifier = modifier.heightIn(min = XiaoQiuButtonHeight),
         enabled = enabled,
         shape = shape,
         colors = colors,
@@ -112,11 +112,11 @@ fun MinisTextButton(
     )
 }
 
-// defaultMinSize is also pinned at MinisSmallButtonHeight so Material3's
+// defaultMinSize is also pinned at XiaoQiuSmallButtonHeight so Material3's
 // internal 40dp floor (ButtonDefaults.MinHeight) doesn't override the
 // heightIn modifier and keep the button at 40dp.
 @Composable
-fun MinisSmallButton(
+fun XiaoQiuSmallButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
@@ -131,8 +131,8 @@ fun MinisSmallButton(
     Button(
         onClick = onClick,
         modifier = modifier
-            .heightIn(min = MinisSmallButtonHeight)
-            .defaultMinSize(minHeight = MinisSmallButtonHeight),
+            .heightIn(min = XiaoQiuSmallButtonHeight)
+            .defaultMinSize(minHeight = XiaoQiuSmallButtonHeight),
         enabled = enabled,
         shape = shape,
         colors = colors,
@@ -145,7 +145,7 @@ fun MinisSmallButton(
 }
 
 @Composable
-fun MinisSmallOutlinedButton(
+fun XiaoQiuSmallOutlinedButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
@@ -160,8 +160,8 @@ fun MinisSmallOutlinedButton(
     OutlinedButton(
         onClick = onClick,
         modifier = modifier
-            .heightIn(min = MinisSmallButtonHeight)
-            .defaultMinSize(minHeight = MinisSmallButtonHeight),
+            .heightIn(min = XiaoQiuSmallButtonHeight)
+            .defaultMinSize(minHeight = XiaoQiuSmallButtonHeight),
         enabled = enabled,
         shape = shape,
         colors = colors,
@@ -174,7 +174,7 @@ fun MinisSmallOutlinedButton(
 }
 
 @Composable
-fun MinisSmallTextButton(
+fun XiaoQiuSmallTextButton(
     onClick: () -> Unit,
     modifier: Modifier = Modifier,
     enabled: Boolean = true,
@@ -189,8 +189,8 @@ fun MinisSmallTextButton(
     TextButton(
         onClick = onClick,
         modifier = modifier
-            .heightIn(min = MinisSmallButtonHeight)
-            .defaultMinSize(minHeight = MinisSmallButtonHeight),
+            .heightIn(min = XiaoQiuSmallButtonHeight)
+            .defaultMinSize(minHeight = XiaoQiuSmallButtonHeight),
         enabled = enabled,
         shape = shape,
         colors = colors,

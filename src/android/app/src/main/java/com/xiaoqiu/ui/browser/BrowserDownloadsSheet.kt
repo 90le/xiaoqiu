@@ -41,7 +41,7 @@ import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.core.content.FileProvider
 import com.xiaoqiu.R
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 import com.xiaoqiu.browser.BrowserTabPool
 
 /**
@@ -89,7 +89,7 @@ fun BrowserDownloadsSheet(
                     modifier = Modifier.weight(1f),
                 )
                 if (downloads.any { it.state != BrowserTabPool.DownloadState.DOWNLOADING }) {
-                    MinisTextButton(onClick = { tabPool.clearFinishedDownloads() }) {
+                    XiaoQiuTextButton(onClick = { tabPool.clearFinishedDownloads() }) {
                         Text(stringResource(R.string.browser_downloads_clear))
                     }
                 }
@@ -225,7 +225,7 @@ private fun DownloadRow(
 }
 
 /** ACTION_VIEW via FileProvider — same pattern as FilePreviewScreen's
- *  openExternally; the `minis-sessions/` root is a declared provider path. */
+ *  openExternally; the `xiaoqiu-sessions/` root is a declared provider path. */
 private fun openDownloadedFile(context: Context, entry: BrowserTabPool.DownloadEntry) {
     val file = entry.destination ?: return
     if (!file.exists()) return

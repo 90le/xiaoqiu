@@ -44,7 +44,7 @@ import com.xiaoqiu.config.audit.ConfigAuditEntry
 import com.xiaoqiu.config.audit.ConfigAuditLog
 import com.xiaoqiu.config.audit.ConfigAuditStatus
 import com.xiaoqiu.config.ConfigBridge
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.launch
@@ -164,7 +164,7 @@ fun ConfigAuditScreen(modifier: Modifier = Modifier) {
                 val successBody = stringResource(R.string.logs_config_revert_success_body)
                 val failedTitle = stringResource(R.string.logs_config_revert_failed_title)
                 val unknownErr = stringResource(R.string.logs_config_revert_unknown_error)
-                MinisTextButton(onClick = {
+                XiaoQiuTextButton(onClick = {
                     val target = entry
                     revertCandidate = null
                     scope.launch {
@@ -187,7 +187,7 @@ fun ConfigAuditScreen(modifier: Modifier = Modifier) {
                 }
             },
             dismissButton = {
-                MinisTextButton(onClick = { revertCandidate = null }) {
+                XiaoQiuTextButton(onClick = { revertCandidate = null }) {
                     Text(stringResource(R.string.logs_config_dialog_cancel))
                 }
             },
@@ -201,7 +201,7 @@ fun ConfigAuditScreen(modifier: Modifier = Modifier) {
             title = { Text(msg.title) },
             text = { Text(msg.body) },
             confirmButton = {
-                MinisTextButton(onClick = { revertResult = null }) {
+                XiaoQiuTextButton(onClick = { revertResult = null }) {
                     Text(stringResource(R.string.logs_config_dialog_ok))
                 }
             },

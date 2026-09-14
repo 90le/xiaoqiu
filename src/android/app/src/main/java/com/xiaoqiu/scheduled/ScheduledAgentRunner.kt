@@ -5,7 +5,7 @@ import android.content.Context
 import android.content.Intent
 import android.net.Uri
 import androidx.core.app.NotificationCompat
-import com.xiaoqiu.MinisApp
+import com.xiaoqiu.XiaoQiuApp
 import com.xiaoqiu.debug.HeadlessChatRunner
 import com.xiaoqiu.logging.AppLogger
 import com.xiaoqiu.service.AgentForegroundService
@@ -58,17 +58,17 @@ object ScheduledAgentRunner {
      *   ~10s broadcast budget and gets the whole process ANR-killed, along
      *   with every PRoot sandbox child. The alarm path passing the default
      *   `true` was exactly that bug. Waiting is only safe off a broadcast —
-     *   e.g. the minis-scheduled CLI, which runs in its own offload thread.
+     *   e.g. the xiaoqiu-scheduled CLI, which runs in its own offload thread.
      * @return the session id once the action has been DISPATCHED (resolved +
      *   prompt sent), or null when the runner couldn't even start (no provider,
-     *   target chat gone, MinisApp not initialized).
+     *   target chat gone, XiaoQiuApp not initialized).
      */
     suspend fun run(
         context: Context,
         task: ScheduledTask,
         waitForCompletion: Boolean = true,
     ): String? {
-        // [T-android-scheduled-lateinit-crash-156] `as? MinisApp` only rules out
+        // [T-android-scheduled-lateinit-crash-156] `as? XiaoQiuApp` only rules out
         // a null / wrong-type Application — it does NOT mean the Application is
         // INITIALIZED, which is what the old comment here claimed. Every
         // `app.chatRepository` read below goes through a lateinit getter that
@@ -85,14 +85,14 @@ object ScheduledAgentRunner {
         // Skipping the run is the right degradation: the task stays scheduled
         // and its next occurrence was already armed by the receiver before this
         // call, so a skipped fire self-heals on the following launch.
-        val app = context.applicationContext as? MinisApp ?: run {
-            AppLogger.error(TAG, "Application is not MinisApp — skipping task ${task.id}")
+        val app = context.applicationContext as? XiaoQiuApp ?: run {
+            AppLogger.error(TAG, "Application is not XiaoQiuApp — skipping task ${task.id}")
             return null
         }
         if (!app.subsystemsReady()) {
             AppLogger.error(
                 TAG,
-                "MinisApp subsystems not initialized (safe-mode or failed init) — skipping task ${task.id}",
+                "XiaoQiuApp subsystems not initialized (safe-mode or failed init) — skipping task ${task.id}",
             )
             return null
         }
@@ -152,7 +152,7 @@ object ScheduledAgentRunner {
      *     RetryRunIntent which has no prompt param).
      */
     private suspend fun dispatch(
-        app: MinisApp,
+        app: XiaoQiuApp,
         task: ScheduledTask,
         sessionId: String,
         wait: Boolean,
@@ -186,7 +186,7 @@ object ScheduledAgentRunner {
         )
     }
 
-    private suspend fun resolveSessionId(app: MinisApp, task: ScheduledTask): String? {
+    private suspend fun resolveSessionId(app: XiaoQiuApp, task: ScheduledTask): String? {
         return when (val mode = task.targetMode) {
             is ScheduledTargetMode.AppendToSession -> {
                 // Follow-up: the target session must still exist. If the user
@@ -297,7 +297,7 @@ object ScheduledAgentRunner {
         sessionId: String,
         preview: String,
     ) {
-        val deepLink = Uri.parse("minis://session/$sessionId")
+        val deepLink = Uri.parse("xiaoqiu://session/$sessionId")
         val openIntent = Intent(Intent.ACTION_VIEW, deepLink).apply {
             setPackage(context.packageName)
         }
@@ -308,7 +308,7 @@ object ScheduledAgentRunner {
             openIntent,
             PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE,
         )
-        val title = "Minis: ${task.label.ifBlank { "Scheduled task" }}"
+        val title = "XiaoQiu: ${task.label.ifBlank { "Scheduled task" }}"
         val notification = NotificationCompat.Builder(context, ScheduledTaskManager.CHANNEL_ID)
             .setSmallIcon(android.R.drawable.ic_menu_recent_history)
             .setContentTitle(title)

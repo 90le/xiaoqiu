@@ -51,7 +51,7 @@ import com.xiaoqiu.R
 import com.xiaoqiu.data.MountedFoldersStore
 import com.xiaoqiu.ui.components.SectionTextField
 import kotlinx.coroutines.launch
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 
 /**
  * Detail/edit screen for a single mounted folder. Mirrors iOS
@@ -101,7 +101,7 @@ fun MountDetailScreen(
                     }
                 },
                 actions = {
-                    MinisTextButton(
+                    XiaoQiuTextButton(
                         enabled = canSave,
                         onClick = {
                             scope.launch {
@@ -214,7 +214,7 @@ fun MountDetailScreen(
             title = { Text(stringResource(R.string.mount_unmount_title)) },
             text = { Text(stringResource(R.string.mount_unmount_message)) },
             confirmButton = {
-                MinisTextButton(onClick = {
+                XiaoQiuTextButton(onClick = {
                     showUnmountConfirm = false
                     scope.launch {
                         store.remove(entry.id)
@@ -228,7 +228,7 @@ fun MountDetailScreen(
                 }
             },
             dismissButton = {
-                MinisTextButton(onClick = { showUnmountConfirm = false }) {
+                XiaoQiuTextButton(onClick = { showUnmountConfirm = false }) {
                     Text(stringResource(R.string.cancel))
                 }
             },
@@ -270,7 +270,7 @@ private fun HeaderCard(entry: MountedFoldersStore.Entry) {
                 )
                 Spacer(Modifier.height(2.dp))
                 Text(
-                    text = "/var/minis/mounts/${entry.name}",
+                    text = "/var/xiaoqiu/mounts/${entry.name}",
                     style = MaterialTheme.typography.bodySmall,
                     fontFamily = FontFamily.Monospace,
                     color = MaterialTheme.colorScheme.onSurfaceVariant,

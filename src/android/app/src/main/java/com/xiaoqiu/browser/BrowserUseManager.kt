@@ -36,8 +36,8 @@ class BrowserUseManager(
     val webView: WebView,
     profile: UserAgentProfile = UserAgentProfile.MOBILE_CHROME,
     /**
-     * [T-android-minis-url-session-scope] Which chat session's sandbox a
-     * `minis://` URL should resolve against, or null when unknown.
+     * [T-android-xiaoqiu-url-session-scope] Which chat session's sandbox a
+     * `xiaoqiu://` URL should resolve against, or null when unknown.
      *
      * A LAMBDA, not a value: tabs are created before `BrowserTabPool.setSession`
      * runs, so a snapshot taken at construction time would be permanently null
@@ -230,7 +230,7 @@ class BrowserUseManager(
 
     init {
         configureWebView(webView, profile)
-        webView.addJavascriptInterface(jsBridge, "__minis__")
+        webView.addJavascriptInterface(jsBridge, "__xiaoqiu__")
         setupWebViewClient()
         setupWebChromeClient()
         // Intercept page-triggered downloads (Content-Disposition attachment,
@@ -271,7 +271,7 @@ class BrowserUseManager(
 
     /**
      * Read a blob: URL from inside the page's JS context and deliver its bytes
-     * through the `__minis__.saveBlobDownload` bridge. blob: object URLs are
+     * through the `__xiaoqiu__.saveBlobDownload` bridge. blob: object URLs are
      * scoped to the page — they cannot be fetched from native code, so this
      * injected fetch + FileReader round-trip is the only way to get the data.
      */
@@ -284,12 +284,12 @@ class BrowserUseManager(
                     .then(function(blob) {
                         var reader = new FileReader();
                         reader.onloadend = function() {
-                            __minis__.saveBlobDownload(reader.result, ${JSONObject.quote(guessedName)});
+                            __xiaoqiu__.saveBlobDownload(reader.result, ${JSONObject.quote(guessedName)});
                         };
-                        reader.onerror = function() { __minis__.blobDownloadError('FileReader error'); };
+                        reader.onerror = function() { __xiaoqiu__.blobDownloadError('FileReader error'); };
                         reader.readAsDataURL(blob);
                     })
-                    .catch(function(e) { __minis__.blobDownloadError(String(e)); });
+                    .catch(function(e) { __xiaoqiu__.blobDownloadError(String(e)); });
             })();
         """.trimIndent()
         webView.post { webView.evaluateJavascript(js, null) }
@@ -418,37 +418,37 @@ class BrowserUseManager(
                 view: WebView, request: WebResourceRequest
             ): android.webkit.WebResourceResponse? {
                 val url = request.url ?: return null
-                if (url.scheme != "minis") return null
-                return interceptMinisURL(url)
+                if (url.scheme != "xiaoqiu") return null
+                return interceptXiaoQiuURL(url)
             }
         }
     }
 
-    /** Resolve minis:// URLs to local workspace files. */
-    private fun interceptMinisURL(uri: android.net.Uri): android.webkit.WebResourceResponse? {
+    /** Resolve xiaoqiu:// URLs to local workspace files. */
+    private fun interceptXiaoQiuURL(uri: android.net.Uri): android.webkit.WebResourceResponse? {
         try {
-            // minis://workspace/foo.html → /var/minis/workspace/foo.html, then
+            // xiaoqiu://workspace/foo.html → /var/xiaoqiu/workspace/foo.html, then
             // resolve to the host file via PRoot bind mounts (per-session
-            // workspace lives under filesDir/minis-sessions/<sid>/workspace/).
+            // workspace lives under filesDir/xiaoqiu-sessions/<sid>/workspace/).
             val host = uri.host ?: return null
             val path = uri.path ?: ""
-            val linuxPath = "/var/minis/$host$path"
+            val linuxPath = "/var/xiaoqiu/$host$path"
 
-            // [T-android-minis-url-session-scope] Resolve against THIS session
+            // [T-android-xiaoqiu-url-session-scope] Resolve against THIS session
             // first, and only then fall back to the global bind-mount map.
             //
             // `workspace`, `attachments`, `offloads` and `browser` live under
-            // `minis-sessions/<sid>/`, but the global map only gains a
-            // `/var/minis/workspace` entry while some session's PRoot shell is
+            // `xiaoqiu-sessions/<sid>/`, but the global map only gains a
+            // `/var/xiaoqiu/workspace` entry while some session's PRoot shell is
             // running — and it is last-writer-wins across sessions. So the old
             // global-only lookup failed in two ordinary situations: the shell
             // had exited (path fell through to the rootfs copy of
-            // /var/minis/workspace, which is empty), or another session had
+            // /var/xiaoqiu/workspace, which is empty), or another session had
             // booted more recently and the mount pointed at ITS workspace.
             //
-            // Measured on a GEM-W09: `minis://workspace/jump-jump.html` 404'd
+            // Measured on a GEM-W09: `xiaoqiu://workspace/jump-jump.html` 404'd
             // while the file sat intact at 5969 bytes in
-            // minis-sessions/145d6883…/workspace/. The rootfs directory the
+            // xiaoqiu-sessions/145d6883…/workspace/. The rootfs directory the
             // resolver actually reached contained nothing but `.` and `..`.
             // That is also why the failure looked intermittent and looked like
             // it depended on subdirectory depth — it depends on neither, only
@@ -473,7 +473,7 @@ class BrowserUseManager(
             // the agent's session viewport when the page doesn't declare one.
             // Without this, Android WebView falls back to a hardcoded 980 CSS
             // px width regardless of the WebView's measured size, making
-            // `set_viewport` look like a no-op for `minis://` HTML pages.
+            // `set_viewport` look like a no-op for `xiaoqiu://` HTML pages.
             val stream = if (mimeType == "text/html" && lastAppliedViewport != null) {
                 ensureMetaViewport(localFile.readBytes(), lastAppliedViewport!!.first)
             } else {
@@ -483,7 +483,7 @@ class BrowserUseManager(
                 mapOf("Access-Control-Allow-Origin" to "*"),
                 stream)
         } catch (e: Exception) {
-            Log.w(TAG, "minis:// intercept error: ${e.message}")
+            Log.w(TAG, "xiaoqiu:// intercept error: ${e.message}")
             return null
         }
     }
@@ -728,7 +728,7 @@ class BrowserUseManager(
 
         withContext(Dispatchers.Main) {
             // Re-assert the last applied viewport before loadUrl. Intercepted
-            // navigations (minis://) served via shouldInterceptRequest skip
+            // navigations (xiaoqiu://) served via shouldInterceptRequest skip
             // the layout pass that a real network load triggers, so without
             // this the page reports Android WebView's 980px no-meta fallback
             // even when a session override (e.g. 960x540) is active.
@@ -938,7 +938,7 @@ class BrowserUseManager(
     /**
      * Public live-preview snapshot — mirrors iOS `webView.takeSnapshot()`.
      * Called by the UI on a timer (e.g. every 3s while a tool is streaming) so
-     * the Minis Computer sheet and FloatingToolStatusBar can show the browser
+     * the XiaoQiu Computer sheet and FloatingToolStatusBar can show the browser
      * state even for actions that don't save an imageFilePath (get_readable,
      * get_text, execute_js, fetch, etc.).
      */
@@ -1038,7 +1038,7 @@ class BrowserUseManager(
         if (script.isNullOrEmpty()) return BrowserActionResult.error("execute_js requires 'script'")
         // Wrap in an async IIFE so `await` works in user scripts.
         // Android WebView doesn't resolve Promises from evaluateJavascript,
-        // so we use a JS bridge callback (__minis__.resolve / __minis__.reject).
+        // so we use a JS bridge callback (__xiaoqiu__.resolve / __xiaoqiu__.reject).
         return try {
             val deferred = CompletableDeferred<String>()
             asyncJsDeferred = deferred
@@ -1048,14 +1048,14 @@ class BrowserUseManager(
                         var __r__ = (async function(){ $script })();
                         var __v__ = await __r__;
                         if (__v__ === undefined || __v__ === null) {
-                            __minis__.resolve(String(__v__));
+                            __xiaoqiu__.resolve(String(__v__));
                         } else if (typeof __v__ === 'object') {
-                            __minis__.resolve(JSON.stringify(__v__));
+                            __xiaoqiu__.resolve(JSON.stringify(__v__));
                         } else {
-                            __minis__.resolve(String(__v__));
+                            __xiaoqiu__.resolve(String(__v__));
                         }
                     } catch(e) {
-                        __minis__.reject(e.message || String(e));
+                        __xiaoqiu__.reject(e.message || String(e));
                     }
                 })();
             """.trimIndent()
@@ -1125,7 +1125,7 @@ class BrowserUseManager(
         // resolves to a Promise. Android's `WebView.evaluateJavascript` does
         // NOT await Promises, so calling `evaluateJavascript(js)` returns the
         // Promise's `{}` string representation and the caller sees a
-        // "No value for base64" parse error. Route through the __minis__
+        // "No value for base64" parse error. Route through the __xiaoqiu__
         // bridge so we actually wait for the Promise to resolve.
         val raw = awaitPromiseJs(BrowserUseJS.fetch(urlString))
             ?: return BrowserActionResult.error("fetch timed out")
@@ -1171,7 +1171,7 @@ class BrowserUseManager(
 
     /**
      * Evaluate an `(async function(){...})()` expression and wait for the
-     * returned Promise to resolve via the `__minis__` bridge. Returns the
+     * returned Promise to resolve via the `__xiaoqiu__` bridge. Returns the
      * resolved string (JSON or plain) or null on timeout. Mirrors the same
      * pattern used by [executeJS].
      */
@@ -1183,14 +1183,14 @@ class BrowserUseManager(
                 try {
                     var __v__ = await ($js);
                     if (__v__ === undefined || __v__ === null) {
-                        __minis__.resolve('null');
+                        __xiaoqiu__.resolve('null');
                     } else if (typeof __v__ === 'object') {
-                        __minis__.resolve(JSON.stringify(__v__));
+                        __xiaoqiu__.resolve(JSON.stringify(__v__));
                     } else {
-                        __minis__.resolve(String(__v__));
+                        __xiaoqiu__.resolve(String(__v__));
                     }
                 } catch(e) {
-                    __minis__.reject(e && e.message ? e.message : String(e));
+                    __xiaoqiu__.reject(e && e.message ? e.message : String(e));
                 }
             })();
         """.trimIndent()
@@ -1240,7 +1240,7 @@ class BrowserUseManager(
     /**
      * Last CSS-pixel viewport applied via [applyViewport]. Used so [navigate]
      * can re-assert the same size before `loadUrl()` — intercepted
-     * (`minis://`) loads skip WebView's measure pass, otherwise stranding the
+     * (`xiaoqiu://`) loads skip WebView's measure pass, otherwise stranding the
      * page at the 980px no-meta fallback.
      */
     private var lastAppliedViewport: Pair<Int, Int>? = null
@@ -1309,7 +1309,7 @@ class BrowserUseManager(
      * `about:blank`, a bare `webView.reload()` is a no-op and
      * `onPageFinished` never fires — we'd time out for no reason. Explicit
      * `loadUrl("about:blank")` always triggers the lifecycle, so the
-     * viewport-change callers still get a deterministic page refresh.
+     * viewport-change callers still get a deterxiaoqiutic page refresh.
      */
     suspend fun reloadAndWait() {
         val deferred = CompletableDeferred<Unit>()
@@ -1769,7 +1769,7 @@ class BrowserUseManager(
         // already finished loading (readyState === 'complete') is almost
         // always stable — confirm with two samples 50ms apart and return
         // without paying the 200ms poll interval. Keeps trivial static
-        // pages (e.g. minis:// docs) fast at any budget.
+        // pages (e.g. xiaoqiu:// docs) fast at any budget.
         val readyState = evaluateJavascript(
             "(function(){try{return document.readyState;}catch(e){return '';}})()"
         ).trim('"')

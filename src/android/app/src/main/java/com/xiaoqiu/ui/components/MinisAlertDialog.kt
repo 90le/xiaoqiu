@@ -20,7 +20,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.window.Dialog
 import androidx.compose.ui.window.DialogProperties
 import com.xiaoqiu.R
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 
 /**
  * App-wide confirmation dialog. Tighter than the Material 3 default
@@ -30,7 +30,7 @@ import com.xiaoqiu.ui.components.MinisTextButton
  * the pattern iOS uses for `UIAlertActionStyle.destructive`.
  */
 @Composable
-fun MinisAlertDialog(
+fun XiaoQiuAlertDialog(
     onDismissRequest: () -> Unit,
     title: String,
     confirmText: String,
@@ -91,13 +91,13 @@ fun MinisAlertDialog(
                             .padding(horizontal = 8.dp, vertical = 8.dp),
                         horizontalAlignment = Alignment.End,
                     ) {
-                        MinisTextButton(onClick = onDismiss) {
+                        XiaoQiuTextButton(onClick = onDismiss) {
                             Text(dismissText)
                         }
-                        MinisTextButton(onClick = onConfirm) {
+                        XiaoQiuTextButton(onClick = onConfirm) {
                             Text(text = confirmText, color = confirmColor)
                         }
-                        MinisTextButton(onClick = onNeutral) {
+                        XiaoQiuTextButton(onClick = onNeutral) {
                             Text(text = neutralText, color = confirmColor)
                         }
                     }
@@ -108,11 +108,11 @@ fun MinisAlertDialog(
                             .padding(horizontal = 8.dp, vertical = 8.dp),
                         horizontalArrangement = Arrangement.End,
                     ) {
-                        MinisTextButton(onClick = onDismiss) {
+                        XiaoQiuTextButton(onClick = onDismiss) {
                             Text(dismissText)
                         }
                         Spacer(modifier = Modifier.width(4.dp))
-                        MinisTextButton(onClick = onConfirm) {
+                        XiaoQiuTextButton(onClick = onConfirm) {
                             Text(text = confirmText, color = confirmColor)
                         }
                     }

@@ -46,7 +46,7 @@ import kotlinx.coroutines.delay
 import java.text.SimpleDateFormat
 import java.util.Date
 import java.util.Locale
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 
 /**
  * Bottom sheet showing memory state for the current session.
@@ -279,7 +279,7 @@ private fun DetailToolbar(
             }
         }
         if (showSave) {
-            MinisTextButton(onClick = onSave) {
+            XiaoQiuTextButton(onClick = onSave) {
                 Text(stringResource(R.string.memory_action_save))
             }
         }

@@ -199,7 +199,7 @@ class ShareReceiverActivity : ComponentActivity() {
         // throws UninitializedPropertyAccessException — crashing the app and
         // re-feeding the crash-burst detector. Null takes the existing
         // "import failed" path instead.
-        val repo = (applicationContext as? com.xiaoqiu.MinisApp)?.providerRepositoryOrNull
+        val repo = (applicationContext as? com.xiaoqiu.XiaoQiuApp)?.providerRepositoryOrNull
         if (repo == null) {
             AppLogger.warning(TAG, "providerRepository unavailable; cannot import")
             toast(getString(com.xiaoqiu.R.string.share_provider_json_import_failed))
@@ -308,7 +308,7 @@ class ShareReceiverActivity : ComponentActivity() {
      * [T-android-share-launch-crash] Hand off to MainActivity, tolerating a
      * failure to start it.
      *
-     * Field report (vivo V2352A / Android 14): sharing into Minis crashed the
+     * Field report (vivo V2352A / Android 14): sharing into XiaoQiu crashed the
      * app on launch, repeatedly —
      *
      *   RuntimeException: Unable to start activity …ShareReceiverActivity

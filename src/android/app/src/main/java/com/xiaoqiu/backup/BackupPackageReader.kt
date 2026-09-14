@@ -4,7 +4,7 @@ import com.xiaoqiu.logging.AppLogger
 import java.io.File
 
 /**
- * Read-side entry point for a `.minisbak` package, implementing the §8.1
+ * Read-side entry point for a `.xiaoqiubak` package, implementing the §8.1
  * pre-flight order:
  *
  *     manifest (plaintext) → verifier (is the passphrase right?)
@@ -49,7 +49,7 @@ class BackupPackageReader(private val root: File) {
             "/" + manifest.format.substringAfter('/', "").substringBefore('.')
         if (major != BackupFormat.CURRENT) {
             throw BackupException(
-                "This backup was created by a newer version of Minis (${manifest.format}). Please update the app."
+                "This backup was created by a newer version of XiaoQiu (${manifest.format}). Please update the app."
             )
         }
         return manifest

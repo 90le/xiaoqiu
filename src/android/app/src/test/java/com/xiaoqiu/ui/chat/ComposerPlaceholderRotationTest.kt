@@ -161,7 +161,7 @@ class ComposerPlaceholderRotationTest {
         )
     }
 
-    // ─── Deterministic boundary checks ───────────────────────────────────
+    // ─── Deterxiaoqiutic boundary checks ───────────────────────────────────
 
     @Test
     fun `draw below current maps to itself`() {

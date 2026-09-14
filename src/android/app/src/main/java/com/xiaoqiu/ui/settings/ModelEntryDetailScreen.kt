@@ -28,8 +28,8 @@ import com.xiaoqiu.data.repository.ProviderRepository
 import com.xiaoqiu.ui.components.RowLabel
 import com.xiaoqiu.ui.components.SectionTextField
 import com.xiaoqiu.R
-import com.xiaoqiu.ui.components.MinisButton
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 
 /**
  * Detail / edit screen for a single ModelEntry. T210: brought to iOS
@@ -101,7 +101,7 @@ fun ModelEntryDetailScreen(
         onBack = null,
         centerTitle = true,
         navigation = {
-            MinisTextButton(
+            XiaoQiuTextButton(
                 onClick = onBack,
                 modifier = Modifier.padding(start = 8.dp),
                 colors = ButtonDefaults.textButtonColors(
@@ -110,7 +110,7 @@ fun ModelEntryDetailScreen(
             ) { Text(stringResource(R.string.common_cancel)) }
         },
         actions = {
-            MinisButton(
+            XiaoQiuButton(
                 onClick = {
                     val baseInputs = baseModel.inputModalities ?: emptyList()
                     val baseOutputs = baseModel.outputModalities ?: emptyList()

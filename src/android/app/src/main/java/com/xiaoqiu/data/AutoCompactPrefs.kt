@@ -22,7 +22,7 @@ import android.content.SharedPreferences
  * offered on the prompt.
  */
 object AutoCompactPrefs {
-    private const val PREFS = "minis_auto_compact_prefs"
+    private const val PREFS = "xiaoqiu_auto_compact_prefs"
     private const val KEY_ENABLED = "autoCompactOnThreshold"
 
     @Volatile
@@ -35,7 +35,7 @@ object AutoCompactPrefs {
         context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)
 
     /**
-     * Capture the app context and warm the cache. Called from MinisApp.onCreate,
+     * Capture the app context and warm the cache. Called from XiaoQiuApp.onCreate,
      * so [isEnabled] is safe from call sites that have no Context — the same
      * arrangement [FastModePrefs] uses.
      */

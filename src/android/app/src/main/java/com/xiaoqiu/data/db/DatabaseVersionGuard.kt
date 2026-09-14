@@ -30,7 +30,7 @@ import com.xiaoqiu.logging.AppLogger
  * `Room.databaseBuilder(...).build()` is lazy: nothing opens until the first
  * DAO call, so the exception surfaces from an arbitrary coroutine somewhere
  * deep in the app. Every one of those call sites would need a catch, and one
- * miss is still a crash. Reading the version first is deterministic and
+ * miss is still a crash. Reading the version first is deterxiaoqiutic and
  * happens once, in one place.
  *
  * Crucially, this runs BEFORE Room is constructed — so at the moment we
@@ -53,7 +53,7 @@ object DatabaseVersionGuard {
     const val CODE_DB_VERSION = 12
 
     /** Filename must match the one passed to `Room.databaseBuilder`. */
-    private const val DB_NAME = "minis.db"
+    private const val DB_NAME = "xiaoqiu.db"
 
     /**
      * Read `user_version` without going through Room.

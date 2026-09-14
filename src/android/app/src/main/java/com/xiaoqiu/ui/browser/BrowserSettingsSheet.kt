@@ -61,7 +61,7 @@ import com.xiaoqiu.browser.BrowserTabPool
 import com.xiaoqiu.browser.UserAgentProfile
 import com.xiaoqiu.logging.AppLogger
 import kotlinx.coroutines.launch
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 import com.xiaoqiu.ui.util.bringIntoViewOnFocus
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -148,7 +148,7 @@ fun BrowserSettingsSheet(
                     fontWeight = FontWeight.SemiBold,
                     modifier = Modifier.weight(1f),
                 )
-                MinisTextButton(onClick = onDismiss) { Text(stringResource(R.string.browser_settings_done)) }
+                XiaoQiuTextButton(onClick = onDismiss) { Text(stringResource(R.string.browser_settings_done)) }
             }
 
             Spacer(Modifier.height(16.dp))
@@ -211,7 +211,7 @@ fun BrowserSettingsSheet(
                     singleLine = false,
                     textStyle = MaterialTheme.typography.bodySmall,
                 )
-                MinisTextButton(onClick = {
+                XiaoQiuTextButton(onClick = {
                     tabPool.setUserAgentFromUI(UserAgentProfile.CUSTOM, customUA)
                 }) {
                     Text(stringResource(R.string.browser_settings_apply))
@@ -316,7 +316,7 @@ fun BrowserSettingsSheet(
                     textStyle = MaterialTheme.typography.bodyMedium,
                 )
                 Spacer(Modifier.size(8.dp))
-                MinisTextButton(
+                XiaoQiuTextButton(
                     onClick = {
                         val minutes = idleTimeoutText.toIntOrNull()
                             ?: BrowserTabPool.DEFAULT_IDLE_TIMEOUT_MINUTES
@@ -402,7 +402,7 @@ fun BrowserSettingsSheet(
 
             Spacer(Modifier.height(8.dp))
 
-            MinisTextButton(
+            XiaoQiuTextButton(
                 onClick = { showClearConfirm = true },
                 enabled = hasCookies,
             ) {
@@ -417,7 +417,7 @@ fun BrowserSettingsSheet(
             title = { Text(stringResource(R.string.browser_settings_clear_all_dialog_title)) },
             text = { Text(stringResource(R.string.browser_settings_clear_all_dialog_message)) },
             confirmButton = {
-                MinisTextButton(onClick = {
+                XiaoQiuTextButton(onClick = {
                     CookieManager.getInstance().removeAllCookies(null)
                     WebStorage.getInstance().deleteAllData()
                     showClearConfirm = false
@@ -426,7 +426,7 @@ fun BrowserSettingsSheet(
                 }
             },
             dismissButton = {
-                MinisTextButton(onClick = { showClearConfirm = false }) {
+                XiaoQiuTextButton(onClick = { showClearConfirm = false }) {
                     Text(stringResource(R.string.cancel))
                 }
             },
@@ -572,7 +572,7 @@ private fun ViewportSection(
                 keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Number),
             )
             Spacer(Modifier.size(8.dp))
-            MinisTextButton(onClick = onApply) { Text(stringResource(R.string.browser_settings_apply)) }
+            XiaoQiuTextButton(onClick = onApply) { Text(stringResource(R.string.browser_settings_apply)) }
         }
 
         // UA mismatch banner — same 768px breakpoint as iOS.

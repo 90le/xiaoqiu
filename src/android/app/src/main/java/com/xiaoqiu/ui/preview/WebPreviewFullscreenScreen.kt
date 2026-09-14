@@ -283,7 +283,7 @@ private fun FloatingMenuButton(
                 modifier = Modifier.size(24.dp),
             )
         }
-        com.xiaoqiu.ui.components.MinisMenu(
+        com.xiaoqiu.ui.components.XiaoQiuMenu(
             expanded = menuOpen,
             onDismissRequest = { menuOpen = false },
             alignEnd = true,
@@ -333,7 +333,7 @@ private fun FloatingMenuButton(
                     onOpenExternal()
                 },
             )
-            com.xiaoqiu.ui.components.MinisMenuDivider()
+            com.xiaoqiu.ui.components.XiaoQiuMenuDivider()
             androidx.compose.material3.DropdownMenuItem(
                 text = {
                     androidx.compose.material3.Text(

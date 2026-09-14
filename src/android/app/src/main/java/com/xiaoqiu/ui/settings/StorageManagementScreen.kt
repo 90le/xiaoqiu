@@ -1,7 +1,7 @@
 package com.xiaoqiu.ui.settings
 
 import com.xiaoqiu.R
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 
 import android.content.Context
 import android.text.format.Formatter
@@ -53,10 +53,10 @@ import java.io.File
 private data class SessionStorageInfo(
     val id: String,
     val title: String?,
-    val minisSize: Long,
+    val xiaoqiuSize: Long,
     val mediaSize: Long,
 ) {
-    val totalSize: Long get() = minisSize + mediaSize
+    val totalSize: Long get() = xiaoqiuSize + mediaSize
 }
 
 @OptIn(ExperimentalMaterial3Api::class)
@@ -83,17 +83,17 @@ fun StorageManagementScreen(
                 dbSize = databaseSize(context)
 
                 val allSessions = chatDao.listSessions()
-                val sessionsDir = File(context.filesDir, "minis-sessions")
+                val sessionsDir = File(context.filesDir, "xiaoqiu-sessions")
                 val mediaDir = File(context.filesDir, "media")
 
                 val mediaSizes = mediaSizesBySession(mediaDir, allSessions.map { it.id }.toSet())
 
                 sessions = allSessions.map { session ->
-                    val minisDir = File(sessionsDir, session.id)
+                    val xiaoqiuDir = File(sessionsDir, session.id)
                     SessionStorageInfo(
                         id = session.id,
                         title = session.title,
-                        minisSize = directorySize(minisDir),
+                        xiaoqiuSize = directorySize(xiaoqiuDir),
                         mediaSize = mediaSizes[session.id] ?: 0L,
                     )
                 }.sortedByDescending { it.totalSize }
@@ -172,19 +172,19 @@ fun SessionStorageDetailScreen(
     val scope = rememberCoroutineScope()
 
     var session by remember { mutableStateOf<ChatSessionEntity?>(null) }
-    var minisSize by remember { mutableLongStateOf(0L) }
+    var xiaoqiuSize by remember { mutableLongStateOf(0L) }
     var mediaSize by remember { mutableLongStateOf(0L) }
     var isClearing by remember { mutableStateOf(false) }
     var showClearDialog by remember { mutableStateOf(false) }
 
-    val sessionsDir = File(context.filesDir, "minis-sessions")
+    val sessionsDir = File(context.filesDir, "xiaoqiu-sessions")
     val mediaDir = File(context.filesDir, "media")
 
     fun reload() {
         scope.launch {
             withContext(Dispatchers.IO) {
                 session = chatDao.getSession(sessionId)
-                minisSize = directorySize(File(sessionsDir, sessionId))
+                xiaoqiuSize = directorySize(File(sessionsDir, sessionId))
                 val mediaSizes = mediaSizesBySession(mediaDir, setOf(sessionId))
                 mediaSize = mediaSizes[sessionId] ?: 0L
             }
@@ -193,15 +193,15 @@ fun SessionStorageDetailScreen(
 
     LaunchedEffect(Unit) { reload() }
 
-    val totalSize = minisSize + mediaSize
+    val totalSize = xiaoqiuSize + mediaSize
     val hasFiles = totalSize > 0
 
     SettingsScaffold(title = session?.title ?: "Session", onBack = onBack) {
-        SettingsSection(header = stringResource(R.string.storage_section_minis_files)) {
-            if (minisSize > 0) {
+        SettingsSection(header = stringResource(R.string.storage_section_xiaoqiu_files)) {
+            if (xiaoqiuSize > 0) {
                 SettingsValueRow(
                     title = stringResource(R.string.storage_browse_files),
-                    value = Formatter.formatFileSize(context, minisSize),
+                    value = Formatter.formatFileSize(context, xiaoqiuSize),
                     onClick = {
                         onBrowseFiles(File(sessionsDir, sessionId).absolutePath)
                     },
@@ -210,7 +210,7 @@ fun SessionStorageDetailScreen(
                 )
             } else {
                 Text(
-                    stringResource(R.string.storage_no_minis_files),
+                    stringResource(R.string.storage_no_xiaoqiu_files),
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium,
                     modifier = Modifier.padding(16.dp),
@@ -283,7 +283,7 @@ fun SessionStorageDetailScreen(
                 Text("This will delete ${Formatter.formatFileSize(context, totalSize)} of files. This action cannot be undone.")
             },
             confirmButton = {
-                MinisTextButton(onClick = {
+                XiaoQiuTextButton(onClick = {
                     showClearDialog = false
                     isClearing = true
                     scope.launch {
@@ -291,7 +291,7 @@ fun SessionStorageDetailScreen(
                             File(sessionsDir, sessionId).deleteRecursively()
                             deleteSessionMedia(mediaDir, sessionId)
                         }
-                        minisSize = 0L
+                        xiaoqiuSize = 0L
                         mediaSize = 0L
                         isClearing = false
                     }
@@ -303,7 +303,7 @@ fun SessionStorageDetailScreen(
                 }
             },
             dismissButton = {
-                MinisTextButton(onClick = { showClearDialog = false }) { Text(stringResource(R.string.common_cancel)) }
+                XiaoQiuTextButton(onClick = { showClearDialog = false }) { Text(stringResource(R.string.common_cancel)) }
             },
         )
     }
@@ -367,7 +367,7 @@ private fun directorySize(dir: File): Long {
 }
 
 private fun databaseSize(context: Context): Long {
-    val dbFile = context.getDatabasePath("minis.db")
+    val dbFile = context.getDatabasePath("xiaoqiu.db")
     var size = if (dbFile.exists()) dbFile.length() else 0L
     val wal = File(dbFile.path + "-wal")
     val shm = File(dbFile.path + "-shm")

@@ -92,7 +92,7 @@ enum class SessionLimit {
  * app segmented differently on Pixel vs vivo vs Xiaomi — and the Provider
  * (custom-model) engine had *no* endpointing whatsoever: it recorded until the
  * user tapped stop or hit a 60 s cap. This class gives both engines one
- * deterministic, device-independent notion of "the user stopped talking".
+ * deterxiaoqiutic, device-independent notion of "the user stopped talking".
  *
  * ## Same model as iOS, on purpose
  *

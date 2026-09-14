@@ -148,7 +148,7 @@ object ModelsDevApi {
             inputModalities = devModel.inputModalities ?: model.inputModalities,
             outputModalities = devModel.outputModalities ?: model.outputModalities,
             reasoningEffortValues = devModel.reasoningEffortValues ?: model.reasoningEffortValues,
-            // [OpenMinis#163] Only carry the AFFIRMATIVE answer forward, so
+            // [OpenXiaoQiu#163] Only carry the AFFIRMATIVE answer forward, so
             // enriching against an entry the catalog is silent about cannot
             // overwrite a prior real answer with a meaningless `false`.
             declaresNoEffortTiers = if (devModel.declaresNoEffortTiers) true else model.declaresNoEffortTiers,
@@ -172,7 +172,7 @@ object ModelsDevApi {
                 inputModalities = model.inputModalities,
                 outputModalities = model.outputModalities,
                 reasoningEffortValues = model.reasoningEffortValues,
-                // [OpenMinis#163] null (not false) when the catalog is silent,
+                // [OpenXiaoQiu#163] null (not false) when the catalog is silent,
                 // so "unknown" stays distinguishable from "declared none".
                 declaresNoEffortTiers = if (model.declaresNoEffortTiers) true else null,
             )
@@ -384,7 +384,7 @@ object ModelsDevApi {
                 break
             }
         }
-        // [OpenMinis#163] The catalog AFFIRMATIVELY says this model has no
+        // [OpenXiaoQiu#163] The catalog AFFIRMATIVELY says this model has no
         // effort tiers, as opposed to saying nothing at all. reasoningEffortValues
         // collapses both to null, losing the difference that matters on the wire:
         //   • reasoning_options absent → no opinion. Stay permissive and keep
@@ -488,7 +488,7 @@ object ModelsDevApi {
         // entry whose type == "effort"; null when the model declares only
         // toggle / budget_tokens (different mechanisms, not effort control).
         val reasoningEffortValues: List<String>?,
-        // [OpenMinis#163] True when reasoning_options was PRESENT but declared
+        // [OpenXiaoQiu#163] True when reasoning_options was PRESENT but declared
         // no usable effort tier — "reasons, but takes no reasoning_effort".
         // Distinct from reasoningEffortValues == null, which also covers "the
         // catalog has never heard of this model"; only this affirmative case

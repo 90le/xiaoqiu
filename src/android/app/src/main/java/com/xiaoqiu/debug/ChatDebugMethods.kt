@@ -1,7 +1,7 @@
 package com.xiaoqiu.debug
 
 import android.content.Context
-import com.xiaoqiu.MinisApp
+import com.xiaoqiu.XiaoQiuApp
 import com.xiaoqiu.data.db.MessageEntity
 import com.xiaoqiu.data.repository.ChatRepository
 import com.xiaoqiu.data.repository.ProviderRepository
@@ -20,12 +20,12 @@ import org.json.JSONObject
 internal object ChatDebugMethods {
 
     private fun chat(context: Context): ChatRepository =
-        (context.applicationContext as? MinisApp
-            ?: throw RPCException(-32000, "MinisApp not initialized")).chatRepository
+        (context.applicationContext as? XiaoQiuApp
+            ?: throw RPCException(-32000, "XiaoQiuApp not initialized")).chatRepository
 
     private fun provider(context: Context): ProviderRepository =
-        (context.applicationContext as? MinisApp
-            ?: throw RPCException(-32000, "MinisApp not initialized")).providerRepository
+        (context.applicationContext as? XiaoQiuApp
+            ?: throw RPCException(-32000, "XiaoQiuApp not initialized")).providerRepository
 
     suspend fun sessionsList(context: Context, params: JSONObject): JSONObject {
         val limit = params.optInt("limit", 50).coerceIn(1, 500)

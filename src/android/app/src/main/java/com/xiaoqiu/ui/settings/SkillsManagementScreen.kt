@@ -1,8 +1,8 @@
 package com.xiaoqiu.ui.settings
 
 import com.xiaoqiu.R
-import com.xiaoqiu.ui.components.MinisButton
-import com.xiaoqiu.ui.components.MinisTextButton
+import com.xiaoqiu.ui.components.XiaoQiuButton
+import com.xiaoqiu.ui.components.XiaoQiuTextButton
 
 import android.net.Uri
 import android.widget.Toast
@@ -116,7 +116,7 @@ fun SkillsManagementScreen(
     skillRepository: SkillRepository,
     onBack: () -> Unit,
     onSkillClick: (String) -> Unit = {},
-    onMinisSkillsClick: () -> Unit = {},
+    onXiaoQiuSkillsClick: () -> Unit = {},
 ) {
     val skills by skillRepository.skills.collectAsState()
     var showImportSheet by remember { mutableStateOf(false) }
@@ -170,7 +170,7 @@ fun SkillsManagementScreen(
                         contentDescription = stringResource(R.string.filebrowser_sort_by),
                     )
                 }
-                com.xiaoqiu.ui.components.MinisMenu(
+                com.xiaoqiu.ui.components.XiaoQiuMenu(
                     expanded = sortMenuExpanded,
                     onDismissRequest = { sortMenuExpanded = false },
                 ) {
@@ -339,14 +339,14 @@ fun SkillsManagementScreen(
                         .fillMaxWidth()
                         .clickable {
                             showAddMenu = false
-                            onMinisSkillsClick()
+                            onXiaoQiuSkillsClick()
                         }
                         .padding(horizontal = 20.dp, vertical = 14.dp),
                     verticalAlignment = Alignment.CenterVertically,
                 ) {
                     Icon(Icons.Outlined.Language, contentDescription = null, modifier = Modifier.size(22.dp))
                     Spacer(Modifier.width(16.dp))
-                    Text(stringResource(R.string.skill_minis_skills_modal), style = MaterialTheme.typography.bodyLarge)
+                    Text(stringResource(R.string.skill_xiaoqiu_skills_modal), style = MaterialTheme.typography.bodyLarge)
                 }
             }
         }
@@ -366,13 +366,13 @@ fun SkillsManagementScreen(
             title = { Text("Delete ${skill?.name ?: "skill"}?") },
             text = { Text(stringResource(R.string.skill_delete_confirm_text)) },
             confirmButton = {
-                MinisTextButton(onClick = {
+                XiaoQiuTextButton(onClick = {
                     deleteSkillId?.let { skillRepository.delete(it) }
                     deleteSkillId = null
                 }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
-                MinisTextButton(onClick = { deleteSkillId = null }) { Text(stringResource(R.string.common_cancel)) }
+                XiaoQiuTextButton(onClick = { deleteSkillId = null }) { Text(stringResource(R.string.common_cancel)) }
             },
         )
     }
@@ -500,7 +500,7 @@ private fun SkillImportSheet(
                         style = MaterialTheme.typography.bodySmall,
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                     )
-                    MinisTextButton(
+                    XiaoQiuTextButton(
                         onClick = { fileLauncher.launch("*/*") },
                         modifier = Modifier.fillMaxWidth(),
                     ) { Text(stringResource(R.string.skill_import_file_button)) }
@@ -513,12 +513,12 @@ private fun SkillImportSheet(
 
             if (selectedTab < 2) {
                 Row(modifier = Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
-                    MinisTextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
-                    MinisTextButton(
+                    XiaoQiuTextButton(onClick = onDismiss) { Text(stringResource(R.string.common_cancel)) }
+                    XiaoQiuTextButton(
                         onClick = {
                             when (selectedTab) {
                                 0 -> {
-                                    if (urlText.isBlank()) { errorText = context.getString(R.string.skill_import_error_no_url); return@MinisTextButton }
+                                    if (urlText.isBlank()) { errorText = context.getString(R.string.skill_import_error_no_url); return@XiaoQiuTextButton }
                                     isLoading = true
                                     scope.launch {
                                         try {
@@ -871,7 +871,7 @@ fun SkillDetailScreen(
 
             // ── Delete ──
             Spacer(Modifier.height(16.dp))
-            MinisButton(
+            XiaoQiuButton(
                 onClick = { showDeleteDialog = true },
                 modifier = Modifier
                     .fillMaxWidth()
@@ -893,7 +893,7 @@ fun SkillDetailScreen(
             title = { Text("Delete ${skill.name}?") },
             text = { Text(stringResource(R.string.skill_delete_confirm_text)) },
             confirmButton = {
-                MinisTextButton(onClick = {
+                XiaoQiuTextButton(onClick = {
                     deleted = true
                     skillRepository.delete(skill.id)
                     showDeleteDialog = false
@@ -901,7 +901,7 @@ fun SkillDetailScreen(
                 }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
             },
             dismissButton = {
-                MinisTextButton(onClick = { showDeleteDialog = false }) { Text(stringResource(R.string.common_cancel)) }
+                XiaoQiuTextButton(onClick = { showDeleteDialog = false }) { Text(stringResource(R.string.common_cancel)) }
             },
         )
     }
@@ -924,7 +924,7 @@ fun SkillDetailScreen(
             confirmButton = {
                 val trimmed = editName.trim()
                 val canSave = trimmed.isNotEmpty() && trimmed != skill.name
-                MinisTextButton(
+                XiaoQiuTextButton(
                     onClick = {
                         if (canSave) skillRepository.update(skill.id, name = trimmed)
                         showEditNameDialog = false
@@ -933,7 +933,7 @@ fun SkillDetailScreen(
                 ) { Text(stringResource(R.string.skill_file_save)) }
             },
             dismissButton = {
-                MinisTextButton(onClick = { showEditNameDialog = false }) { Text(stringResource(R.string.common_cancel)) }
+                XiaoQiuTextButton(onClick = { showEditNameDialog = false }) { Text(stringResource(R.string.common_cancel)) }
             },
         )
     }
@@ -1164,7 +1164,7 @@ fun SkillFileViewerScreen(
                 },
                 actions = {
                     if (isEditing) {
-                        MinisTextButton(onClick = {
+                        XiaoQiuTextButton(onClick = {
                             if (isSkillMd) {
                                 // SKILL.md edits go through importFromContent so
                                 // YAML frontmatter changes flow back into DB metadata.
@@ -1176,7 +1176,7 @@ fun SkillFileViewerScreen(
                             onBack()
                         }) { Text(stringResource(R.string.skill_file_save)) }
                     } else {
-                        MinisTextButton(onClick = {
+                        XiaoQiuTextButton(onClick = {
                             editContent = initialContent
                             isEditing = true
                         }) { Text(stringResource(R.string.skill_file_edit)) }

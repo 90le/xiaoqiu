@@ -14,7 +14,7 @@ import java.security.MessageDigest
  * Why this exists: the original update flow held the downloaded [File]
  * reference in a Composable `remember{}` slot. When the user tapped "Open
  * Settings" to grant "install unknown apps" permission, the system pushed
- * Minis to the background; on return the Activity often recreated, the slot
+ * XiaoQiu to the background; on return the Activity often recreated, the slot
  * was reset, and the UI silently asked the user to download the APK again.
  *
  * Storage: a single SharedPreferences key holding a small JSON blob. We
@@ -46,7 +46,7 @@ object PendingUpdateStore {
 
     private var prefs: SharedPreferences? = null
 
-    /** Idempotent. Safe to call from MinisApp.onCreate. */
+    /** Idempotent. Safe to call from XiaoQiuApp.onCreate. */
     fun init(context: Context) {
         if (prefs != null) return
         prefs = context.applicationContext.getSharedPreferences(PREFS, Context.MODE_PRIVATE)

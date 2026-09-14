@@ -13,8 +13,8 @@ import java.io.File
  * Decides what should happen when a link inside chat markdown is tapped.
  *
  * Routing order:
- *  1. Recognized minis:// deep-link action  → DeepLink (delegated to MainActivity via Intent.ACTION_VIEW)
- *  2. minis://<sandbox path>, file://, or absolute /var/minis|/root path → SandboxFile
+ *  1. Recognized xiaoqiu:// deep-link action  → DeepLink (delegated to MainActivity via Intent.ACTION_VIEW)
+ *  2. xiaoqiu://<sandbox path>, file://, or absolute /var/xiaoqiu|/root path → SandboxFile
  *  3. Non-http(s) external schemes (intent://, mailto:, tel:, geo:, …)   → ExternalApp
  *  4. Anything else (http(s), about, file)                                → Web
  */
@@ -34,9 +34,9 @@ object ChatLinkResolver {
         val uri = runCatching { trimmed.toUri() }.getOrNull()
         val scheme = uri?.scheme?.lowercase()
 
-        // 1. minis:// deep links — only branch out when the URL maps to a known action,
+        // 1. xiaoqiu:// deep links — only branch out when the URL maps to a known action,
         //    otherwise fall through to sandbox-path handling.
-        if (scheme == "minis") {
+        if (scheme == "xiaoqiu") {
             val action = DeepLinkHandler.parse(uri)
             if (action !is DeepLinkAction.Unknown) {
                 return ChatLinkAction.DeepLink(action)
@@ -70,10 +70,10 @@ object ChatLinkResolver {
     /**
      * Map a chat link to a host File when it points into the sandbox, else null.
      * Accepts:
-     *   minis://attachments/foo.png        → /var/minis/attachments/foo.png
-     *   minis:///var/minis/workspace/x.csv → /var/minis/workspace/x.csv (absolute)
+     *   xiaoqiu://attachments/foo.png        → /var/xiaoqiu/attachments/foo.png
+     *   xiaoqiu:///var/xiaoqiu/workspace/x.csv → /var/xiaoqiu/workspace/x.csv (absolute)
      *   file:///path/to/file               → /path/to/file
-     *   /var/minis/workspace/x.csv         → resolved via bind mount
+     *   /var/xiaoqiu/workspace/x.csv         → resolved via bind mount
      *   /root/whatever                     → resolved relative to rootfs
      */
     private fun resolveSandboxFile(
@@ -89,18 +89,18 @@ object ChatLinkResolver {
                 PRootKernel.resolveHostPath(linuxPath)
             }
         return when (scheme) {
-            "minis" -> {
+            "xiaoqiu" -> {
                 // Keep '#' — attachment filenames legitimately contain it.
-                // `minis://` URLs don't use fragments, so stripping at '#'
+                // `xiaoqiu://` URLs don't use fragments, so stripping at '#'
                 // would truncate filenames like `foo #China.mp4`.
-                val stripped = raw.removePrefix("minis://").substringBefore('?')
-                // [T-android-minis-url-double-encoding] Try each decode
+                val stripped = raw.removePrefix("xiaoqiu://").substringBefore('?')
+                // [T-android-xiaoqiu-url-double-encoding] Try each decode
                 // candidate and take the first that exists on disk. See
-                // [minisPathCandidates] for why one decode pass isn't enough.
-                minisPathCandidates(stripped)
+                // [xiaoqiuPathCandidates] for why one decode pass isn't enough.
+                xiaoqiuPathCandidates(stripped)
                     .asSequence()
                     .map { candidate ->
-                        val linuxPath = if (candidate.startsWith("/")) candidate else "/var/minis/$candidate"
+                        val linuxPath = if (candidate.startsWith("/")) candidate else "/var/xiaoqiu/$candidate"
                         lookup(linuxPath)
                     }
                     .firstOrNull { it != null && it.exists() }
@@ -108,8 +108,8 @@ object ChatLinkResolver {
                     // caller's own exists() check reports against the path the
                     // user actually meant, and diagnostics stay readable.
                     ?: lookup(
-                        minisPathCandidates(stripped).first().let {
-                            if (it.startsWith("/")) it else "/var/minis/$it"
+                        xiaoqiuPathCandidates(stripped).first().let {
+                            if (it.startsWith("/")) it else "/var/xiaoqiu/$it"
                         },
                     )
             }
@@ -125,11 +125,11 @@ object ChatLinkResolver {
     }
 
     /**
-     * [T-android-minis-url-double-encoding] Decode candidates for the path part
-     * of a `minis://` URL, in priority order. Ported from iOS
-     * `MinisURLPathDecoding` (T-fix-double-encoding).
+     * [T-android-xiaoqiu-url-double-encoding] Decode candidates for the path part
+     * of a `xiaoqiu://` URL, in priority order. Ported from iOS
+     * `XiaoQiuURLPathDecoding` (T-fix-double-encoding).
      *
-     * A correctly-formed minis URL percent-encodes each segment exactly once,
+     * A correctly-formed xiaoqiu URL percent-encodes each segment exactly once,
      * and one decode pass recovers the real UTF-8 name. But links reach us
      * double-encoded when the agent — or an intermediate Markdown
      * autolink/sanitize step — re-encodes the literal `%` of an
@@ -138,7 +138,7 @@ object ChatLinkResolver {
      *
      * The user-visible symptom is a tap that does NOTHING, which is why this
      * is worth the tolerance: [resolve] falls through to `ChatLinkAction.Web`,
-     * and a web preview of a `minis://` URL renders nothing at all. There is
+     * and a web preview of a `xiaoqiu://` URL renders nothing at all. There is
      * no error, no toast, no navigation — the link just looks dead.
      *
      * Note this is NOT specific to CJK. Any non-ASCII segment percent-encodes
@@ -160,7 +160,7 @@ object ChatLinkResolver {
      * either: its multi-arg constructor ENCODES its input, so `getPath()`
      * hands the string straight back undecoded.)
      */
-    internal fun minisPathCandidates(strippedPath: String): List<String> {
+    internal fun xiaoqiuPathCandidates(strippedPath: String): List<String> {
         // Decode %XX only, never mapping '+' to space (see KDoc). Done by hand
         // rather than with URLDecoder (form semantics: '+' → space) or
         // java.net.URI (its multi-arg constructor ENCODES its input, so

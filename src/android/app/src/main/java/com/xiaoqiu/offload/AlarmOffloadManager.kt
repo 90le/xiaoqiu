@@ -24,10 +24,10 @@ class AlarmOffloadManager(private val context: Context) {
 
     companion object {
         private const val TAG = "AlarmOffloadManager"
-        private const val PREFS_NAME = "minis_alarms_prefs"
+        private const val PREFS_NAME = "xiaoqiu_alarms_prefs"
         private const val KEY_ALARMS = "alarms_json"
-        const val CHANNEL_ID = "minis_alarms"
-        private const val CHANNEL_NAME = "Minis Alarms & Timers"
+        const val CHANNEL_ID = "xiaoqiu_alarms"
+        private const val CHANNEL_NAME = "XiaoQiu Alarms & Timers"
 
         const val EXTRA_ALARM_ID = "alarm_id"
         const val EXTRA_ALARM_LABEL = "alarm_label"
@@ -49,7 +49,7 @@ class AlarmOffloadManager(private val context: Context) {
                 CHANNEL_NAME,
                 NotificationManager.IMPORTANCE_HIGH
             ).apply {
-                description = "Alarms and timers scheduled by the Minis agent"
+                description = "Alarms and timers scheduled by the XiaoQiu agent"
                 enableVibration(true)
             }
             notificationManager.createNotificationChannel(channel)
