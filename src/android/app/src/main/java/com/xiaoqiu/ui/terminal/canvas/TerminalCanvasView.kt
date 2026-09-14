@@ -8,8 +8,12 @@ import androidx.compose.animation.core.exponentialDecay
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
 import androidx.compose.foundation.gestures.detectTapGestures
+
+import androidx.compose.foundation.clickable
 import androidx.compose.foundation.gestures.detectVerticalDragGestures
 import androidx.compose.foundation.layout.fillMaxSize
+
+import androidx.compose.foundation.layout.offset
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
@@ -22,6 +26,8 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.drawscope.drawIntoCanvas
 import androidx.compose.ui.graphics.nativeCanvas
 import androidx.compose.ui.graphics.toArgb
+
+import androidx.compose.ui.draw.clip
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.platform.LocalDensity
 import androidx.compose.ui.unit.sp
@@ -115,37 +121,155 @@ fun TerminalCanvasView(
     }
     val scope = rememberCoroutineScope()
 
+    // ── [小丘] v1 选区体系状态 ──
+    // 柄拖动模式：0=无 1=起点柄 2=终点柄（Canvas 手势统一分发用）
+    var dragHandle by remember { mutableStateOf(0) }
+    // 复制浮层开关（选区存在时显示）
+    var showCopyBar by remember { mutableStateOf(false) }
+    val view = androidx.compose.ui.platform.LocalView.current
+
+    /** 长按选词（v1 wordExpand：词字符边界扩展） */
+    fun startSelectionAt(px: Float, py: Float) {
+        if (cellWidth <= 0f || cellHeight <= 0f) return
+        val col = (px / cellWidth).toInt().coerceIn(0, cols - 1)
+        val row = (py / cellHeight).toInt().coerceIn(0, rows - 1)
+        val lines = emulator.visibleLines()
+        fun isWordChar(c: Int): Boolean {
+            val ch = c.toChar()
+            return ch.isLetterOrDigit() || ch == '_' || ch == '-' || ch == '.' ||
+                ch == '/' || ch == ':' || ch == '?' || ch == '&' || ch == '=' ||
+                ch == '+' || ch == '%' || ch == '#' || ch == '~' || ch == '@'
+        }
+        var sx = col; var ex = col
+        val line = lines.getOrNull(row)
+        if (line != null && col in line.indices && isWordChar(line[col].char)) {
+            while (sx > 0 && isWordChar(line[sx - 1].char)) sx--
+            while (ex < line.size - 1 && isWordChar(line[ex + 1].char)) ex++
+        }
+        emulator.setSelectionRect(sx, row, ex, row)
+        showCopyBar = true
+        view.performHapticFeedback(android.view.HapticFeedbackConstants.LONG_PRESS)
+    }
+
+    /** 规范化选区端点（start 在前） */
+    fun selectionEnds(): IntArray? {
+        val sel = emulator.selectionRect.value ?: return null
+        return if (sel[1] < sel[3] || (sel[1] == sel[3] && sel[0] <= sel[2]))
+            intArrayOf(sel[0], sel[1], sel[2], sel[3])
+        else intArrayOf(sel[2], sel[3], sel[0], sel[1])
+    }
+
+    /** 柄命中测试（起点/终点 ±30px） */
+    fun hitHandle(x: Float, y: Float): Int {
+        val e = selectionEnds() ?: return 0
+        val sx = e[0] * cellWidth; val sy = (e[1] + 1) * cellHeight
+        val ex = (e[2] + 1) * cellWidth; val ey = (e[3] + 1) * cellHeight
+        val dS = kotlin.math.hypot((x - sx).toDouble(), (y - sy).toDouble())
+        val dE = kotlin.math.hypot((x - ex).toDouble(), (y - ey).toDouble())
+        return when { dS < 60 && dS <= dE -> 1; dE < 60 -> 2; else -> 0 }
+    }
+
+    /** 拖柄落点 → 更新对应端 */
+    fun moveHandleTo(x: Float, y: Float) {
+        val e = selectionEnds() ?: return
+        val col = (x / cellWidth).toInt().coerceIn(0, cols - 1)
+        val row = (y / cellHeight).toInt().coerceIn(0, rows - 1)
+        if (dragHandle == 1) emulator.setSelectionRect(col, row, e[2], e[3])
+        else emulator.setSelectionRect(e[0], e[1], col, row)
+    }
+
+    // 边缘自动滚（柄拖到上下边缘带时循环滚+选区跟随）
+    LaunchedEffect(dragHandle) {
+        if (dragHandle == 0) return@LaunchedEffect
+        while (true) {
+            val edgeTop = cellHeight * 2f
+            val edgeBottom = rows * cellHeight - cellHeight * 2f
+            // 柄当前位置未知——用最后触摸 y（存在 handleY）
+            val hy = handleY
+            val dir = when {
+                hy in 0f..edgeTop -> -1
+                hy >= edgeBottom -> 1
+                else -> 0
+            }
+            if (dir != 0) {
+                emulator.scrollOffset = (emulator.scrollOffset + dir).coerceAtLeast(0)
+                val e = selectionEnds()
+                if (e != null) {
+                    if (dragHandle == 1) emulator.setSelectionRect(e[0], e[1] + dir, e[2], e[3])
+                    else emulator.setSelectionRect(e[0], e[1], e[2], e[3] + dir)
+                }
+            }
+            delay(40)
+        }
+    }
+    var handleY by remember { mutableStateOf(0f) }
+
+    // 复制到剪贴板
+    fun copySelection() {
+        val e = selectionEnds() ?: return
+        val text = emulator.getSelectedText(e[0], e[1], e[2], e[3])
+        if (text.isNotEmpty()) {
+            val cb = emulator.let {
+                // context 通过 LocalContext 在组合侧获取后传入不便，此处用 view
+                view.context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+            }
+            cb.setPrimaryClip(android.content.ClipData.newPlainText("xiaoqiu", text))
+        }
+        emulator.clearSelectionRect()
+        showCopyBar = false
+    }
+
+    androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize()) {
     Canvas(
         modifier = modifier
             .fillMaxSize()
             .background(TerminalPalette.defaultBackground)
-            // Single pointerInput handles both: vertical drag → scroll w/ fling,
-            // tap → focus. Compose chains the two detectors inside one pointer
-            // session; tap fires only when no drag movement was detected.
+            // [小丘] 统一手势分发：柄拖动 > 滚动/fling；长按选词；点按聚焦
             .pointerInput(cellHeight) {
                 val tracker = androidx.compose.ui.input.pointer.util.VelocityTracker()
-                detectVerticalDragGestures(
-                    onDragStart = { tracker.resetTracking(); scrollAccumPx.value = 0f },
+                detectDragGestures(
+                    onDragStart = { pos ->
+                        tracker.resetTracking(); scrollAccumPx.value = 0f
+                        dragHandle = hitHandle(pos.x, pos.y)
+                        handleY = pos.y
+                    },
                     onDragEnd = {
-                        val velocity = tracker.calculateVelocity().y
-                        scope.launch {
-                            var lastValue = 0f
-                            AnimationState(initialValue = 0f, initialVelocity = velocity)
-                                .animateDecay(exponentialDecay(frictionMultiplier = 0.15f)) {
-                                    val frameDelta = value - lastValue
-                                    lastValue = value
-                                    if (!applyScroll(frameDelta)) cancelAnimation()
-                                }
+                        if (dragHandle != 0) { dragHandle = 0 }
+                        else {
+                            val velocity = tracker.calculateVelocity().y
+                            scope.launch {
+                                var lastValue = 0f
+                                AnimationState(initialValue = 0f, initialVelocity = velocity)
+                                    .animateDecay(exponentialDecay(frictionMultiplier = 0.15f)) {
+                                        val frameDelta = value - lastValue
+                                        lastValue = value
+                                        if (!applyScroll(frameDelta)) cancelAnimation()
+                                    }
+                            }
                         }
                     },
-                    onDragCancel = { tracker.resetTracking() },
+                    onDragCancel = { dragHandle = 0; tracker.resetTracking() },
                 ) { change, dragAmount ->
-                    tracker.addPosition(change.uptimeMillis, change.position)
-                    applyScroll(dragAmount)
+                    change.consume()
+                    if (dragHandle != 0) {
+                        handleY = change.position.y
+                        moveHandleTo(change.position.x, change.position.y)
+                    } else {
+                        tracker.addPosition(change.uptimeMillis, change.position)
+                        applyScroll(dragAmount)
+                    }
                 }
             }
             .pointerInput(Unit) {
-                detectTapGestures(onTap = { onTap() })
+                detectTapGestures(
+                    onTap = { offset ->
+                        if (emulator.selectionRect.value != null) {
+                            emulator.clearSelectionRect()
+                            showCopyBar = false
+                        } else onTap()
+                    },
+                    onLongPress = { offset -> startSelectionAt(offset.x, offset.y) },
+                )
             },
     ) {
         // Recompute cols/rows from actual draw size.
@@ -186,8 +310,8 @@ fun TerminalCanvasView(
                     intArrayOf(sel[2], sel[3], sel[0], sel[1])
                 }.let { listOf(it[0], it[1], it[2], it[3]) }
                 val selPaint = Paint().apply {
-                    // Translucent blue, matches Material text-selection tint.
-                    color = android.graphics.Color.argb(0x66, 0x33, 0x99, 0xFF)
+                    // [小丘] 选区墨绿（山野风，替代 Material 蓝）
+                    color = android.graphics.Color.argb(0x88, 0x2E, 0x4A, 0x38)
                     style = Paint.Style.FILL
                 }
                 for (r in sy..ey) {
@@ -201,6 +325,24 @@ fun TerminalCanvasView(
                         selPaint,
                     )
                 }
+
+                // [小丘] 双拖柄（v1：圆头竖杆，起点/终点）
+                val handlePaint = Paint().apply {
+                    color = android.graphics.Color.argb(0xFF, 0x8F, 0xE0, 0xAC)
+                    style = Paint.Style.FILL
+                    shadowLayer = 8f
+                    // 阴影需要 blurring mask filter；简化用双圈模拟
+                }
+                fun drawHandlePx(px: Float, py: Float) {
+                    val rodTop = py - cellHeight * 1.6f
+                    nc.drawRoundRect(
+                        android.graphics.RectF(px - 5f, rodTop, px + 5f, py),
+                        5f, 5f, handlePaint,
+                    )
+                    nc.drawCircle(px, rodTop, 11f, handlePaint)
+                }
+                drawHandlePx(sx * cellWidth, (sy + 1) * cellHeight)
+                drawHandlePx((ex + 1) * cellWidth, (ey + 1) * cellHeight)
             }
 
             // Cursor
@@ -242,6 +384,49 @@ fun TerminalCanvasView(
                 }
             }
         }
+
+        // [小丘] 复制浮层：选区存在时贴选区上方显示（v1 工具条）
+        val selNow = emulator.selectionRect.value
+        if (showCopyBar && selNow != null) {
+            val e = if (selNow[1] < selNow[3] || (selNow[1] == selNow[3] && selNow[0] <= selNow[2]))
+                intArrayOf(selNow[0], selNow[1], selNow[2], selNow[3])
+            else intArrayOf(selNow[2], selNow[3], selNow[0], selNow[1])
+            val barY = (e[1] * cellHeight - 52.dp.roundToPx()).coerceAtLeast(8.dp.roundToPx())
+            androidx.compose.foundation.layout.Row(
+                modifier = Modifier
+                    .offset(x = with(androidx.compose.ui.platform.LocalDensity.current) { (e[0] * cellWidth).toDp() })
+                    .offset(y = with(androidx.compose.ui.platform.LocalDensity.current) { barY.toDp() })
+                    .clip(androidx.compose.foundation.shape.RoundedCornerShape(20.dp))
+                    .background(androidx.compose.ui.graphics.Color(0xE6, 0x2E, 0x4A, 0x38))
+                    .padding(horizontal = 14.dp, vertical = 8.dp),
+                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.spacedBy(16.dp),
+            ) {
+                androidx.compose.material3.Text(
+                    "复制",
+                    color = androidx.compose.ui.graphics.Color.White,
+                    fontSize = 13.sp,
+                    modifier = Modifier.clickable { copySelection() },
+                )
+                androidx.compose.material3.Text(
+                    "全选",
+                    color = androidx.compose.ui.graphics.Color(0xFFCFE0D5),
+                    fontSize = 13.sp,
+                    modifier = Modifier.clickable {
+                        emulator.setSelectionRect(0, 0, cols - 1, rows - 1)
+                    },
+                )
+                androidx.compose.material3.Text(
+                    "✕",
+                    color = androidx.compose.ui.graphics.Color(0xFFBBBBBB),
+                    fontSize = 13.sp,
+                    modifier = Modifier.clickable {
+                        emulator.clearSelectionRect()
+                        showCopyBar = false
+                    },
+                )
+            }
+        }
+    } // Box
     }
 }
 
