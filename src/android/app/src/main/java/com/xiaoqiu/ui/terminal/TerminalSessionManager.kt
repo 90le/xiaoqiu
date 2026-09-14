@@ -56,24 +56,58 @@ class TerminalSessionManager(private val appContext: Context) {
      * 纯终端按钮 → 激活现有（无则新建）。镜像 v1 openTerminal 语义。
      */
     fun open(sessionId: String? = null, initCommand: String? = null): Tab {
+        // [小丘] 持久化恢复：App 重启后标签结构（数量/标题/活跃）回来，PTY 会话重开
+        if (tabs.isEmpty()) restoreTabs()
         if (initCommand.isNullOrBlank() && sessionId == null) {
             (active ?: createTab()).let { activate(it.id); return it }
         }
         return createTab(sessionId = sessionId, initCommand = initCommand)
     }
 
-    fun createTab(sessionId: String? = null, initCommand: String? = null): Tab {
+    // ── [小丘] 多标签持久化：[{id,title}] + activeId，SharedPreferences JSON ──
+    private fun persistTabs() {
+        try {
+            val arr = org.json.JSONArray()
+            tabs.forEach { t -> arr.put(org.json.JSONObject().put("id", t.id).put("title", t.title)) }
+            appContext.getSharedPreferences("xiaoqiu_terminal_tabs", android.content.Context.MODE_PRIVATE)
+                .edit()
+                .putString("tabs", arr.toString())
+                .putString("active", activeId)
+                .apply()
+        } catch (_: Exception) {}
+    }
+
+    private var restored = false
+    private fun restoreTabs() {
+        if (restored) return
+        restored = true
+        try {
+            val sp = appContext.getSharedPreferences("xiaoqiu_terminal_tabs", android.content.Context.MODE_PRIVATE)
+            val raw = sp.getString("tabs", null) ?: return
+            val arr = org.json.JSONArray(raw)
+            for (i in 0 until arr.length()) {
+                val o = arr.getJSONObject(i)
+                createTab(restoreId = o.optString("id"), restoreTitle = o.optString("title"))
+            }
+            val savedActive = sp.getString("active", null)
+            if (savedActive != null && tabs.any { it.id == savedActive }) activate(savedActive)
+        } catch (_: Exception) {}
+    }
+
+    fun createTab(sessionId: String? = null, initCommand: String? = null,
+                  restoreId: String? = null, restoreTitle: String? = null): Tab {
         counter += 1
         val session = TerminalSession(appContext)
         val emulator = TerminalEmulator()
         val tab = Tab(
-            id = UUID.randomUUID().toString().take(8),
+            id = restoreId ?: UUID.randomUUID().toString().take(8),
             session = session,
             emulator = emulator,
-            initialTitle = "t$counter",
+            initialTitle = restoreTitle ?: "t$counter",
         )
         tabs.add(tab)
         activate(tab.id)
+        persistTabs()
 
         // 输出泵：常驻收集，后台标签也持续喂 emulator（PTY 缓冲不积压）。
         pumpJobs[tab.id] = scope.launch {
@@ -89,10 +123,14 @@ class TerminalSessionManager(private val appContext: Context) {
         return tab
     }
 
-    fun activate(id: String) { activeId = id }
+    fun activate(id: String) {
+        activeId = id
+        persistTabs()
+    }
 
     fun rename(id: String, title: String) {
         tabs.firstOrNull { it.id == id }?.rename(title)
+        persistTabs()
     }
 
     /** 关闭标签：停会话 + 停泵 + 移除；相邻标签接替 active。 */
@@ -106,6 +144,7 @@ class TerminalSessionManager(private val appContext: Context) {
             activeId = tabs.getOrNull(idx.coerceAtMost(tabs.lastIndex))?.id
                 ?: tabs.firstOrNull()?.id
         }
+        persistTabs()
     }
 
     /** 重启：清屏重来（同一标签，emulator 复位，会话重 boot）。 */

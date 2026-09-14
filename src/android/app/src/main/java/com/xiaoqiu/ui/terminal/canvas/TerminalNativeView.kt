@@ -263,6 +263,66 @@ class TerminalNativeView @JvmOverloads constructor(
 
     private var btnToBottomRect: android.graphics.RectF? = null
 
+    // ── [小丘] 选区双拖柄（v1 完全体）：柄拖动=调选择；边缘自动滚 ──
+    private var dragHandle = 0 // 0=无 1=起点柄 2=终点柄
+    private var handleAnchorY = 0f
+    private val HANDLE_HIT = 30f // px 命中半径
+
+    /** 当前选区规范化为 (startCol,startRow,endCol,endRow)——start 在前。 */
+    private fun selectionEnds(): IntArray? {
+        val sel = emulator?.selectionRect?.value ?: return null
+        return if (sel[1] < sel[3] || (sel[1] == sel[3] && sel[0] <= sel[2]))
+            intArrayOf(sel[0], sel[1], sel[2], sel[3])
+        else intArrayOf(sel[2], sel[3], sel[0], sel[1])
+    }
+
+    private fun hitHandle(x: Float, y: Float): Int {
+        val ends = selectionEnds() ?: return 0
+        val sx = ends[0] * cellWidth
+        val sy = ends[1] * cellHeight
+        val ex = (ends[2] + 1) * cellWidth
+        val ey = (ends[3] + 1) * cellHeight
+        val dStart = Math.hypot((x - sx).toDouble(), (y - sy).toDouble()).toFloat()
+        val dEnd = Math.hypot((x - ex).toDouble(), (y - ey).toDouble()).toFloat()
+        return when {
+            dStart < HANDLE_HIT && dStart <= dEnd -> 1
+            dEnd < HANDLE_HIT -> 2
+            else -> 0
+        }
+    }
+
+    /** 拖柄落点 → 更新选区对应端（cell 换算 + clamp）。 */
+    private fun moveHandleTo(x: Float, y: Float) {
+        val em = emulator ?: return
+        val ends = selectionEnds() ?: return
+        val col = (x / cellWidth).toInt().coerceIn(0, cols - 1)
+        val row = (y / cellHeight).toInt().coerceIn(0, rows - 1)
+        if (dragHandle == 1) em.setSelectionRect(col, row, ends[2], ends[3])
+        else em.setSelectionRect(ends[0], ends[1], col, row)
+        invalidate()
+    }
+
+    // 边缘自动滚：柄在上/下边缘带时循环滚并跟随选择（v1 同款）
+    private var edgeScrolling = false
+    private val edgeScrollRunnable = object : Runnable {
+        override fun run() {
+            val em = emulator ?: return
+            if (!edgeScrolling || dragHandle == 0) { edgeScrolling = false; return }
+            val dir = if (handleAnchorY < cellHeight * 2) -1 else if (handleAnchorY > height - cellHeight * 2) 1 else 0
+            if (dir != 0) {
+                em.scrollOffset = (em.scrollOffset + dir).coerceAtLeast(0)
+                // 滚动后柄的 viewport 位置同步平移（选择跟随）
+                val ends = selectionEnds() ?: return
+                if (dragHandle == 1) em.setSelectionRect(ends[0], ends[1] + dir, ends[2], ends[3])
+                else em.setSelectionRect(ends[0], ends[1], ends[2], ends[3] + dir)
+                invalidate()
+                postDelayed(this, 40)
+            } else {
+                edgeScrolling = false
+            }
+        }
+    }
+
     override fun onTouchEvent(event: MotionEvent): Boolean {
         // [小丘] 回底按钮命中优先（点击即回底，不进手势）
         if (event.action == MotionEvent.ACTION_DOWN) {
@@ -271,6 +331,28 @@ class TerminalNativeView @JvmOverloads constructor(
                 emulator?.scrollOffset = 0
                 invalidate()
                 return true
+            }
+        }
+        // [小丘] 选区拖柄优先：按下命中柄→接管拖动
+        when (event.actionMasked) {
+            MotionEvent.ACTION_DOWN -> {
+                dragHandle = hitHandle(event.x, event.y)
+                if (dragHandle != 0) { handleAnchorY = event.y; return true }
+            }
+            MotionEvent.ACTION_MOVE -> {
+                if (dragHandle != 0) {
+                    handleAnchorY = event.y
+                    moveHandleTo(event.x, event.y)
+                    if (!edgeScrolling) { edgeScrolling = true; post(edgeScrollRunnable) }
+                    return true
+                }
+            }
+            MotionEvent.ACTION_UP, MotionEvent.ACTION_CANCEL -> {
+                if (dragHandle != 0) {
+                    dragHandle = 0
+                    edgeScrolling = false
+                    return true
+                }
             }
         }
         return gestureDetector.onTouchEvent(event) || super.onTouchEvent(event)
@@ -422,6 +504,24 @@ class TerminalNativeView @JvmOverloads constructor(
                     selPaint,
                 )
             }
+
+            // [小丘] v1 双拖柄：起点/终点两个竖圆柄（iOS 风：圆头+短杆）
+            val hp = android.graphics.Paint(android.graphics.Paint.ANTI_ALIAS_FLAG).apply {
+                color = 0xFF6FBF8A.toInt()
+                style = Paint.Style.FILL
+            }
+            fun drawHandle(px: Float, py: Float) {
+                // 竖杆（高 1.6 cell）
+                val rodTop = py - cellHeight * 1.5f
+                canvas.drawRoundRect(
+                    px - 4f, rodTop, px + 4f, py,
+                    4f, 4f, hp,
+                )
+                // 圆头
+                canvas.drawCircle(px, py - cellHeight * 1.5f, 9f, hp)
+            }
+            drawHandle(sx * cellWidth, (sy + 1) * cellHeight)
+            drawHandle((ex + 1) * cellWidth, (ey + 1) * cellHeight)
         }
 
         // Cursor (only when viewing live tail).
