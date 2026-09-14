@@ -224,6 +224,9 @@ fun TerminalScreen(
                 // selection + ActionMode + ClipboardManager copy. The old
                 // TerminalCanvasView is left in the package as a Compose-only
                 // fallback if anything regresses with the View interop path.
+                // [实验] 注释 AndroidView——验证原生View interop 是否压制 Compose 绘制
+                Box(modifier = Modifier.fillMaxSize().background(Color(0xFF101418)))
+                /*
                 TerminalNativeViewCompose(
                     emulator = emulator,
                     onResize = { cols, rows ->
@@ -232,6 +235,7 @@ fun TerminalScreen(
                     },
                     onTap = { inputController.requestFocus() },
                 )
+                */
                 TerminalInputView(
                     onInput = { bytes ->
                         // Any user input snaps back to live tail so typing is visible.
