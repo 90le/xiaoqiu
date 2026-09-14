@@ -100,6 +100,8 @@ fun TerminalScreen(
     val inputController = rememberTerminalInputController()
     val scope = rememberCoroutineScope()
     var ctrlActive by remember { mutableStateOf(false) }
+    var altActive by remember { mutableStateOf(false) }
+    var keysExpanded by remember { mutableStateOf(false) }
 
     // Wire emulator responses (DSR etc.) back to the PTY of the ACTIVE tab.
     DisposableEffect(terminalSession, emulator) {
@@ -182,9 +184,19 @@ fun TerminalScreen(
     // already set in the manifest, edge-to-edge enabled, and modern Pixel
     // builds reporting WindowInsets.ime correctly, a plain in-window Box +
     // imePadding does the right thing without any custom tracking.
-    val accessoryBarHeightDp = 40.dp
+    val accessoryBarHeightDp = if (keysExpanded) 134.dp else 74.dp
 
     Box(modifier = Modifier.fillMaxSize().background(TerminalBg)) {
+        // [小丘] 悬浮 D-pad（v1：球态拖移/点开/位置持久化/出界自愈）
+        FloatingDpad(
+            onArrow = { dir ->
+                emulator.scrollOffset = 0
+                val prefix = if (emulator.applicationCursorKeys)
+                    byteArrayOf(0x1B, 'O'.code.toByte())
+                else byteArrayOf(0x1B, '['.code.toByte())
+                terminalSession.sendRawBytes(prefix + byteArrayOf(dir.code.toByte()))
+            },
+        )
         // Main content: top bar + canvas. imePadding() lifts the canvas
         // above the keyboard so it's never covered.
         Column(
@@ -270,22 +282,37 @@ fun TerminalScreen(
         ) {
             KeyboardAccessoryBar(
                 ctrlActive = ctrlActive,
+                altActive = altActive,
                 keyboardVisible = inputController.isFocused,
+                expanded = keysExpanded,
                 onCtrlToggle = { ctrlActive = !ctrlActive },
+                onAltToggle = { altActive = !altActive },
                 onToggleKeyboard = {
                     if (inputController.isFocused) inputController.clearFocus()
                     else inputController.requestFocus()
                 },
+                onToggleExpanded = { keysExpanded = !keysExpanded },
                 onSendRaw = { bytes ->
                     emulator.scrollOffset = 0
                     terminalSession.sendRawBytes(bytes)
                 },
-                onArrow = { dir ->
+                onSendText = { text ->
                     emulator.scrollOffset = 0
-                    val prefix = if (emulator.applicationCursorKeys)
-                        byteArrayOf(0x1B, 'O'.code.toByte())
-                    else byteArrayOf(0x1B, '['.code.toByte())
-                    terminalSession.sendRawBytes(prefix + byteArrayOf(dir.code.toByte()))
+                    // [小丘] 粘滞修饰键组合：CTRL+字母→控制码；ALT+字母→ESC前缀
+                    val ch = text.singleOrNull()
+                    val combo = when {
+                        ctrlActive && ch != null && ch.isLetter() -> {
+                            ctrlActive = false
+                            byteArrayOf((ch.uppercaseChar().code - 'A'.code + 1).toByte())
+                        }
+                        altActive && ch != null && ch.isLetterOrDigit() -> {
+                            altActive = false
+                            byteArrayOf(0x1B) + text.toByteArray()
+                        }
+                        else -> null
+                    }
+                    if (combo != null) terminalSession.sendRawBytes(combo)
+                    else terminalSession.sendText(text)
                 },
             )
         }
@@ -375,76 +402,119 @@ private fun CircularIconButton(
 @Composable
 private fun KeyboardAccessoryBar(
     ctrlActive: Boolean,
+    altActive: Boolean,
     keyboardVisible: Boolean,
+    expanded: Boolean,
     onCtrlToggle: () -> Unit,
+    onAltToggle: () -> Unit,
     onToggleKeyboard: () -> Unit,
+    onToggleExpanded: () -> Unit,
     onSendRaw: (ByteArray) -> Unit,
-    onArrow: (Char) -> Unit,
+    onSendText: (String) -> Unit,
 ) {
-    val scrollState = rememberScrollState()
-    Box(
+    // [小丘] v1 快捷键条 v7 完全体：常态两行编程高频 + 展开两行（符号+次级）。
+    // 粘滞修饰键（CTRL/ALT）点亮待组合；控制键直接发控制码。
+    Column(
         modifier = Modifier
             .fillMaxWidth()
-            .padding(vertical = 4.dp)
+            .padding(horizontal = 4.dp, vertical = 3.dp)
             .clip(RoundedCornerShape(12.dp))
             .background(AccessoryBg),
+        verticalArrangement = Arrangement.spacedBy(3.dp),
     ) {
-        Row(
-            modifier = Modifier
-                .horizontalScroll(scrollState)
-                .padding(horizontal = 12.dp, vertical = 6.dp),
-            horizontalArrangement = Arrangement.spacedBy(10.dp),
-            verticalAlignment = Alignment.CenterVertically,
-        ) {
-        QuickCommandButton(
-            label = stringResource(if (keyboardVisible) R.string.terminal_hide_keyboard else R.string.terminal_show_keyboard),
-            icon = if (keyboardVisible) Icons.Default.KeyboardHide else Icons.Outlined.Keyboard,
-            onClick = onToggleKeyboard,
-        )
-        QuickCommandButton("Esc", iconText = "⎋") { onSendRaw(byteArrayOf(0x1B)) }
-        QuickCommandButton("Tab", icon = Icons.AutoMirrored.Filled.KeyboardTab) { onSendRaw(byteArrayOf(0x09)) }
-        // [T-android-shell-toolbar-enter-key] The soft keyboard's Return
-        // inserts a newline inside the terminal, so it can't send a real
-        // carriage return to run a command line / trigger an in-CLI prompt.
-        // This writes CR (0x0D) on the same raw-PTY path as Esc/Tab/C-c.
-        // Placed right after Tab, mirroring iOS fa3d2f8c.
-        QuickCommandButton("⏎", iconText = "⏎") { onSendRaw(byteArrayOf(0x0D)) }
-        QuickCommandButton("Ctrl", iconText = "^", isActive = ctrlActive, onClick = onCtrlToggle)
-        QuickCommandButton("\u2191", icon = Icons.Default.KeyboardArrowUp) { onArrow('A') }
-        QuickCommandButton("\u2193", icon = Icons.Default.KeyboardArrowDown) { onArrow('B') }
-        QuickCommandButton("\u2190", icon = Icons.AutoMirrored.Filled.KeyboardArrowLeft) { onArrow('D') }
-        QuickCommandButton("\u2192", icon = Icons.AutoMirrored.Filled.KeyboardArrowRight) { onArrow('C') }
-        QuickCommandButton("C-c", icon = Icons.Outlined.Cancel) { onSendRaw(byteArrayOf(0x03)) }
-        QuickCommandButton("C-d", icon = Icons.Default.Eject) { onSendRaw(byteArrayOf(0x04)) }
-        QuickCommandButton("C-z", icon = Icons.Outlined.PauseCircle) { onSendRaw(byteArrayOf(0x1A)) }
+        // ── 行1：⌨ CTRL* ALT* | ESC TAB ⏎ ^C ⌫ ──
+        KeyScrollRow {
+            KeyCap("⌨", onClick = onToggleKeyboard, prominent = keyboardVisible)
+            KeyCap("CTRL", sticky = ctrlActive, onClick = onCtrlToggle)
+            KeyCap("ALT", sticky = altActive, onClick = onAltToggle)
+            KeyCap("ESC") { onSendRaw(byteArrayOf(0x1B)) }
+            KeyCap("TAB") { onSendRaw(byteArrayOf(0x09)) }
+            KeyCap("⏎", prominent = true) { onSendRaw(byteArrayOf(0x0D)) }
+            KeyCap("^C") { onSendRaw(byteArrayOf(0x03)) }
+            KeyCap("⌫") { onSendRaw(byteArrayOf(0x7F)) }
+        }
+        if (expanded) {
+            // ── 展开行A：编程符号横滚 ──
+            KeyScrollRow {
+                listOf("~", "|", "\\", "/", "<", ">", "[", "]", "{", "}", "(", ")",
+                    "=", "+", "-", "_", "*", "&", "%", "$", "#", "@", "!", "\'", "\"",
+                    ":", ";", ".", ",", "?", "^", "`").forEach { sym ->
+                    KeyCap(sym) { onSendText(sym) }
+                }
+            }
+            // ── 展开行B：Alt组合+历史控制+编辑键 ──
+            KeyScrollRow {
+                KeyCap("A·B") { onSendRaw(byteArrayOf(0x1B, 'b'.code.toByte())) }
+                KeyCap("A·F") { onSendRaw(byteArrayOf(0x1B, 'f'.code.toByte())) }
+                KeyCap("A·D") { onSendRaw(byteArrayOf(0x1B, 'd'.code.toByte())) }
+                KeyCap("A·.") { onSendRaw(byteArrayOf(0x1B, '.'.code.toByte())) }
+                KeyCap("^R") { onSendRaw(byteArrayOf(0x12)) }
+                KeyCap("^K") { onSendRaw(byteArrayOf(0x0B)) }
+                KeyCap("^Y") { onSendRaw(byteArrayOf(0x19)) }
+                KeyCap("^P") { onSendRaw(byteArrayOf(0x10)) }
+                KeyCap("^N") { onSendRaw(byteArrayOf(0x0E)) }
+                KeyCap("INS") { onSendRaw(byteArrayOf(0x1B, '['.code.toByte(), '2'.code.toByte(), '~'.code.toByte())) }
+                KeyCap("DEL") { onSendRaw(byteArrayOf(0x7F)) }
+                KeyCap("SPC", prominent = true) { onSendRaw(byteArrayOf(0x20)) }
+            }
+        }
+        // ── 行2：^D ^Z ^U ^W ^L | HOME END PGUP PGDN | ▾/▴ ──
+        KeyScrollRow {
+            KeyCap("^D") { onSendRaw(byteArrayOf(0x04)) }
+            KeyCap("^Z") { onSendRaw(byteArrayOf(0x1A)) }
+            KeyCap("^U") { onSendRaw(byteArrayOf(0x15)) }
+            KeyCap("^W") { onSendRaw(byteArrayOf(0x17)) }
+            KeyCap("^L") { onSendRaw(byteArrayOf(0x0C)) }
+            KeyCap("HOME") { onSendRaw(byteArrayOf(0x1B, '['.code.toByte(), 'H'.code.toByte())) }
+            KeyCap("END") { onSendRaw(byteArrayOf(0x1B, '['.code.toByte(), 'F'.code.toByte())) }
+            KeyCap("PGUP") { onSendRaw(byteArrayOf(0x1B, '['.code.toByte(), '5'.code.toByte(), '~'.code.toByte())) }
+            KeyCap("PGDN") { onSendRaw(byteArrayOf(0x1B, '['.code.toByte(), '6'.code.toByte(), '~'.code.toByte())) }
+            KeyCap(if (expanded) "▴" else "▾", onClick = onToggleExpanded)
         }
     }
 }
 
 @Composable
-private fun QuickCommandButton(
-    label: String,
-    icon: ImageVector? = null,
-    iconText: String? = null,
-    isActive: Boolean = false,
-    onClick: () -> Unit,
-) {
-    val bg = if (isActive) AccButtonActive else AccButtonBg
-    val fg = if (isActive) Color.White else TerminalGreen
+private fun KeyScrollRow(content: @Composable androidx.compose.foundation.layout.RowScope.() -> Unit) {
     Row(
         modifier = Modifier
-            .height(28.dp)
+            .fillMaxWidth()
+            .horizontalScroll(rememberScrollState())
+            .padding(horizontal = 6.dp, vertical = 2.dp),
+        horizontalArrangement = Arrangement.spacedBy(5.dp),
+        verticalAlignment = Alignment.CenterVertically,
+        content = content,
+    )
+}
+
+@Composable
+private fun KeyCap(
+    label: String,
+    sticky: Boolean = false,
+    prominent: Boolean = false,
+    onClick: (() -> Unit)? = null,
+) {
+    val bg = when {
+        sticky -> AccButtonActive
+        prominent -> Color(0xFF2E4A38)
+        else -> AccButtonBg
+    }
+    val fg = if (sticky) Color.White else TerminalGreen
+    Box(
+        modifier = Modifier
+            .height(30.dp)
             .clip(RoundedCornerShape(6.dp))
             .background(bg)
-            .clickable(onClick = onClick)
+            .clickable(onClick = { onClick?.invoke() })
             .padding(horizontal = 10.dp),
-        verticalAlignment = Alignment.CenterVertically,
-        horizontalArrangement = Arrangement.spacedBy(4.dp),
+        contentAlignment = Alignment.Center,
     ) {
-        when {
-            icon != null -> Icon(icon, null, tint = fg, modifier = Modifier.size(12.dp))
-            iconText != null -> Text(iconText, color = fg, style = TextStyle(fontFamily = JetBrainsMonoFontFamily, fontSize = 11.sp))
-        }
-        Text(label, color = fg, style = TextStyle(fontFamily = JetBrainsMonoFontFamily, fontSize = 11.sp), maxLines = 1)
+        Text(
+            label,
+            color = fg,
+            style = TextStyle(fontFamily = JetBrainsMonoFontFamily, fontSize = 12.sp),
+            maxLines = 1,
+        )
     }
 }
+
