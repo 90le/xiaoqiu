@@ -7,6 +7,7 @@ import androidx.compose.animation.core.animateDecay
 import androidx.compose.animation.core.exponentialDecay
 import androidx.compose.foundation.Canvas
 import androidx.compose.foundation.background
+import androidx.compose.foundation.gestures.detectDragGestures
 import androidx.compose.foundation.gestures.detectTapGestures
 
 import androidx.compose.foundation.clickable
@@ -124,6 +125,7 @@ fun TerminalCanvasView(
     // ── [小丘] v1 选区体系状态 ──
     // 柄拖动模式：0=无 1=起点柄 2=终点柄（Canvas 手势统一分发用）
     var dragHandle by remember { mutableStateOf(0) }
+    var selectionDragging by remember { mutableStateOf(false) }
     // 复制浮层开关（选区存在时显示）
     var showCopyBar by remember { mutableStateOf(false) }
     val view = androidx.compose.ui.platform.LocalView.current
@@ -178,6 +180,8 @@ fun TerminalCanvasView(
         else emulator.setSelectionRect(e[0], e[1], col, row)
     }
 
+    var handleY by remember { mutableStateOf(0f) }
+
     // 边缘自动滚（柄拖到上下边缘带时循环滚+选区跟随）
     LaunchedEffect(dragHandle) {
         if (dragHandle == 0) return@LaunchedEffect
@@ -202,7 +206,6 @@ fun TerminalCanvasView(
             delay(40)
         }
     }
-    var handleY by remember { mutableStateOf(0f) }
 
     // 复制到剪贴板
     fun copySelection() {
@@ -228,10 +231,10 @@ fun TerminalCanvasView(
             .pointerInput(cellHeight) {
                 val tracker = androidx.compose.ui.input.pointer.util.VelocityTracker()
                 detectDragGestures(
-                    onDragStart = { pos ->
+                    onDragStart = {
                         tracker.resetTracking(); scrollAccumPx.value = 0f
-                        dragHandle = hitHandle(pos.x, pos.y)
-                        handleY = pos.y
+                        // 起点柄判定需要起点坐标——用 coroutineScope 延迟判断不可行；
+                        // 简化：onDragStart 记为未定，首个 MOVE 帧判定（下方 change.position 可用）
                     },
                     onDragEnd = {
                         if (dragHandle != 0) { dragHandle = 0 }
@@ -251,6 +254,11 @@ fun TerminalCanvasView(
                     onDragCancel = { dragHandle = 0; tracker.resetTracking() },
                 ) { change, dragAmount ->
                     change.consume()
+                    if (dragHandle == 0 && !selectionDragging) {
+                        // 首帧判定：起点命中柄→进入柄拖动；否则滚动
+                        dragHandle = hitHandle(change.position.x, change.position.y)
+                        selectionDragging = dragHandle != 0
+                    }
                     if (dragHandle != 0) {
                         handleY = change.position.y
                         moveHandleTo(change.position.x, change.position.y)
