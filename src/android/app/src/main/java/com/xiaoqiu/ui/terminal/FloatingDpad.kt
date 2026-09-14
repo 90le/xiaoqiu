@@ -10,6 +10,7 @@ import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
 import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Text
@@ -94,27 +95,19 @@ fun FloatingDpad(
                 .padding(6.dp),
             horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            // 顶行：拖柄（可拖提示底）+ 收起圆钮
-            Row(
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = androidx.compose.foundation.layout.Arrangement.Center,
-                modifier = Modifier.padding(bottom = 4.dp),
-            ) {
+            // 顶行：拖柄 + 收起
+            Row(verticalAlignment = Alignment.CenterVertically) {
                 Box(
                     modifier = Modifier
                         .then(drag)
-                        .background(Color(0xFF33333A), androidx.compose.foundation.shape.RoundedCornerShape(8.dp))
-                        .padding(horizontal = 8.dp, vertical = 3.dp),
+                        .padding(horizontal = 4.dp),
                 ) {
-                    Text("⠿⠿ 拖移", color = Color(0xFF6FBF8A), fontSize = 10.sp, fontWeight = FontWeight.Bold)
+                    Text("⠿⠿", color = Color(0xFF6FBF8A), fontSize = 12.sp, fontWeight = FontWeight.Bold)
                 }
-                Spacer(Modifier.size(8.dp))
                 Box(
                     modifier = Modifier
-                        .size(24.dp)
-                        .background(Color(0xFF3A3A40), androidx.compose.foundation.shape.CircleShape)
-                        .clickable { expanded = false },
-                    contentAlignment = Alignment.Center,
+                        .clickable { expanded = false }
+                        .padding(horizontal = 6.dp),
                 ) {
                     Text("⌄", color = Color(0xFFBBBBBB), fontSize = 14.sp)
                 }
