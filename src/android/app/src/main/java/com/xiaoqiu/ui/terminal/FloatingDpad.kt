@@ -51,7 +51,7 @@ fun FloatingDpad(
     val screenH = LocalConfiguration.current.screenHeightDp
 
     var expanded by remember { mutableStateOf(false) }
-    var pos by remember { loadDpadPos(context) }
+    var pos by remember { androidx.compose.runtime.mutableStateOf(loadDpadPos(context)) }
 
     // 出界自愈：屏幕旋转/尺寸变化后 clamp 回来
     LaunchedEffect(screenW, screenH) {
