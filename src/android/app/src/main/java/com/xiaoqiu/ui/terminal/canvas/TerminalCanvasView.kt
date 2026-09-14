@@ -223,7 +223,6 @@ fun TerminalCanvasView(
     }
 
     androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize()) {
-    androidx.compose.foundation.layout.Box(modifier = Modifier.fillMaxSize()) {
     Canvas(
         modifier = modifier
             .fillMaxSize()
@@ -416,7 +415,10 @@ fun TerminalCanvasView(
                     modifier = Modifier.clickable { emulator.clearSelectionRect(); showCopyBar = false })
             }
         }
-    } // Box    }
+    ) // Canvas 参数闭合
+    } // Canvas content
+    } // Box
+
 }
 
 private fun drawCell(
