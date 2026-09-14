@@ -63,6 +63,7 @@ fun TerminalCanvasView(
     fontSizeSp: Float = 13f,
     onResize: (cols: Int, rows: Int) -> Unit,
     onTap: () -> Unit = {},
+    onPasteText: (String) -> Unit = {},
 ) {
     val density = LocalDensity.current
     val fontSizePx = with(density) { fontSizeSp.sp.toPx() }
@@ -277,8 +278,16 @@ fun TerminalCanvasView(
                 detectTapGestures(
                     onTap = { offset ->
                         if (emulator.selectionRect.value != null) {
-                            emulator.clearSelectionRect()
-                            showCopyBar = false
+                            // [小丘] v1 点选：移动最近端点，不清除
+                            val e = selectionEnds() ?: return@detectTapGestures
+                            val col = (offset.x / cellWidth).toInt().coerceIn(0, cols - 1)
+                            val row = (offset.y / cellHeight).toInt().coerceIn(0, rows - 1)
+                            val sx = e[0] * cellWidth; val sy = (e[1] + 1) * cellHeight
+                            val ex = (e[2] + 1) * cellWidth; val ey = (e[3] + 1) * cellHeight
+                            val dS = kotlin.math.hypot((offset.x - sx).toDouble(), (offset.y - sy).toDouble())
+                            val dE = kotlin.math.hypot((offset.x - ex).toDouble(), (offset.y - ey).toDouble())
+                            if (dS <= dE) emulator.setSelectionRect(col, row, e[2], e[3])
+                            else emulator.setSelectionRect(e[0], e[1], col, row)
                         } else onTap()
                     },
                     onLongPress = { offset -> startSelectionAt(offset.x, offset.y) },
@@ -416,6 +425,16 @@ fun TerminalCanvasView(
             ) {
                 androidx.compose.material3.Text("复制", color = androidx.compose.ui.graphics.Color.White, fontSize = 13.sp,
                     modifier = Modifier.clickable { copySelection() })
+                androidx.compose.material3.Text("粘贴", color = androidx.compose.ui.graphics.Color(0xFF8FE0AC), fontSize = 13.sp,
+                    modifier = Modifier.clickable {
+                        val cb = view.context.getSystemService(android.content.Context.CLIPBOARD_SERVICE) as android.content.ClipboardManager
+                        val text = cb.primaryClip?.getItemAt(0)?.coerceToText(view.context)?.toString().orEmpty()
+                        if (text.isNotEmpty()) {
+                            onPasteText(text)
+                            emulator.clearSelectionRect()
+                            showCopyBar = false
+                        }
+                    })
                 androidx.compose.material3.Text("全选", color = androidx.compose.ui.graphics.Color(0xFFCFE0D5), fontSize = 13.sp,
                     modifier = Modifier.clickable { emulator.setSelectionRect(0, 0, cols - 1, rows - 1) })
                 androidx.compose.material3.Text("✕", color = androidx.compose.ui.graphics.Color(0xFFBBBBBB), fontSize = 13.sp,

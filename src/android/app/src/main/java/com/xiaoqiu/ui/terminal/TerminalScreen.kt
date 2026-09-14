@@ -226,6 +226,10 @@ fun TerminalScreen(
                         terminalSession.setWindowSize(cols, rows)
                     },
                     onTap = { inputController.requestFocus() },
+                    onPasteText = { text ->
+                        emulator.scrollOffset = 0
+                        terminalSession.sendText(text)
+                    },
                 )
                 TerminalInputView(
                     onInput = { bytes ->
