@@ -198,16 +198,6 @@ fun TerminalScreen(
                 .imePadding()
                 .padding(bottom = accessoryBarHeightDp),
         ) {
-            // [探针A] 最简 Compose 元素——若它可见而 TabsBar 不可见=TabsBar 内部问题
-            Text(
-                "PROBE-A 顶部测试",
-                color = androidx.compose.ui.graphics.Color.White,
-                fontSize = 18.sp,
-                modifier = Modifier
-                    .fillMaxWidth()
-                    .background(androidx.compose.ui.graphics.Color(0xFFCC0000))
-                    .padding(8.dp),
-            )
             // [小丘] 标签条即顶栏（v1 结构：标签管理是终端页第一公民，
             // 不再藏在标题栏下的暗区——用户"看不到"的根治）
             TerminalTabsBar(
@@ -224,10 +214,11 @@ fun TerminalScreen(
                 // selection + ActionMode + ClipboardManager copy. The old
                 // TerminalCanvasView is left in the package as a Compose-only
                 // fallback if anything regresses with the View interop path.
-                // [实验] 注释 AndroidView——验证原生View interop 是否压制 Compose 绘制
-                Box(modifier = Modifier.fillMaxSize().background(Color(0xFF101418)))
-                /*
-                TerminalNativeViewCompose(
+                // [小丘] 纯 Compose 渲染器（TerminalCanvasView）——
+                // 原生 View interop 在 MIUI 上会压制上方 Compose 内容绘制
+                // （实机验证：AndroidView 存在时 TabsBar/PROBE 全黑，移除后立即正常）。
+                // Compose Canvas 与 v1 xterm.js 同为软件画布路线，性能足够。
+                com.xiaoqiu.ui.terminal.canvas.TerminalCanvasView(
                     emulator = emulator,
                     onResize = { cols, rows ->
                         emulator.resize(cols, rows)
@@ -235,7 +226,6 @@ fun TerminalScreen(
                     },
                     onTap = { inputController.requestFocus() },
                 )
-                */
                 TerminalInputView(
                     onInput = { bytes ->
                         // Any user input snaps back to live tail so typing is visible.

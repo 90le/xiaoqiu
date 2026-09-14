@@ -97,7 +97,7 @@ fun TerminalTabsBar(
                 .clickable { drawerOpen = true },
             contentAlignment = Alignment.Center,
         ) {
-            Text("☰标签", color = Color(0xFFFFE066), fontSize = 20.sp, fontWeight = androidx.compose.ui.text.font.FontWeight.Bold)
+            Text("☰", color = Color(0xFF9CBFA8), fontSize = 18.sp, maxLines = 1, softWrap = false)
         }
         // ⌘ 命令面板（v1 commands 复用：▶跑/✎预填/编辑/二次确认删）
         Box(
