@@ -49,8 +49,11 @@ object TerminalPalette {
         return p
     }
 
-    val defaultForeground: Color = Color(204, 204, 204)
-    val defaultBackground: Color = Color.Black
+    // [小丘] 山野风夜间终端：深墨绿底（非纯黑，护眼+品牌感），米白前景
+    val defaultForeground: Color = Color(0xD8, 0xE4, 0xDB)
+    val defaultBackground: Color = Color(0x0A, 0x12, 0x0E)
+    val cursorColor: Color = Color(0x8F, 0xE0, 0xAC)   // 山绿亮光标
+    val selectionColor: Color = Color(0x2E, 0x4A, 0x38) // 选区墨绿
 
     fun resolve(color: TerminalColor, isForeground: Boolean, bold: Boolean = false): Color = when (color) {
         is TerminalColor.Default -> if (isForeground) defaultForeground else defaultBackground

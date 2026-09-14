@@ -70,7 +70,7 @@ fun TerminalTabsBar(
         modifier = modifier
             .fillMaxWidth()
             .statusBarsPadding()
-            .background(Color(0xFF16161B))
+            .background(Color(0xFF0D1411))
             .drawBehind {
                 // 底部分隔线：标签条与终端画布的硬边界（v1 tabs 底线）
                 drawRect(
@@ -92,8 +92,8 @@ fun TerminalTabsBar(
                 .padding(vertical = 6.dp, horizontal = 4.dp)
                 .size(40.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(Color(0xFF3A3A44))
-                .border(1.dp, Color(0xFF55555F), RoundedCornerShape(10.dp))
+                .background(Color(0xFF25302A))
+                .border(1.dp, Color(0xFF3E5348), RoundedCornerShape(10.dp))
                 .clickable { drawerOpen = true },
             contentAlignment = Alignment.Center,
         ) {
@@ -105,8 +105,8 @@ fun TerminalTabsBar(
                 .padding(vertical = 6.dp, horizontal = 2.dp)
                 .size(40.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(Color(0xFF3A3A44))
-                .border(1.dp, Color(0xFF55555F), RoundedCornerShape(10.dp))
+                .background(Color(0xFF25302A))
+                .border(1.dp, Color(0xFF3E5348), RoundedCornerShape(10.dp))
                 .clickable { paletteOpen = true },
             contentAlignment = Alignment.Center,
         ) {
@@ -150,8 +150,8 @@ fun TerminalTabsBar(
                 .padding(vertical = 6.dp, horizontal = 2.dp)
                 .size(40.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(Color(0xFF3A3A44))
-                .border(1.dp, Color(0xFF55555F), RoundedCornerShape(10.dp))
+                .background(Color(0xFF25302A))
+                .border(1.dp, Color(0xFF3E5348), RoundedCornerShape(10.dp))
                 .clickable(onClick = onClear),
             contentAlignment = Alignment.Center,
         ) {
@@ -163,12 +163,12 @@ fun TerminalTabsBar(
                 .padding(vertical = 6.dp, horizontal = 6.dp)
                 .size(40.dp)
                 .clip(RoundedCornerShape(10.dp))
-                .background(Color(0xFF3A3A44))
-                .border(1.dp, Color(0xFF55555F), RoundedCornerShape(10.dp))
+                .background(Color(0xFF25302A))
+                .border(1.dp, Color(0xFF3E5348), RoundedCornerShape(10.dp))
                 .clickable(onClick = onClose),
             contentAlignment = Alignment.Center,
         ) {
-            Text("✕", color = Color(0xFFE0E0E0), fontSize = 16.sp)
+            Text("✕", color = Color(0xFFCFE0D5), fontSize = 16.sp)
         }
     }
 

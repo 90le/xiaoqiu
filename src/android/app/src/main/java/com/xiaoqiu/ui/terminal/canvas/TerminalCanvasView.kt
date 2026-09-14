@@ -211,7 +211,7 @@ fun TerminalCanvasView(
                     val cx = cc * cellWidth
                     val cy = cr * cellHeight
                     val cursorPaint = Paint().apply {
-                        color = TerminalPalette.defaultForeground.toArgb()
+                        color = TerminalPalette.cursorColor.toArgb()
                         style = Paint.Style.FILL
                     }
                     when (emulator.cursorShape) {
