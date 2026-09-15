@@ -327,7 +327,15 @@ fun InlineVoiceInputPanel(
     fun startCapture() {
         // Route the engine per the resolved choice (mirrors iOS provider resolve
         // on prepare/refresh).
-        val engineId = if (choice.isSystem) "system" else "provider"
+        // [小丘] 空态修复：choice 空（entry==null）时旧逻辑默认 system，
+        // 在 MIUI（无系统识别服务）上必然失败。改为：provider 引擎可用就
+        // 走 provider（resolveVoiceInputCandidates 非空即有可用 ASR），
+        // 只有 provider 不可用才落回 system。
+        val engineId = when {
+            choice.entry != null -> "provider"
+            com.xiaoqiu.speech.SpeechRecognitionManager.providerEngineAvailable() -> "provider"
+            else -> "system"
+        }
         SpeechRecognitionManager.selectEngine(engineId)
         (SpeechRecognitionManager.availableEngines()
             .firstOrNull { it.id == "system" } as? com.xiaoqiu.speech.SystemSpeechRecognitionEngine)
@@ -461,6 +469,10 @@ fun InlineVoiceInputPanel(
     // service, or an ASR provider configured in XiaoQiu. The composer's toggle
     // stays visible throughout, so leaving is always one tap away.
     val engineAvailable by SpeechRecognitionManager.isAvailable.collectAsState()
+    // [小丘] 进入面板即重探（权限/配置可能已变），并清一次降级标记。
+    androidx.compose.runtime.LaunchedEffect(Unit) {
+        SpeechRecognitionManager.clearDegradationAndRefresh()
+    }
     if (!engineAvailable) {
         VoiceEngineUnavailableNotice(
             expanded = expanded,

@@ -1898,6 +1898,62 @@ class ProviderRepository(private val context: Context) {
         resolveVoiceInputChoice().entry
 
     /**
+     * [小丘] 存量自愈：早期版本添加的语音 Provider（智谱语音等）没有享受
+     * addInstance 里的自动绑定，且旧 seed 的 glm-asr/cogtts 可能缺
+     * inputModalities/outputModalities。启动时调用一次，幂等：
+     *   1. 给 modality 为空但 id/name 命中 ASR/TTS 推断模式的 entry 补齐
+     *      （withInferredVoiceModality）；
+     *   2. voiceInputGroupId 仍为空且存在可用 ASR 条目时自动建组绑定。
+     */
+    fun autoBindVoiceInputIfMissing(): Unit = synchronized(configLock) {
+        ensureConfigLoaded()
+        val config = workingCopy()
+
+        // 1. modality 补齐（只碰 null 的，绝不覆盖已有值）
+        var changed = false
+        val healedEntries = config.modelEntries.map { entry ->
+            if (entry.baseModel.inputModalities == null && entry.baseModel.outputModalities == null) {
+                val healed = com.xiaoqiu.data.model.run {
+                    entry.baseModel.withInferredVoiceModality()
+                }
+                if (healed !== entry.baseModel) {
+                    changed = true
+                    entry.copy(baseModel = healed)
+                } else entry
+            } else entry
+        }
+        if (changed) {
+            val entriesField = config.modelEntries
+            entriesField.clear()
+            entriesField.addAll(healedEntries)
+            android.util.Log.i("ProviderRepo", "[Voice] autoBind: healed modalities on entries")
+        }
+
+        // 2. 自动绑定（voiceInputGroupId 为空时）
+        if (config.voiceInputGroupId == null) {
+            val asrPair = config.modelEntries.firstOrNull { entry ->
+                val inst = config.instances.firstOrNull { it.id == entry.providerInstanceId }
+                inst != null && inst.isEnabled && entry.baseModel.hasAudioInput
+            }
+            if (asrPair != null) {
+                val inst = config.instances.first { it.id == asrPair.providerInstanceId }
+                val group = com.xiaoqiu.data.model.ModelGroup(
+                    name = "语音识别（${inst.label}）",
+                ).apply { memberEntryIds.add(asrPair.id) }
+                config.modelGroups.add(group)
+                config.voiceInputGroupId = group.id
+                android.util.Log.i(
+                    "ProviderRepo",
+                    "[Voice] autoBind: bound voice input group '${group.name}' → ${asrPair.baseModel.id}",
+                )
+                changed = true
+            }
+        }
+
+        if (changed) saveConfig(config)
+    }
+
+    /**
      * [T-voice-asr-group-failover] Ordered ASR fail-over candidates: the
      * explicit override first (if usable and provider-backed), then every
      * usable member of the Voice Input group, ordered per the group's routing

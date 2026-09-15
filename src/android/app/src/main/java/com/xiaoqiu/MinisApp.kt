@@ -724,6 +724,9 @@ class XiaoQiuApp : Application(), ImageLoaderFactory {
         // Initialize speech-recognition adapter layer (system + provider engines).
         com.xiaoqiu.speech.SpeechRecognitionManager.init(this)
 
+        // [小丘] 存量语音自愈：modality 补齐 + 自动绑定语音输入组。
+        runCatching { providerRepository.autoBindVoiceInputIfMissing() }
+
         // Refresh model lists once per calendar day (mirrors iOS XiaoQiuApp.swift).
         // Runs per-instance in parallel; `autoRefreshModels` skips instances with custom models.
         providerRepository.refreshAllModelsIfNeeded(

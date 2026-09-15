@@ -1,6 +1,10 @@
 package com.xiaoqiu.speech
 
 import android.content.Context
+import kotlinx.coroutines.launch
+
+import androidx.lifecycle.lifecycleScope
+
 import android.content.SharedPreferences
 import android.util.Log
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -181,6 +185,23 @@ object SpeechRecognitionManager {
         refreshAvailability()
         refreshSupportedLocales()
         observeAppLifecycle()
+
+        // [小丘] isAvailable 实时化：配置一变就重算。修复"用户配好了语音
+        // Provider 但 isAvailable 仍是启动时的 false → 面板永远弹
+        // '没有可用的语音识别'"的滞留问题。App 未就绪时静默（引擎侧
+        // repository() 也会返回 null，isAvailable 自然为 false）。
+        androidx.lifecycle.ProcessLifecycleOwner.get().lifecycleScope.launch {
+            while (true) {
+                val app = appContext.applicationContext as? com.xiaoqiu.XiaoQiuApp ?: break
+                kotlinx.coroutines.delay(500)
+                if (app.subsystemsReady()) {
+                    app.providerRepository.config.collect {
+                        refreshAvailability()
+                    }
+                    break
+                }
+            }
+        }
     }
 
     /**
