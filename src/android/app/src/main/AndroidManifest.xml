@@ -184,6 +184,20 @@
              Safe here because the UI is Compose: layout is driven by
              currentWindowAdaptiveInfo(), which recomposes on configuration
              change, so nothing depends on the recreate to re-read resources. -->
+        <!-- [小丘] 系统语音助手入口：出现在 设置→语音助手 候选列表。
+             透明无 UI，直接转跳语音对话（xiaoqiu://action/voice_chat）。 -->
+        <activity
+            android:name=".assistant.AssistantEntryActivity"
+            android:theme="@android:style/Theme.Translucent.NoTitleBar"
+            android:excludeFromRecents="true"
+            android:noHistory="true"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.ASSIST" />
+                <category android:name="android.intent.category.DEFAULT" />
+            </intent-filter>
+        </activity>
+
         <activity
             android:name=".MainActivity"
             android:configChanges="screenSize|smallestScreenSize|screenLayout|orientation"

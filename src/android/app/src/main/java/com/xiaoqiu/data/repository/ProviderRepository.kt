@@ -683,6 +683,22 @@ class ProviderRepository(private val context: Context) {
                 "ProviderRepo",
                 "[Voice] addInstance seeded ${voiceSeeds.size} voice-template models for ${instance.label}",
             )
+            // [小丘] 自动绑定：用户尚无语音输入组时，用 seed 的 ASR 模型
+            // （glm-asr 等 hasAudioInput）自动建组并绑定为语音输入——消除
+            // "配了 Provider 但没绑定语音输入 → 报没有可用的语音识别" 的断点。
+            if (config.voiceInputGroupId == null) {
+                voiceSeeds.firstOrNull { it.baseModel.hasAudioInput }?.let { asrEntry ->
+                    val group = com.xiaoqiu.data.model.ModelGroup(
+                        name = "语音识别（${instance.label}）",
+                    ).apply { memberEntryIds.add(asrEntry.id) }
+                    config.modelGroups.add(group)
+                    config.voiceInputGroupId = group.id
+                    android.util.Log.i(
+                        "ProviderRepo",
+                        "[Voice] auto-bound voice input group '${group.name}' → ${asrEntry.baseModel.id}",
+                    )
+                }
+            }
         }
         saveConfig(config)
         // Stale from the start so the next background sweep (or an explicit

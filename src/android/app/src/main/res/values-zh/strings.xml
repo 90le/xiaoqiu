@@ -1479,6 +1479,8 @@
     <string name="model_picker_modality_video">视频</string>
     <string name="voice_panel_collapse">收起语音面板</string>
     <string name="voice_panel_no_engine_title">当前没有可用的语音识别</string>
+    <string name="voice_panel_no_engine_body_provider">语音输入尚未绑定云识别模型。在小丘 Providers 里添加语音服务商（如智谱语音）——添加后将自动绑定。</string>
+    <string name="voice_panel_no_engine_body_system">设备的系统语音识别服务未启用。请打开设备设置，启用一项语音识别服务（如超级小爱 / Google 语音）。</string>
     <string name="voice_panel_no_engine_body">语音输入需要一个识别引擎。请开启设备的语音服务，或在 小丘 中配置一个转录服务商。</string>
     <string name="voice_panel_no_engine_open_system">设备设置</string>
     <string name="voice_panel_no_engine_open_providers">小丘 服务商</string>

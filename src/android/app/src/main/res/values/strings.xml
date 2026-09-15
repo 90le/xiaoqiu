@@ -1622,6 +1622,8 @@
     <!-- [T-android-voice-panel] Inline voice input panel (mirrors iOS InlineVoiceInputView) -->
     <string name="voice_panel_collapse">Collapse voice panel</string>
     <string name="voice_panel_no_engine_title">No speech recognition available</string>
+    <string name="voice_panel_no_engine_body_provider">No cloud recognition model is bound to voice input. Add a voice provider (e.g. Zhipu) in 小丘 providers — after adding, it binds automatically.</string>
+    <string name="voice_panel_no_engine_body_system">The device\'s system speech service is not enabled. Open device settings and enable a speech recognition service (e.g. XiaoAi / Google).</string>
     <string name="voice_panel_no_engine_body">Voice input needs a recognition engine. Enable your device\'s speech service, or configure a transcription provider in 小丘.</string>
     <string name="voice_panel_no_engine_open_system">Device settings</string>
     <string name="voice_panel_no_engine_open_providers">小丘 providers</string>

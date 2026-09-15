@@ -1236,8 +1236,14 @@ private fun VoiceEngineUnavailableNotice(
 
         Spacer(modifier = Modifier.height(10.dp))
 
+        // [小丘] 动态诊断：按引擎状态给出具体原因与指引（不再笼统一句）。
+        val sysOk = com.xiaoqiu.speech.SpeechRecognitionManager.systemEngineAvailable()
+        val provOk = com.xiaoqiu.speech.SpeechRecognitionManager.providerEngineAvailable()
+        val body = if (!provOk && sysOk) stringResource(R.string.voice_panel_no_engine_body_provider)
+        else if (provOk && !sysOk) stringResource(R.string.voice_panel_no_engine_body_system)
+        else stringResource(R.string.voice_panel_no_engine_body)
         Text(
-            text = stringResource(R.string.voice_panel_no_engine_body),
+            text = body,
             style = TextStyle(fontSize = 12.sp),
             color = MaterialTheme.colorScheme.onSurfaceVariant,
             textAlign = TextAlign.Center,
@@ -1250,7 +1256,7 @@ private fun VoiceEngineUnavailableNotice(
             modifier = Modifier.fillMaxWidth(),
             horizontalArrangement = Arrangement.Center,
         ) {
-            NoticeActionButton(stringResource(R.string.voice_panel_no_engine_open_system)) {
+            if (!sysOk) NoticeActionButton(stringResource(R.string.voice_panel_no_engine_open_system)) {
                 // Best-effort: the exact voice-input screen varies by OEM, so
                 // fall back to the app's own settings page rather than crashing
                 // on a device that doesn't expose the specific action.
@@ -1271,7 +1277,7 @@ private fun VoiceEngineUnavailableNotice(
                 }
             }
             Spacer(modifier = Modifier.width(8.dp))
-            NoticeActionButton(stringResource(R.string.voice_panel_no_engine_open_providers)) {
+            if (!provOk) NoticeActionButton(stringResource(R.string.voice_panel_no_engine_open_providers)) {
                 runCatching {
                     ctx.startActivity(
                         android.content.Intent(

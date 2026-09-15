@@ -295,6 +295,14 @@ object SpeechRecognitionManager {
      * the mic button so runtime degradation (first-failure observations in
      * the active engine) takes effect.
      */
+    /** [小丘] 系统识别引擎（小爱/Google 等系统服务）此刻是否可用。 */
+    fun systemEngineAvailable(): Boolean =
+        engines.firstOrNull { it is SystemSpeechRecognitionEngine }?.isAvailable ?: false
+
+    /** [小丘] 云识别引擎（Provider ASR，如智谱 glm-asr）此刻是否可用。 */
+    fun providerEngineAvailable(): Boolean =
+        engines.firstOrNull { it is ProviderSpeechRecognitionEngine }?.isAvailable ?: false
+
     fun refreshAvailability() {
         _isAvailable.value = engines.any { it.isAvailable }
     }
