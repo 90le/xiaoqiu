@@ -261,6 +261,7 @@ import com.mikepenz.markdown.m3.markdownColor
 import com.mikepenz.markdown.m3.markdownTypography
 import org.intellij.markdown.ast.ASTNode
 import org.intellij.markdown.ast.getTextInNode
+import com.xiaoqiu.data.model.isVoiceTemplateSeedShape
 import com.xiaoqiu.data.model.LLMModel
 import com.xiaoqiu.data.model.ModelEntry
 import com.xiaoqiu.data.model.ModelGroup
