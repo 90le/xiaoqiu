@@ -150,6 +150,18 @@ fun LazyListScope.modelEntryPickerItems(
     // synthetic instance is first in entriesByInstance).
     val systemPair: Pair<ProviderInstance, List<ModelEntry>>? = modalityFilter
         ?.systemEntries()
+        // [小丘] 系统识别服务不可用（如 MIUI 未启用 RecognitionService）时给
+        // System 在线/离线两项标注「未启用」，防止用户选中后才撞上
+        // "没有可用的语音识别"。探测是 cheap probe（见 SpeechRecognitionManager）。
+        ?.map { entry ->
+            if (modalityFilter == PickerModalityFilter.AUDIO_INPUT &&
+                !com.xiaoqiu.speech.SpeechRecognitionManager.systemEngineAvailable()
+            ) {
+                entry.copy(baseModel = entry.baseModel.copy(
+                    displayName = entry.baseModel.displayName + "（未启用）",
+                ))
+            } else entry
+        }
         ?.filter { it.id !in excludeIds && matchesSearch(it) }
         ?.takeIf { it.isNotEmpty() }
         ?.let { SystemVoiceEntries.syntheticInstance(systemProviderLabel) to it }

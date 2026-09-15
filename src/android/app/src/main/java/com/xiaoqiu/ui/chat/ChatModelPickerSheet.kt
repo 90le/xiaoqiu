@@ -363,8 +363,16 @@ internal fun ModelPickerSheet(
             .filter { it.isEnabled }
             .map { instance ->
                 val pt = System.nanoTime()
+                // [小丘] 排除专用语音模型（glm-asr/cogtts 等）：聊天选择器只列
+                // 对话模型。判定 = 模板 seed 形态（audio 单标志）或 id/name 命中
+                // ASR/TTS 推断模式（如 glm-asr-2512），与语音选择器的
+                // AUDIO_INPUT 过滤互为镜像，双向不串台。
                 val entries = config.modelEntries.filter {
-                    it.providerInstanceId == instance.id && !it.isHidden
+                    it.providerInstanceId == instance.id && !it.isHidden &&
+                        !it.model.isVoiceTemplateSeedShape &&
+                        com.xiaoqiu.data.model.VoiceModality.inferDedicatedVoiceModality(
+                            it.model.id, it.model.displayName,
+                        ) == null
                 }
                 val filtered = if (searchText.isEmpty()) entries
                 else entries.filter {

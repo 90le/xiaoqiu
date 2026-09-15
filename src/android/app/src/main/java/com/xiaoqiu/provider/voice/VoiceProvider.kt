@@ -191,7 +191,10 @@ open class VoiceProvider(
     fun composedUrlString(path: String): String {
         val base = effectiveBaseURL()
         var p = path
-        for (version in listOf("/v1", "/v2", "/v3")) {
+        // [小丘] 加 "/v4"：智谱 open.bigmodel.cn/api/paas/v4 基座 + OpenAI 风格
+        // /v1/audio/* 路径曾拼成 /paas/v4/v1/audio/*（双版本 404）。实测智谱
+        // 端点为 /api/paas/v4/audio/transcriptions（文档 docs.bigmodel.cn）。
+        for (version in listOf("/v1", "/v2", "/v3", "/v4")) {
             if (base.endsWith(version) && p.startsWith("$version/")) {
                 p = p.removePrefix(version)
                 break
