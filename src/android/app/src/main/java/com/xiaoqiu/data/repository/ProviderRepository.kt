@@ -1913,9 +1913,7 @@ class ProviderRepository(private val context: Context) {
         var changed = false
         val healedEntries = config.modelEntries.map { entry ->
             if (entry.baseModel.inputModalities == null && entry.baseModel.outputModalities == null) {
-                val healed = com.xiaoqiu.data.model.run {
-                    entry.baseModel.withInferredVoiceModality()
-                }
+                val healed = entry.baseModel.withInferredVoiceModality()
                 if (healed !== entry.baseModel) {
                     changed = true
                     entry.copy(baseModel = healed)
